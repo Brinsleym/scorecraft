@@ -447,3 +447,28 @@ fn opening_a_file_twice_reuses_its_library_score() {
         "io_error"
     );
 }
+
+#[test]
+fn page_6_manuscript_paper_is_a_new_library_score() {
+    let mut s = Session::new();
+    fixed_clock(&mut s);
+    s.create_memory_library().unwrap();
+    let r = run(
+        &mut s,
+        "score.newManuscript",
+        json!({ "paper": "grand", "size": "a4", "pages": 3, "title": "Lesson 4" }),
+    );
+    assert_eq!(r["imported"], true);
+    let st = s.reader_state().unwrap();
+    assert_eq!(st["pageCount"], 3);
+    let scores = run(&mut s, "library.scores", json!({}));
+    assert_eq!(scores["scores"][0]["title"], "Lesson 4");
+    assert_eq!(
+        fails(&mut s, "score.newManuscript", json!({ "paper": "harp" })),
+        "bad_params"
+    );
+    assert_eq!(
+        fails(&mut s, "score.newManuscript", json!({ "pages": 0 })),
+        "bad_params"
+    );
+}

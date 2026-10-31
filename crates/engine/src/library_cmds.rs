@@ -96,6 +96,15 @@ pub fn specs() -> Vec<CommandSpec> {
             import_files as _,
         ),
         spec(
+            "score.newManuscript",
+            "New Manuscript Paper…",
+            "File",
+            r#"{"paper":"single|grand|tab"="single","size":"letter|a4"="letter","pages":1..200=4,"title":string?}"#,
+            false,
+            library_open,
+            new_manuscript as _,
+        ),
+        spec(
             "library.openFile",
             "Open Score…",
             "File",
@@ -353,6 +362,31 @@ fn import_files(session: &mut Session, params: &Value) -> Result<Value, EngineEr
     };
     l.commit(&label, Transaction::new(ops))?;
     Ok(edited(l, json!({ "imported": imported, "failed": failed })))
+}
+
+/// Blank manuscript paper (PAGE-6): a new score of staves, grand staves or tablature, imported
+/// into the library and opened.
+fn new_manuscript(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
+    const ID: &str = "score.newManuscript";
+    let p = params_object(ID, params)?;
+    reject_unknown_keys(ID, p, &["paper", "size", "pages", "title"])?;
+    let paper_id = opt_str(ID, p, "paper")?.unwrap_or("single");
+    let paper = scorecraft_pdf::Paper::from_id(paper_id)
+        .ok_or_else(|| bad(ID, "`paper` must be single, grand or tab".into()))?;
+    let (w, h) = match opt_str(ID, p, "size")?.unwrap_or("letter") {
+        "letter" => (612.0, 792.0),
+        "a4" => (595.28, 841.89),
+        _ => return Err(bad(ID, "`size` must be letter or a4".into())),
+    };
+    let pages = crate::commands::opt_int(ID, p, "pages", 1, 200)?.unwrap_or(4);
+    let title = opt_str(ID, p, "title")?.unwrap_or(match paper {
+        scorecraft_pdf::Paper::Single => "Manuscript paper",
+        scorecraft_pdf::Paper::Grand => "Piano manuscript paper",
+        scorecraft_pdf::Paper::Tab => "Tablature paper",
+    });
+    check_len(ID, "title", title, 200)?;
+    let pdf = scorecraft_pdf::manuscript(paper, w, h, usize::try_from(pages).unwrap_or(4), title)?;
+    session.open_bytes_in_library(&format!("{title}.pdf"), pdf, None)
 }
 
 /// Opens a score file through the library: the score already holding the same file (by its

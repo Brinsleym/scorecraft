@@ -205,7 +205,10 @@ impl App {
             self.library.dirty = true;
             return r;
         }
-        if let (Ok(_), true) = (&r, id == "score.open" || id == "library.openFile") {
+        if let (Ok(_), true) = (
+            &r,
+            id == "score.open" || id == "library.openFile" || id == "score.newManuscript",
+        ) {
             self.opened(params);
             self.state.library = false;
             self.library.dirty = true;
@@ -789,6 +792,20 @@ impl App {
                     .clicked()
             {
                 self.score_panel.open = !self.score_panel.open;
+            }
+            if self.session.library().is_some() {
+                ui.menu_button("New", |ui| {
+                    for (paper, label) in [
+                        ("single", "Manuscript paper"),
+                        ("grand", "Piano manuscript paper"),
+                        ("tab", "Tablature paper"),
+                    ] {
+                        if ui.button(label).clicked() {
+                            run.push(("score.newManuscript", json!({ "paper": paper })));
+                            ui.close();
+                        }
+                    }
+                });
             }
             if has {
                 ui.menu_button("Export", |ui| {
