@@ -211,7 +211,8 @@ marks what an agent cannot finish alone (real devices, observation of enScore, l
   score, exchange by what each side has seen), with a three-replica convergence property test.
 - **Done (M8 parts 2–3):** every record merges; the engine turns every edit into changes; sync
   through a shared folder (`sync.backend.set`, `sync.now`), which a cloud folder can carry.
-- **Missing:** background sync and a Sync panel in the app; the Google Drive API backend; Wi-Fi
+- **Missing:** sync off the UI thread (it runs in the frame, every two minutes); the Google Drive
+  API backend; Wi-Fi
   between devices; log compaction (the log replays in full when a library opens); WebDAV and
   self-hosted server backends; backup and restore; enScore's free two-way folder mirror with the
   computer or OneDrive (SYNC-8, shares the folder backend with SYNC-7).

@@ -103,6 +103,7 @@ peers) and score files come in later parts.
 | SYNC-T11 | A score on both | both draw and one renames it offline, then they sync | both have both strokes and the new name; nothing waits |
 | SYNC-T12 | A library on disk syncing through a real folder | it is closed and reopened, then edited | the device keeps its id, the log is rebuilt, and a new device on the folder gets everything |
 | SYNC-T13 | Bad params, a damaged block from another device | `sync.backend.set`, `sync.now` | refused with messages; the block is skipped and listed |
+| SYNC-T14 | Two apps with a folder set | each runs a frame | each syncs on its own at once (the second gets the first's score and says so), and not again until two minutes have passed |
 
 ## Open questions
 

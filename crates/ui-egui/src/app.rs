@@ -103,6 +103,8 @@ pub struct App {
     /// The click last asked of the platform, and why there is none, if there is none.
     sent_click: Option<Option<(f64, u8, u8, bool)>>,
     click_error: Option<String>,
+    /// When to sync next on its own, in egui seconds (`None`: at the first frame).
+    next_sync: Option<f64>,
 }
 
 fn bool_param(params: &Value, key: &str) -> Result<Option<bool>, EngineError> {
@@ -162,6 +164,7 @@ impl App {
             score_cache: None,
             sent_click: None,
             click_error: None,
+            next_sync: None,
         }
     }
 
@@ -374,6 +377,7 @@ impl App {
         }
         self.sync_keep_awake();
         self.sync_click();
+        self.auto_sync(&ctx);
         self.shortcuts(&ctx);
         self.dropped_files(&ctx);
 
@@ -466,6 +470,26 @@ impl App {
                         crate::library_view::LibraryAction::Command(id, p) => {
                             let r = self.command(id, &p);
                             self.report(r);
+                        }
+                        crate::library_view::LibraryAction::SyncNow => {
+                            let r = self.command("sync.now", &json!({}));
+                            self.state.message = Some(match r {
+                                Ok(v) => sync_report(&v),
+                                Err(e) => e.to_string(),
+                            });
+                        }
+                        crate::library_view::LibraryAction::ChooseSyncFolder => {
+                            if let Some(path) = self.platform.pick_folder() {
+                                let set = self.command(
+                                    "sync.backend.set",
+                                    &json!({ "kind": "folder", "path": path }),
+                                );
+                                let r = set.and_then(|_| self.command("sync.now", &json!({})));
+                                self.state.message = Some(match r {
+                                    Ok(v) => sync_report(&v),
+                                    Err(e) => e.to_string(),
+                                });
+                            }
                         }
                         crate::library_view::LibraryAction::ImportFolder => {
                             if let Some(path) = self.platform.pick_folder() {
@@ -983,6 +1007,57 @@ impl App {
 
 /// What an import did, in a sentence (IMP-6): imported, already in the library, ignored, and
 /// each file that couldn't be read with why.
+/// Seconds between syncs on their own while the app is open.
+const AUTO_SYNC_SECS: f64 = 120.0;
+
+impl App {
+    /// Sync on its own when the app starts and every couple of minutes, if a folder is set.
+    /// Quiet unless something arrived or it failed.
+    fn auto_sync(&mut self, ctx: &Context) {
+        let now = ctx.input(|i| i.time);
+        if self.next_sync.is_some_and(|t| now < t) {
+            return;
+        }
+        self.next_sync = Some(now + AUTO_SYNC_SECS);
+        let on = self
+            .session
+            .dispatch("sync.status", &json!({}))
+            .ok()
+            .is_some_and(|s| s.get("backend").is_some_and(Value::is_string));
+        if !on {
+            return;
+        }
+        match self.command("sync.now", &json!({})) {
+            Ok(v) if v.get("changed").and_then(Value::as_u64).unwrap_or(0) > 0 => {
+                self.state.message = Some(sync_report(&v));
+            }
+            Ok(_) => {}
+            Err(e) => self.state.message = Some(format!("Sync: {e}")),
+        }
+        ctx.request_repaint_after(std::time::Duration::from_secs_f64(AUTO_SYNC_SECS));
+    }
+}
+
+/// One line on what `sync.now` did.
+pub fn sync_report(v: &Value) -> String {
+    let n = |k: &str| v.get(k).and_then(Value::as_u64).unwrap_or(0);
+    let mut parts = vec![format!(
+        "Synced: sent {}, received {} changes",
+        n("sent"),
+        n("received")
+    )];
+    if n("downloaded") > 0 {
+        parts.push(format!("{} score files fetched", n("downloaded")));
+    }
+    if n("waitingFiles") > 0 {
+        parts.push(format!(
+            "{} score files still on their way",
+            n("waitingFiles")
+        ));
+    }
+    parts.join("; ")
+}
+
 pub fn import_report(v: &Value) -> String {
     let n = |k: &str| match v.get(k) {
         Some(Value::Array(a)) => a.len() as u64,
@@ -1535,6 +1610,46 @@ mod tests {
         let id = app.session.library_score_id().unwrap();
         app.command("score.open", &json!({ "score": id })).unwrap();
         assert!(!app.state.library);
+    }
+
+    #[test]
+    fn sync_t14_the_app_syncs_on_its_own_through_a_folder() {
+        let shared =
+            std::env::temp_dir().join(format!("scorecraft-ui-sync-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&shared);
+        std::fs::create_dir_all(&shared).unwrap();
+        let folder = json!({ "kind": "folder", "path": shared.to_string_lossy() });
+        let (mut a, _) = app_with_score(2);
+        a.command("sync.backend.set", &folder).unwrap();
+        let ctx = Context::default();
+        frames(&mut a, &ctx, 1, Vec::new());
+        assert_eq!(
+            std::fs::read_dir(shared.join("blobs")).unwrap().count(),
+            1,
+            "the first frame synced the score's file"
+        );
+        let mut b = App::new(Box::new(NoPlatform), Settings::default());
+        b.command("sync.backend.set", &folder).unwrap();
+        let ctx_b = Context::default();
+        frames(&mut b, &ctx_b, 1, Vec::new());
+        assert_eq!(b.session.library().unwrap().scores.len(), 1);
+        assert!(
+            b.state
+                .message
+                .as_deref()
+                .is_some_and(|m| m.starts_with("Synced:")),
+            "{:?}",
+            b.state.message
+        );
+        // Not again until the interval has passed.
+        let before = b.session.dispatch("sync.status", &json!({})).unwrap()["lastSyncMs"].clone();
+        frames(&mut b, &ctx_b, 2, Vec::new());
+        let after = b.session.dispatch("sync.status", &json!({})).unwrap()["lastSyncMs"].clone();
+        assert_eq!(before, after);
+        assert_eq!(
+            sync_report(&json!({ "sent": 2, "received": 5, "downloaded": 1, "waitingFiles": 2 })),
+            "Synced: sent 2, received 5 changes; 1 score files fetched; 2 score files still on their way"
+        );
     }
 
     #[test]
