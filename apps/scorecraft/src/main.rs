@@ -110,7 +110,15 @@ impl Platform for Desktop {
         }
     }
 
-    fn set_click(&mut self, click: Option<(f64, u8)>) -> Result<(), String> {
+    fn set_click(&mut self, click: Option<(f64, u8, u8, bool)>) -> Result<(), String> {
+        let click = click.map(
+            |(bpm, beats, subdivision, accent)| scorecraft_devices::Click {
+                bpm,
+                beats,
+                subdivision,
+                accent,
+            },
+        );
         if self.click.is_none() {
             if click.is_none() {
                 return Ok(());

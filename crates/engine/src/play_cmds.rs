@@ -56,6 +56,24 @@ pub fn specs() -> Vec<CommandSpec> {
             always,
             stop as _,
         ),
+        spec(
+            "list.turn.next",
+            "Next in List",
+            "Lists",
+            "{}",
+            false,
+            always,
+            turn_next as _,
+        ),
+        spec(
+            "list.turn.previous",
+            "Previous in List",
+            "Lists",
+            "{}",
+            false,
+            always,
+            turn_previous as _,
+        ),
         spec("list.state", "Playing", "", "{}", true, always, state as _),
     ]
 }
@@ -243,6 +261,26 @@ fn play(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
     }
     open_entry(session, list, from, Way::Forward, false)?
         .ok_or_else(|| bad(ID, "the list has no score to play from there".into()))
+}
+
+/// A turn while a list plays (TURN-7): through the score, then on to the next entry. The same as
+/// `view.turn.next` while a list plays; refused when none does.
+fn turn_next(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
+    const ID: &str = "list.turn.next";
+    reject_unknown_keys(ID, params_object(ID, params)?, &[])?;
+    if session.playback.is_none() {
+        return Err(bad(ID, "no list is playing".into()));
+    }
+    session.dispatch("view.turn.next", &json!({}))
+}
+
+fn turn_previous(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
+    const ID: &str = "list.turn.previous";
+    reject_unknown_keys(ID, params_object(ID, params)?, &[])?;
+    if session.playback.is_none() {
+        return Err(bad(ID, "no list is playing".into()));
+    }
+    session.dispatch("view.turn.previous", &json!({}))
 }
 
 fn stop(session: &mut Session, params: &Value) -> Result<Value, EngineError> {

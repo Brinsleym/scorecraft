@@ -20,6 +20,8 @@ pub const MIN_BPM: f64 = 20.0;
 pub const MAX_BPM: f64 = 300.0;
 /// Beats per bar the metronome offers.
 pub const METERS: [u8; 4] = [2, 3, 4, 6];
+/// Clicks per beat the metronome offers (1: the beat only).
+pub const SUBDIVISIONS: std::ops::RangeInclusive<u8> = 1..=4;
 /// Taps further apart than this start a new tap tempo.
 pub const TAP_RESET_MS: u64 = 2000;
 /// Taps averaged: the intervals between the last four.
@@ -44,6 +46,8 @@ pub struct Beat {
 pub struct Metronome {
     bpm: f64,
     beats: u8,
+    subdivision: u8,
+    accent: bool,
     started_ms: Option<u64>,
     taps: Vec<u64>,
 }
@@ -53,6 +57,8 @@ impl Default for Metronome {
         Metronome {
             bpm: 100.0,
             beats: 4,
+            subdivision: 1,
+            accent: true,
             started_ms: None,
             taps: Vec::new(),
         }
@@ -70,6 +76,30 @@ impl Metronome {
 
     pub fn beats(&self) -> u8 {
         self.beats
+    }
+
+    /// Clicks per beat, from [`SUBDIVISIONS`].
+    pub fn subdivision(&self) -> u8 {
+        self.subdivision
+    }
+
+    /// Whether the first beat of the bar is accented.
+    pub fn accent(&self) -> bool {
+        self.accent
+    }
+
+    /// Sets clicks per beat; outside [`SUBDIVISIONS`] is refused.
+    pub fn set_subdivision(&mut self, n: u8) -> bool {
+        if SUBDIVISIONS.contains(&n) {
+            self.subdivision = n;
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn set_accent(&mut self, on: bool) {
+        self.accent = on;
     }
 
     pub fn running(&self) -> bool {
@@ -153,7 +183,7 @@ impl Metronome {
         Some(Beat {
             count,
             in_bar,
-            accent: in_bar == 0,
+            accent: self.accent && in_bar == 0,
             phase,
             next_ms: start + ((count + 1) as f64 * beat_ms).ceil() as u64,
         })

@@ -43,7 +43,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "practice.metronome.set",
             "Metronome Tempo",
             "",
-            r#"{"bpm":20..300?,"beats":2|3|4|6?}"#,
+            r#"{"bpm":20..300?,"beats":2|3|4|6?,"subdivision":1..4?,"accent":bool?}"#,
             false,
             set as _,
         ),
@@ -65,6 +65,8 @@ pub(crate) fn state_json(session: &Session) -> Value {
         "running": m.running(),
         "bpm": m.bpm(),
         "beats": m.beats(),
+        "subdivision": m.subdivision(),
+        "accent": m.accent(),
         "beat": beat.map(|b| json!({
             "count": b.count,
             "inBar": b.in_bar + 1,
@@ -102,9 +104,11 @@ fn tap(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
 fn set(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
     const ID: &str = "practice.metronome.set";
     let p = params_object(ID, params)?;
-    reject_unknown_keys(ID, p, &["bpm", "beats"])?;
+    reject_unknown_keys(ID, p, &["bpm", "beats", "subdivision", "accent"])?;
     let bpm = opt_f64(ID, p, "bpm")?;
     let beats = opt_int(ID, p, "beats", 1, 16)?;
+    let subdivision = opt_int(ID, p, "subdivision", 1, 4)?;
+    let accent = opt_bool(ID, p, "accent")?;
     if let Some(b) = bpm
         && !(MIN_BPM..=MAX_BPM).contains(&b)
     {
@@ -124,6 +128,12 @@ fn set(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
     }
     if let Some(b) = beats.and_then(|b| u8::try_from(b).ok()) {
         session.metronome.set_beats(b);
+    }
+    if let Some(n) = subdivision.and_then(|n| u8::try_from(n).ok()) {
+        session.metronome.set_subdivision(n);
+    }
+    if let Some(a) = accent {
+        session.metronome.set_accent(a);
     }
     Ok(state_json(session))
 }
@@ -173,6 +183,20 @@ mod tests {
         ] {
             assert!(s.dispatch("practice.metronome.set", &bad).is_err(), "{bad}");
         }
+        let r = s
+            .dispatch(
+                "practice.metronome.set",
+                &json!({ "subdivision": 3, "accent": false }),
+            )
+            .unwrap();
+        assert_eq!(
+            (r["subdivision"].as_u64(), r["accent"].as_bool()),
+            (Some(3), Some(false))
+        );
+        assert!(
+            s.dispatch("practice.metronome.set", &json!({ "subdivision": 5 }))
+                .is_err()
+        );
         let r = s
             .dispatch("practice.metronome.toggle", &json!({ "on": false }))
             .unwrap();

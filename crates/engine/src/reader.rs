@@ -396,6 +396,12 @@ impl Session {
     /// The reader state as `view.state` returns it; `None` with no score open.
     pub fn reader_state(&mut self) -> Option<Value> {
         self.refresh_reader();
-        self.score.as_ref().map(|s| s.reader.to_json())
+        let back = !self.nav_history.is_empty();
+        self.score.as_ref().map(|s| {
+            let mut v = s.reader.to_json();
+            crate::commands::set(&mut v, "filter", json!(s.view.filter().id()));
+            crate::commands::set(&mut v, "canGoBack", json!(back));
+            v
+        })
     }
 }

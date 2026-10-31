@@ -116,6 +116,7 @@ impl Session {
         // The ruler lies on a page of the score that was open.
         self.markup.ruler = None;
         self.markup.selection = None;
+        self.nav_history.clear();
         self.score = Some(OpenScore {
             view,
             name: name.to_owned(),

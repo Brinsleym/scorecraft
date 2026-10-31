@@ -44,9 +44,9 @@ pub trait Platform {
     fn pick_folder(&mut self) -> Option<String> {
         None
     }
-    /// Plays the metronome's click at (BPM, beats per bar), or stops it with `None`. An error
-    /// says why there is no sound (the pulse still shows).
-    fn set_click(&mut self, _click: Option<(f64, u8)>) -> Result<(), String> {
+    /// Plays the metronome's click at (BPM, beats per bar, clicks per beat, accent), or stops
+    /// it with `None`. An error says why there is no sound (the pulse still shows).
+    fn set_click(&mut self, _click: Option<(f64, u8, u8, bool)>) -> Result<(), String> {
         Err("this build has no audio output".into())
     }
 }
@@ -96,7 +96,7 @@ pub struct App {
     /// command so the panel never shows stale pages.
     score_cache: Option<Value>,
     /// The click last asked of the platform, and why there is none, if there is none.
-    sent_click: Option<Option<(f64, u8)>>,
+    sent_click: Option<Option<(f64, u8, u8, bool)>>,
     click_error: Option<String>,
 }
 
@@ -233,7 +233,8 @@ impl App {
             || id == "input.pen.only"
             || id == "input.touch.lock"
             || id == "library.sort.set"
-            || id == "ui.library.view";
+            || id == "ui.library.view"
+            || id == "view.filter.set";
         let changes_prefs = id.starts_with("view.layout")
             || id.starts_with("view.turn.halfPage")
             || id.starts_with("view.turn.alternating")
@@ -311,6 +312,11 @@ impl App {
                     .and_then(Value::as_u64)
                     .and_then(|b| u8::try_from(b).ok())
                     .unwrap_or(4),
+                st.get("subdivision")
+                    .and_then(Value::as_u64)
+                    .and_then(|b| u8::try_from(b).ok())
+                    .unwrap_or(1),
+                st.get("accent").and_then(Value::as_bool).unwrap_or(true),
             )
         });
         if self.sent_click == Some(want) {
@@ -569,12 +575,26 @@ impl App {
                 run.push(("practice.metronome.set", json!({ "bpm": b.round() })));
             }
             ui.horizontal(|ui| {
+                ui.label("Beats");
                 for m in [2u64, 3, 4, 6] {
                     if ui.radio(beats == m, m.to_string()).clicked() {
                         run.push(("practice.metronome.set", json!({ "beats": m })));
                     }
                 }
             });
+            let sub = st.get("subdivision").and_then(Value::as_u64).unwrap_or(1);
+            ui.horizontal(|ui| {
+                ui.label("Clicks per beat");
+                for n in 1u64..=4 {
+                    if ui.radio(sub == n, n.to_string()).clicked() {
+                        run.push(("practice.metronome.set", json!({ "subdivision": n })));
+                    }
+                }
+            });
+            let mut accent = st.get("accent").and_then(Value::as_bool).unwrap_or(true);
+            if ui.checkbox(&mut accent, "Accent the first beat").changed() {
+                run.push(("practice.metronome.set", json!({ "accent": accent })));
+            }
         });
     }
 
@@ -837,6 +857,24 @@ impl App {
                 }
                 if self.icon_button(ui, tokens, "Zoom In", false, Icon::ZoomIn) {
                     run.push(("view.zoom.set", json!({ "zoom": (zoom * 1.25).min(8.0) })));
+                }
+                let filter = s("filter");
+                ui.menu_button("Colours", |ui| {
+                    for (id, label) in [("normal", "Normal"), ("dark", "Dark"), ("sepia", "Sepia")]
+                    {
+                        if ui.radio(filter == id, label).clicked() {
+                            run.push(("view.filter.set", json!({ "filter": id })));
+                            ui.close();
+                        }
+                    }
+                });
+                if st.get("canGoBack").and_then(Value::as_bool) == Some(true)
+                    && ui
+                        .button("Back")
+                        .on_hover_text("Back to where the shortcut was")
+                        .clicked()
+                {
+                    run.push(("nav.back", json!({})));
                 }
                 ui.separator();
                 self.metronome_menu(ui, &mut run);

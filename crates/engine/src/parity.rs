@@ -2,4 +2,4 @@
 //! this. `cargo xtask parity` fails under it. Raise it when parity rises; never lower it.
 
 /// Live feature-map rows (measured by `cargo xtask parity`).
-pub const FLOOR: usize = 58;
+pub const FLOOR: usize = 63;
