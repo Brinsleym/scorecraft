@@ -3958,6 +3958,13 @@ dependencies = [
 [[package]]
 name = "scorecraft-sync"
 version = "0.0.1"
+dependencies = [
+ "proptest",
+ "scorecraft-doc",
+ "scorecraft-testkit",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "scorecraft-sync-server"

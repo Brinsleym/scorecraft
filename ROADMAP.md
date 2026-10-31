@@ -2,7 +2,7 @@
 
 **Stage: pre-alpha** · next: alpha, the [alpha gate](docs/roadmap.md#alpha-gate) (~105–287 h away)
 
-> **Last reviewed:** 2026-10-28 · **Last updated:** 2026-10-31 · **Change:** patch (M6 part 3: shortcuts and snips, breadth 53%; earlier: M6 part 2: the metronome, breadth 52%; earlier: M6 part 1: playing a list, breadth 51%; earlier: M5 part 2: the library window, breadth 50%; earlier: M5 part 1: library search and sort, breadth 49%; earlier: M4 part 5: export with ink, breadth 47%; earlier: M4 part 4: the pen in the desktop app; earlier: merged with M3 done on main: M3 reader app done; earlier: M4 part 3: rectangle select, shapes and the pen button, breadth 46%; earlier: M4 part 2c: stamps, breadth 43%; earlier: M4 part 2b: text notes, breadth 42%; earlier: M4 part 2a: layers and presets, breadth 41%; earlier: owner's answers on markup, 124 rows, breadth 38%; earlier: M4 part 1: the ink engine and markup commands, breadth 39%; earlier: M1 foundation and M2 PDF reading done; earlier: owner's priorities after the M0 review; earlier: M0 skeleton done; earlier: 4 features added from the Microsoft Store description; PDF backend reuses PDFCraft) · **Target:** enScore 3.7 (2026)
+> **Last reviewed:** 2026-10-28 · **Last updated:** 2026-10-31 · **Change:** patch (M8 part 1: the sync merge core; M7 blocked; earlier: M6 part 3: shortcuts and snips, breadth 53%; earlier: M6 part 2: the metronome, breadth 52%; earlier: M6 part 1: playing a list, breadth 51%; earlier: M5 part 2: the library window, breadth 50%; earlier: M5 part 1: library search and sort, breadth 49%; earlier: M4 part 5: export with ink, breadth 47%; earlier: M4 part 4: the pen in the desktop app; earlier: merged with M3 done on main: M3 reader app done; earlier: M4 part 3: rectangle select, shapes and the pen button, breadth 46%; earlier: M4 part 2c: stamps, breadth 43%; earlier: M4 part 2b: text notes, breadth 42%; earlier: M4 part 2a: layers and presets, breadth 41%; earlier: owner's answers on markup, 124 rows, breadth 38%; earlier: M4 part 1: the ink engine and markup commands, breadth 39%; earlier: M1 foundation and M2 PDF reading done; earlier: owner's priorities after the M0 review; earlier: M0 skeleton done; earlier: 4 features added from the Microsoft Store description; PDF backend reuses PDFCraft) · **Target:** enScore 3.7 (2026)
 
 ScoreCraft's one-page summary of how close it is to enScore 3.7 (measured from public listings on
 2026-10-28). Detail: [target-app parity](docs/target-app-parity.md) (methodology, weights,
@@ -45,7 +45,7 @@ is no library screen and no ink yet, so it is not ready for real work; next is i
 | Stability | 0% | 50–100 | [gaps G3](docs/gaps.md#g3-stability-and-data-safety) |
 | Hardware (pedals, MIDI, stylus, e-ink) | 10% | 45–90 | [hardware-parity](docs/hardware-parity.md) |
 | Platforms | 0% | 80–200 | [gaps G9](docs/gaps.md#g9-mobile-platforms) |
-| Sync | 0% | 130–250 | [sync-parity](docs/sync-parity.md) |
+| Sync | 5% | 120–240 | [sync-parity](docs/sync-parity.md) |
 | Practice and audio | 0% | 60–120 | [practice-parity](docs/practice-parity.md) |
 | Localization | 0% | 40–80 | [localization-parity](docs/localization-parity.md) |
 
@@ -68,6 +68,7 @@ Detail: [docs/roadmap.md](docs/roadmap.md).
 
 | Date | Entry |
 |---|---|
+| 2026-10-31 | M8 part 1: sync's merge core: markings drawn offline on two devices are both kept, a delete is for good, the later edit or rename wins, and three devices making random edits converge (property test). M7 mobile is blocked here: no Android SDK or Xcode, and the Android entry point needs the owner's call on unsafe code |
 | 2026-10-31 | Photos and scans as a score (PNG, JPEG), one page each; parity 65 of 124 |
 | 2026-10-31 | Manuscript paper: staves, grand staves or tablature as a new library score (File > New); parity 64 of 124 |
 | 2026-10-31 | Page colours (normal, dark, sepia), list turns, back from a shortcut jump, metronome subdivisions and accent; the browser keeps its library in IndexedDB; parity 63 of 124 |

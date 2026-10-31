@@ -1,6 +1,6 @@
 # Sync and backup parity
 
-> **Last reviewed:** 2026-10-28 · **Last updated:** 2026-10-28 · **Change:** minor (owner's sync design: Google Drive first, device-to-device over Wi-Fi, download everything; earlier: SY-12 folder mirror; first version) · **Target:** enScore 3.7 (2026)
+> **Last reviewed:** 2026-10-28 · **Last updated:** 2026-10-31 · **Change:** patch (SY-2, SY-3 partial: the merge core; earlier: owner's sync design: Google Drive first, device-to-device over Wi-Fi, download everything; earlier: SY-12 folder mirror; first version) · **Target:** enScore 3.7 (2026)
 
 enScore sells Sync as a subscription and requires an account, and also offers a free two-way folder mirror with the computer or OneDrive (S8). ScoreCraft's sync is free and
 has two parts (owner's design, 2026-10-28): **Google Drive sync** of the whole library, app
@@ -16,8 +16,8 @@ Design: [`architecture.md` §9](architecture.md#9-sync).
 | Id | Target | Rows | Status |
 |---|---|---|---|
 | SY-1 | Scores (blobs), markings, metadata, lists and bookmarks sync across devices | SYNC-1 | missing |
-| SY-2 | Offline-first: every edit is local first; sync is background and resumable | SYNC-3 | missing |
-| SY-3 | Concurrent offline markings on two devices merge without loss | SYNC-6 | missing |
+| SY-2 | Offline-first: every edit is local first; sync is background and resumable | SYNC-3 | partial: each device applies and logs its own changes, exchange by what each side has seen (`scorecraft-sync`); no background transport yet |
+| SY-3 | Concurrent offline markings on two devices merge without loss | SYNC-6 | partial: markings and score details merge ([spec](spec/sync.md)); three-replica convergence property test |
 | SY-13 | Google Drive backend: the whole library (score files and folders), app configuration and annotations sync to the user's own Drive, opt-in with their Google account | SYNC-1, SYNC-7 | missing |
 | SY-7 | Optional end-to-end encryption | ours | missing |
 | SY-8 | Download everything: a new or returning device fetches every score, annotation and setting in the background before it is needed; nothing is fetched when a score opens | SYNC-5 | missing |
@@ -47,6 +47,7 @@ Design: [`architecture.md` §9](architecture.md#9-sync).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-31 | patch | SY-2 and SY-3 partial: the sync merge core for markings and score details (M8 part 1) |
 | 2026-10-28 | minor | Owner's sync design: Google Drive first (SY-13), device-to-device over Wi-Fi and via Drive with optional sign-in (SY-14..16), download everything (SY-8 rewritten), OneDrive/Dropbox, folders, WebDAV and the server moved to later backends (SY-17, SY-4..6, SY-12) |
 | 2026-10-28 | minor | SY-12 folder mirror (SYNC-8) from the Microsoft Store description |
 | 2026-10-28 | major | First version |
