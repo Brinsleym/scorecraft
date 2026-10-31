@@ -173,6 +173,8 @@ struct MemInner {
     /// Mutating calls left before the simulated crash; `None` never crashes.
     writes_left: Option<usize>,
     writes: usize,
+    /// Paths written or removed since the last [`MemStorage::take_changes`], when tracking.
+    changes: Option<std::collections::BTreeSet<String>>,
 }
 
 /// Files in memory. Clones share the same files, so a test can "crash" one handle and reopen the
@@ -200,6 +202,32 @@ impl MemStorage {
     /// Writes and removes done so far.
     pub fn write_count(&self) -> usize {
         self.lock().writes
+    }
+
+    /// Starts noting which files change, so a copy elsewhere (the browser's IndexedDB) can be
+    /// kept up to date with [`MemStorage::take_changes`].
+    pub fn track_changes(&self) {
+        let mut inner = self.lock();
+        if inner.changes.is_none() {
+            inner.changes = Some(std::collections::BTreeSet::new());
+        }
+    }
+
+    /// The files changed since the last call: each path with its bytes now, or `None` if it was
+    /// removed. Empty unless [`MemStorage::track_changes`] was called.
+    pub fn take_changes(&self) -> Vec<(String, Option<Vec<u8>>)> {
+        let mut inner = self.lock();
+        let paths = match inner.changes.as_mut() {
+            Some(c) => std::mem::take(c),
+            None => return Vec::new(),
+        };
+        paths
+            .into_iter()
+            .map(|p| {
+                let data = inner.files.get(&p).cloned();
+                (p, data)
+            })
+            .collect()
     }
 
     /// A snapshot of every file.
@@ -244,6 +272,9 @@ impl Storage for MemStorage {
         let mut inner = self.lock();
         MemStorage::gate(&mut inner, path)?;
         inner.files.insert(path.to_owned(), data.to_vec());
+        if let Some(c) = inner.changes.as_mut() {
+            c.insert(path.to_owned());
+        }
         Ok(())
     }
 
@@ -252,6 +283,9 @@ impl Storage for MemStorage {
         let mut inner = self.lock();
         MemStorage::gate(&mut inner, path)?;
         inner.files.remove(path);
+        if let Some(c) = inner.changes.as_mut() {
+            c.insert(path.to_owned());
+        }
         Ok(())
     }
 
@@ -274,6 +308,25 @@ impl Storage for MemStorage {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn memory_tracks_changes_for_a_copy_elsewhere() {
+        let mut m = MemStorage::new();
+        m.write_atomic("a.json", b"1").unwrap();
+        assert!(m.take_changes().is_empty(), "not tracking yet");
+        m.track_changes();
+        m.write_atomic("a.json", b"2").unwrap();
+        m.write_atomic("b/c.json", b"3").unwrap();
+        m.remove("b/c.json").unwrap();
+        assert_eq!(
+            m.take_changes(),
+            vec![
+                ("a.json".to_owned(), Some(b"2".to_vec())),
+                ("b/c.json".to_owned(), None)
+            ]
+        );
+        assert!(m.take_changes().is_empty());
+    }
+
     use super::*;
 
     #[test]

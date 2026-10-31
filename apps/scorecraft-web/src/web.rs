@@ -30,6 +30,8 @@ fn read_into(file: web_sys::File, inbox: Inbox, ctx: eframe::egui::Context) {
 }
 
 struct Web {
+    /// The library's files, kept in memory and mirrored into IndexedDB; handed to the app once.
+    library: Option<(scorecraft_format::MemStorage, bool)>,
     inbox: Inbox,
     ctx: Option<eframe::egui::Context>,
     /// The screen wake lock while held (READ-9), released when keep-awake goes off.
@@ -37,6 +39,12 @@ struct Web {
 }
 
 impl Platform for Web {
+    fn library_storage(&mut self) -> Option<(scorecraft_engine::AnyStorage, bool)> {
+        self.library
+            .take()
+            .map(|(mem, exists)| (Box::new(mem) as scorecraft_engine::AnyStorage, exists))
+    }
+
     /// Opens the browser's file picker; the file arrives in a later frame.
     fn pick_score(&mut self) -> Option<String> {
         let document = web_sys::window()?.document()?;
@@ -129,6 +137,8 @@ impl Platform for Web {
 struct Shell {
     app: App,
     inbox: Inbox,
+    /// The library's memory storage, whose changes are written behind into IndexedDB.
+    files: scorecraft_format::MemStorage,
 }
 
 impl eframe::App for Shell {
@@ -157,6 +167,14 @@ impl eframe::App for Shell {
             }
         }
         self.app.ui(ui);
+        let changes = self.files.take_changes();
+        if !changes.is_empty() {
+            wasm_bindgen_futures::spawn_local(async move {
+                if let Err(e) = crate::idb::apply(changes).await {
+                    web_sys::console::error_1(&e);
+                }
+            });
+        }
     }
 }
 
@@ -166,6 +184,14 @@ pub fn start() {
         .map(|t| Settings::parse(&t))
         .unwrap_or_default();
     wasm_bindgen_futures::spawn_local(async move {
+        // The library kept in this browser, if any.
+        let files = scorecraft_format::MemStorage::new();
+        let stored = crate::idb::load().await.unwrap_or_default();
+        let exists = stored.iter().any(|(p, _)| p == "manifest.json");
+        for (path, data) in &stored {
+            files.plant(path, data);
+        }
+        files.track_changes();
         let Some(canvas) = web_sys::window()
             .and_then(|w| w.document())
             .and_then(|d| d.get_element_by_id("scorecraft_canvas"))
@@ -180,12 +206,13 @@ pub fn start() {
                 eframe::WebOptions::default(),
                 Box::new(move |cc| {
                     let platform = Web {
+                        library: Some((files.clone(), exists)),
                         inbox: inbox.clone(),
                         ctx: Some(cc.egui_ctx.clone()),
                         wake: Rc::default(),
                     };
                     let app = App::new(Box::new(platform), settings);
-                    Ok(Box::new(Shell { app, inbox }))
+                    Ok(Box::new(Shell { app, inbox, files }))
                 }),
             )
             .await;

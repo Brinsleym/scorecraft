@@ -4004,6 +4004,8 @@ version = "0.0.1"
 dependencies = [
  "eframe",
  "js-sys",
+ "scorecraft-engine",
+ "scorecraft-format",
  "scorecraft-ui-egui",
  "serde_json",
  "wasm-bindgen",

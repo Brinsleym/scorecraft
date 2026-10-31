@@ -25,6 +25,11 @@ pub trait Platform {
     fn library_dir(&self) -> Option<String> {
         None
     }
+    /// A library storage the platform keeps itself (the browser's, backed by IndexedDB), and
+    /// whether it already holds a library. Asked once, before [`Platform::library_dir`].
+    fn library_storage(&mut self) -> Option<(scorecraft_engine::AnyStorage, bool)> {
+        None
+    }
     /// Asks where to save an exported PDF, suggesting `name`. `None` if cancelled or there is no
     /// dialog.
     fn pick_export_path(&mut self, _name: &str) -> Option<String> {
@@ -111,16 +116,22 @@ impl App {
         let mut session = Session::new();
         let mut state = UiState::new();
         // Scores open through the library, so markings are kept with them (ANNO-15).
-        let opened = match platform.library_dir() {
-            Some(dir) => {
-                let id = if std::path::Path::new(&dir).exists() {
-                    "library.open"
-                } else {
-                    "library.create"
-                };
-                session.dispatch(id, &json!({ "path": dir })).map(|_| ())
-            }
-            None => session.create_memory_library().map(|_| ()),
+        let mut platform = platform;
+        let own = platform.library_storage();
+        let opened = match own {
+            Some((storage, true)) => session.open_library_in(storage, "browser").map(|_| ()),
+            Some((storage, false)) => session.create_library_in(storage, "browser"),
+            None => match platform.library_dir() {
+                Some(dir) => {
+                    let id = if std::path::Path::new(&dir).exists() {
+                        "library.open"
+                    } else {
+                        "library.create"
+                    };
+                    session.dispatch(id, &json!({ "path": dir })).map(|_| ())
+                }
+                None => session.create_memory_library().map(|_| ()),
+            },
         };
         if let Err(e) = opened {
             state.message = Some(format!(

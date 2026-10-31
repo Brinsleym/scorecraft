@@ -353,7 +353,8 @@ impl LibraryView {
                 ));
             }
             ui.separator();
-            if ui.button("Import Folder…").clicked() {
+            // Browsers can't hand over a folder of files here.
+            if !cfg!(target_arch = "wasm32") && ui.button("Import Folder…").clicked() {
                 out.push(LibraryAction::ImportFolder);
             }
         });
