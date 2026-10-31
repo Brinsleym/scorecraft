@@ -24,6 +24,10 @@ pub(crate) struct LibrarySession {
     pub(crate) unreadable: Vec<String>,
     /// This session's hybrid logical clock; every marking is stamped with it (architecture §9).
     pub(crate) hlc: Hlc,
+    /// Sync's replica and log, when sync is on for this library.
+    pub(crate) sync: Option<crate::sync_cmds::SyncState>,
+    /// Records saved since sync last recorded changes.
+    pub(crate) dirty: BTreeSet<Touched>,
 }
 
 impl LibrarySession {
@@ -41,17 +45,39 @@ impl LibrarySession {
             self.history.forget_redo(scope);
             return Err(e.into());
         }
+        self.mark(&applied.touched);
         Ok(applied)
+    }
+
+    /// Note every record for sync (after a repair rewrote records outside the history).
+    pub(crate) fn mark_all(&mut self) {
+        let Some(st) = &self.sync else { return };
+        let mut all = BTreeSet::from([Touched::Library]);
+        for lib in [&self.lib, st.replica.library()] {
+            all.extend(lib.scores.keys().map(|id| Touched::Score(*id)));
+            all.extend(lib.lists.keys().map(|id| Touched::List(*id)));
+        }
+        self.dirty.extend(all);
+    }
+
+    /// Note records sync should look at after this command.
+    fn mark(&mut self, touched: &BTreeSet<Touched>) {
+        if self.sync.is_some() {
+            self.dirty.extend(touched.iter().copied());
+        }
     }
 
     /// Saves a change that is not an undo step (the score was opened).
     pub(crate) fn save_untracked(&mut self, touched: Touched) -> Result<(), EngineError> {
-        self.store.save(&self.lib, &BTreeSet::from([touched]))?;
+        let touched = BTreeSet::from([touched]);
+        self.store.save(&self.lib, &touched)?;
+        self.mark(&touched);
         Ok(())
     }
 
     pub(crate) fn save_undone(&mut self, u: &Undone) -> Result<(), EngineError> {
         self.store.save(&self.lib, &u.touched)?;
+        self.mark(&u.touched);
         Ok(())
     }
 }
@@ -195,15 +221,25 @@ impl Session {
 
     fn attach(
         &mut self,
-        store: Store<AnyStorage>,
+        mut store: Store<AnyStorage>,
         lib: Library,
         mut ids: IdGen,
         location: &str,
-        unreadable: Vec<String>,
+        mut unreadable: Vec<String>,
     ) {
-        // A device id per session until device identity is stored with sync (M8).
         let now = self.now_ms();
-        let device: DeviceId = ids.id(now);
+        // With sync on, the device keeps the id sync gave it; otherwise one per session.
+        let sync = match crate::sync_cmds::load(&mut store, &lib, now) {
+            Ok(s) => s,
+            Err(e) => {
+                unreadable.push(format!("sync: {e}"));
+                None
+            }
+        };
+        let device: DeviceId = match &sync {
+            Some(st) => st.replica.device(),
+            None => ids.id(now),
+        };
         self.library = Some(LibrarySession {
             store,
             lib,
@@ -212,6 +248,8 @@ impl Session {
             location: location.to_owned(),
             unreadable,
             hlc: Hlc::new(0, 0, device),
+            sync,
+            dirty: BTreeSet::new(),
         });
     }
 

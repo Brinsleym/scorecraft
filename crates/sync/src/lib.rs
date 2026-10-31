@@ -433,6 +433,11 @@ impl Replica {
         self.pending.len()
     }
 
+    /// Whether this replica has change `id` (applied or waiting).
+    pub fn knows(&self, id: &ChangeId) -> bool {
+        self.log.contains_key(id)
+    }
+
     /// How many changes this replica has, from every device.
     pub fn log_len(&self) -> usize {
         self.log.len()

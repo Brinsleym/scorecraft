@@ -684,6 +684,7 @@ fn verify(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
         // Repair rewrites records outside the undo history; steps recorded before it may no
         // longer apply.
         l.history.clear();
+        l.mark_all();
         crate::commands::set(
             &mut out,
             "repaired",

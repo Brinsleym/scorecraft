@@ -1,6 +1,6 @@
 # Sync
 
-> **Last reviewed:** 2026-10-31 · **Last updated:** 2026-10-31 · **Change:** minor (part 2: every record, revivals, list positions, changes from edits; earlier: first version) · **Target:** enScore 3.7 (2026)
+> **Last reviewed:** 2026-10-31 · **Last updated:** 2026-10-31 · **Change:** minor (part 3: syncing through a shared folder; earlier: part 2: every record, revivals, list positions, changes from edits; earlier: first version) · **Target:** enScore 3.7 (2026)
 
 How two or more devices that change the same library while apart end up with the same library.
 Written for milestone M8, from the owner's design ([architecture §9](../architecture.md#9-sync)).
@@ -64,6 +64,28 @@ peers) and score files come in later parts.
   network. Exchanging is "send what the other hasn't seen": each side names the changes it has
   (by device, the highest sequence received), and gets the rest.
 
+### SYNC-1 and SYNC-7 Syncing through a shared folder (part 3)
+
+- `sync.backend.set {kind: "folder", path}` turns sync on for the open library and syncs it
+  through `path`: any folder every device can reach, such as one that Google Drive for desktop,
+  OneDrive, Dropbox, iCloud Drive or Syncthing keeps in sync, or a network share. `{kind: "none"}`
+  stops using the folder; the library keeps recording changes.
+- Turning sync on gives the device an id, kept in the library, and records the whole library as
+  changes. From then on, every command's saved edits are recorded after the command, and kept in
+  the library under `sync/` as append-only blocks. When the library opens, the replica is
+  rebuilt from them, and anything edited while sync wasn't recording is recorded then.
+- `sync.now`:
+  - writes this device's new changes to the folder as one new block file;
+  - reads the blocks of other devices that it hasn't seen;
+  - applies them to the library and saves them;
+  - copies score files both ways, by content address.
+
+  Each device writes only new files and never changes one, so a cloud tool never sees a
+  conflict. A block may only carry its own device's changes, and a damaged block or file is
+  skipped and listed in `sync.status`. Undo history for records that changed is dropped.
+- `sync.status` reports whether sync is on, the device, the folder, how many changes there are,
+  how many wait, when it last synced, and the score files neither side has yet.
+
 ## Acceptance tests
 
 | Id | Given | When | Then |
@@ -77,6 +99,10 @@ peers) and score files come in later parts.
 | SYNC-T7 | A marking (then a whole score) on two devices | one deletes it, then undoes the delete | it is back on both |
 | SYNC-T8 | A list A B C D on two devices | one moves D to the front (one change) while the other inserts X after B and drops C | both read D A B X |
 | SYNC-T9 | A replica's state saved as JSON | it is loaded and edits continue | nothing is lost and sequence numbers carry on |
+| SYNC-T10 | Two devices on one folder | one imports a score and draws on it, both sync | the other has the score, its file and the stroke, and can open, render and draw; its own edits come back |
+| SYNC-T11 | A score on both | both draw and one renames it offline, then they sync | both have both strokes and the new name; nothing waits |
+| SYNC-T12 | A library on disk syncing through a real folder | it is closed and reopened, then edited | the device keeps its id, the log is rebuilt, and a new device on the folder gets everything |
+| SYNC-T13 | Bad params, a damaged block from another device | `sync.backend.set`, `sync.now` | refused with messages; the block is skipped and listed |
 
 ## Open questions
 
@@ -90,5 +116,6 @@ peers) and score files come in later parts.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-31 | minor | Part 3: SYNC-1 and SYNC-7 through a shared folder; SYNC-T10..T13 |
 | 2026-10-31 | minor | Part 2: every record of the library, revivals for undone deletes, list positions, changes worked out from edits; SYNC-T6..T9 |
 | 2026-10-31 | major | First version for M8 part 1: merge rules for markings and score details, exchange by what each side has seen |

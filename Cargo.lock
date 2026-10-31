@@ -3814,8 +3814,10 @@ dependencies = [
  "scorecraft-practice",
  "scorecraft-render",
  "scorecraft-search",
+ "scorecraft-sync",
  "scorecraft-testkit",
  "scorecraft-text",
+ "serde",
  "serde_json",
 ]
 

@@ -73,7 +73,7 @@ mod tests {
                 .all(|c| c["id"].as_str().unwrap().starts_with("annotate."))
         );
         let none = s
-            .dispatch("engine.commands.list", &json!({"filter": "sync."}))
+            .dispatch("engine.commands.list", &json!({"filter": "nothing.here."}))
             .unwrap();
         assert!(none["commands"].as_array().unwrap().is_empty());
     }
