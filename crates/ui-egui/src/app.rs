@@ -30,6 +30,11 @@ pub trait Platform {
     fn pick_export_path(&mut self, _name: &str) -> Option<String> {
         None
     }
+    /// Hands a file to the player when there is no save dialog (the browser downloads it).
+    /// `false` when the platform can't.
+    fn save_bytes(&mut self, _name: &str, _bytes: &[u8]) -> bool {
+        false
+    }
     /// Asks for a folder to import. `None` if cancelled or there is no dialog.
     fn pick_folder(&mut self) -> Option<String> {
         None
@@ -644,16 +649,42 @@ impl App {
 
     /// Exports the open score with its visible layers' ink (EXP-2).
     fn export(&mut self, mode: &str) {
-        let name = self
-            .settings
-            .last_score
-            .as_deref()
-            .and_then(|p| std::path::Path::new(p).file_stem())
-            .map(|s| format!("{} (marked).pdf", s.to_string_lossy()))
-            .unwrap_or_else(|| "Score (marked).pdf".to_owned());
+        // Named after the score's title (or its file), "(marked)" added.
+        let title = self.session.library_score_id().and_then(|id| {
+            self.session
+                .dispatch("library.score.get", &json!({ "score": id }))
+                .ok()
+                .and_then(|v| {
+                    let t = v.pointer("/metadata/title").and_then(Value::as_str)?;
+                    (!t.trim().is_empty()).then(|| t.to_owned())
+                })
+        });
+        let stem = title.or_else(|| {
+            self.settings
+                .last_score
+                .as_deref()
+                .and_then(|p| std::path::Path::new(p).file_stem())
+                .map(|s| s.to_string_lossy().into_owned())
+        });
+        let clean: String = stem
+            .unwrap_or_else(|| "Score".to_owned())
+            .chars()
+            .map(|c| if "/\\:*?\"<>|".contains(c) { '-' } else { c })
+            .collect();
+        let name = format!("{clean} (marked).pdf");
         if let Some(path) = self.platform.pick_export_path(&name) {
             let r = self.command("score.export.pdf", &json!({ "path": path, "mode": mode }));
             self.report(r);
+        } else if cfg!(target_arch = "wasm32") {
+            // No save dialog: build the file in memory and let the browser download it.
+            match self.session.export_pdf_bytes(&json!({ "mode": mode })) {
+                Ok(pdf) => {
+                    if !self.platform.save_bytes(&name, &pdf) {
+                        self.state.message = Some("This browser couldn't save the file.".into());
+                    }
+                }
+                Err(e) => self.state.message = Some(e.to_string()),
+            }
         }
     }
 

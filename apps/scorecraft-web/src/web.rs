@@ -32,6 +32,8 @@ fn read_into(file: web_sys::File, inbox: Inbox, ctx: eframe::egui::Context) {
 struct Web {
     inbox: Inbox,
     ctx: Option<eframe::egui::Context>,
+    /// The screen wake lock while held (READ-9), released when keep-awake goes off.
+    wake: Rc<RefCell<Option<eframe::wasm_bindgen::JsValue>>>,
 }
 
 impl Platform for Web {
@@ -56,12 +58,65 @@ impl Platform for Web {
         None
     }
 
+    /// The Screen Wake Lock API (`navigator.wakeLock.request("screen")`), where the browser has
+    /// it; called by name, so no unstable web-sys features are needed.
     fn set_keep_awake(&mut self, on: bool) -> Result<(), String> {
-        if on {
-            Err("not in the browser yet".into())
-        } else {
-            Ok(())
+        use eframe::wasm_bindgen::JsValue;
+        use js_sys::{Function, Reflect};
+        if !on {
+            if let Some(sentinel) = self.wake.borrow_mut().take()
+                && let Ok(release) = Reflect::get(&sentinel, &JsValue::from_str("release"))
+                && let Ok(release) = release.dyn_into::<Function>()
+            {
+                let _ = release.call0(&sentinel);
+            }
+            return Ok(());
         }
+        let navigator = web_sys::window()
+            .map(|w| JsValue::from(w.navigator()))
+            .ok_or_else(|| "no browser window".to_owned())?;
+        let lock = Reflect::get(&navigator, &JsValue::from_str("wakeLock"))
+            .ok()
+            .filter(|v| !v.is_undefined())
+            .ok_or_else(|| "this browser can't keep the screen awake".to_owned())?;
+        let request: Function = Reflect::get(&lock, &JsValue::from_str("request"))
+            .ok()
+            .and_then(|f| f.dyn_into().ok())
+            .ok_or_else(|| "this browser can't keep the screen awake".to_owned())?;
+        let promise: js_sys::Promise = request
+            .call1(&lock, &JsValue::from_str("screen"))
+            .ok()
+            .and_then(|p| p.dyn_into().ok())
+            .ok_or_else(|| "the browser refused to keep the screen awake".to_owned())?;
+        let held = self.wake.clone();
+        wasm_bindgen_futures::spawn_local(async move {
+            if let Ok(sentinel) = wasm_bindgen_futures::JsFuture::from(promise).await {
+                *held.borrow_mut() = Some(sentinel);
+            }
+        });
+        Ok(())
+    }
+
+    /// Downloads `bytes` as `name` through a temporary object URL.
+    fn save_bytes(&mut self, name: &str, bytes: &[u8]) -> bool {
+        let save = || -> Option<()> {
+            let document = web_sys::window()?.document()?;
+            let parts = js_sys::Array::new();
+            parts.push(&js_sys::Uint8Array::from(bytes));
+            let options = web_sys::BlobPropertyBag::new();
+            options.set_type("application/pdf");
+            let blob =
+                web_sys::Blob::new_with_u8_array_sequence_and_options(&parts, &options).ok()?;
+            let url = web_sys::Url::create_object_url_with_blob(&blob).ok()?;
+            let a: web_sys::HtmlAnchorElement =
+                document.create_element("a").ok()?.dyn_into().ok()?;
+            a.set_href(&url);
+            a.set_download(name);
+            a.click();
+            let _ = web_sys::Url::revoke_object_url(&url);
+            Some(())
+        };
+        save().is_some()
     }
 
     fn save_settings(&mut self, settings: &Settings) {
@@ -127,6 +182,7 @@ pub fn start() {
                     let platform = Web {
                         inbox: inbox.clone(),
                         ctx: Some(cc.egui_ctx.clone()),
+                        wake: Rc::default(),
                     };
                     let app = App::new(Box::new(platform), settings);
                     Ok(Box::new(Shell { app, inbox }))

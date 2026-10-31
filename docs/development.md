@@ -199,8 +199,8 @@ python3 -m http.server -d apps/scorecraft-web 8000
 then open <http://localhost:8000>. Install the CLI at the version in `Cargo.lock`
 (`cargo install wasm-bindgen-cli --version 0.2.130 --locked`). Scores come from the file picker
 (the Open button) or a drop, and open through an in-memory library: markings last until the tab
-closes. Settings are kept in local storage. Not yet: a library kept in the browser (OPFS),
-export downloads, keep-awake (Screen Wake Lock), Web MIDI. `cargo xtask wasm` checks it builds.
+closes. Settings are kept in local storage. Export downloads the file; keep-awake uses the Screen
+Wake Lock API where the browser has it. Not yet: a library kept in the browser (OPFS), Web MIDI. `cargo xtask wasm` checks it builds.
 
 ## Mobile builds
 
