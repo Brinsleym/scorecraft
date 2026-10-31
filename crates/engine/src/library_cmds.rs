@@ -96,6 +96,15 @@ pub fn specs() -> Vec<CommandSpec> {
             import_files as _,
         ),
         spec(
+            "library.import.images",
+            "Import Photos as a Score…",
+            "File>Import",
+            r#"{"paths":[path],"title":string?}"#,
+            false,
+            library_open,
+            import_images as _,
+        ),
+        spec(
             "score.newManuscript",
             "New Manuscript Paper…",
             "File",
@@ -362,6 +371,38 @@ fn import_files(session: &mut Session, params: &Value) -> Result<Value, EngineEr
     };
     l.commit(&label, Transaction::new(ops))?;
     Ok(edited(l, json!({ "imported": imported, "failed": failed })))
+}
+
+/// Photos or scans as a score (IMP-3): each image one page, in the order given, as a new
+/// library score, opened.
+fn import_images(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
+    const ID: &str = "library.import.images";
+    let p = params_object(ID, params)?;
+    reject_unknown_keys(ID, p, &["paths", "title"])?;
+    let paths = opt_str_list(ID, p, "paths", scorecraft_pdf::images::MAX_IMAGES)?
+        .ok_or_else(|| bad(ID, "`paths` is required".into()))?;
+    let mut images = Vec::with_capacity(paths.len());
+    for path in &paths {
+        let bytes = crate::score_cmds::read_score(path)?;
+        let name = std::path::Path::new(path)
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        images.push((name, bytes));
+    }
+    let first = images
+        .first()
+        .map(|(n, _)| {
+            std::path::Path::new(n)
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_default()
+        })
+        .unwrap_or_default();
+    let title = opt_str(ID, p, "title")?.map(str::to_owned).unwrap_or(first);
+    check_len(ID, "title", &title, 200)?;
+    let pdf = scorecraft_pdf::pdf_from_images(&images, &title)?;
+    session.open_bytes_in_library(&format!("{title}.pdf"), pdf, None)
 }
 
 /// Blank manuscript paper (PAGE-6): a new score of staves, grand staves or tablature, imported

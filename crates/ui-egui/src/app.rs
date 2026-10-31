@@ -40,6 +40,11 @@ pub trait Platform {
     fn save_bytes(&mut self, _name: &str, _bytes: &[u8]) -> bool {
         false
     }
+    /// Asks for photos or scans to make a score from (IMP-3). `None` if cancelled or there is no
+    /// dialog.
+    fn pick_images(&mut self) -> Option<Vec<String>> {
+        None
+    }
     /// Asks for a folder to import. `None` if cancelled or there is no dialog.
     fn pick_folder(&mut self) -> Option<String> {
         None
@@ -207,7 +212,10 @@ impl App {
         }
         if let (Ok(_), true) = (
             &r,
-            id == "score.open" || id == "library.openFile" || id == "score.newManuscript",
+            id == "score.open"
+                || id == "library.openFile"
+                || id == "score.newManuscript"
+                || id == "library.import.images",
         ) {
             self.opened(params);
             self.state.library = false;
@@ -795,6 +803,13 @@ impl App {
             }
             if self.session.library().is_some() {
                 ui.menu_button("New", |ui| {
+                    if !cfg!(target_arch = "wasm32") && ui.button("Score from photos…").clicked()
+                    {
+                        if let Some(paths) = self.platform.pick_images() {
+                            run.push(("library.import.images", json!({ "paths": paths })));
+                        }
+                        ui.close();
+                    }
                     for (paper, label) in [
                         ("single", "Manuscript paper"),
                         ("grand", "Piano manuscript paper"),

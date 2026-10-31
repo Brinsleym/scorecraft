@@ -131,6 +131,20 @@ impl Platform for Desktop {
         Ok(())
     }
 
+    fn pick_images(&mut self) -> Option<Vec<String>> {
+        #[cfg(any(windows, target_os = "macos"))]
+        {
+            rfd::FileDialog::new()
+                .add_filter("Images", &["png", "jpg", "jpeg"])
+                .pick_files()
+                .map(|v| v.iter().map(|p| p.to_string_lossy().into_owned()).collect())
+        }
+        #[cfg(not(any(windows, target_os = "macos")))]
+        {
+            None
+        }
+    }
+
     fn pick_folder(&mut self) -> Option<String> {
         #[cfg(any(windows, target_os = "macos"))]
         {

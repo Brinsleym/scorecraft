@@ -15,14 +15,14 @@ the feature catalog is [`feature-map.md`](feature-map.md); the measured checklis
 
 | Number | Value | Kind |
 |---|---|---|
-| **Feature breadth** (does each enScore feature exist?) | **57%** weighted (64 of 124 feature-map rows live, all `partial`: engine commands with tests, plus the M3 Windows reader; the pen marks up in the desktop app) | measured by `cargo xtask parity` |
+| **Feature breadth** (does each enScore feature exist?) | **58%** weighted (65 of 124 feature-map rows live, all `partial`: engine commands with tests, plus the M3 Windows reader; the pen marks up in the desktop app) | measured by `cargo xtask parity` |
 | **Ready for real work** (could a musician replace enScore with it on stage?) | **0%** | estimated, weights below |
 | **Practising musician** (reads, marks, turns with a pedal, uses setlists) | 0% | estimated, [method](#practising-musician) |
 | **Essentials user** (open a PDF, turn pages, mark it up) | 0% | estimated, [method](#essentials-user) |
 | **Stage** | **pre-alpha** | the [alpha gate](roadmap.md#alpha-gate) does not pass |
 | Remaining to **alpha** | **~105–287 agent-hours** | estimated, uncalibrated: P0 rows (after PDFCraft reuse); M0 (2026-10-28), M2, M1 and M3 (2026-10-31) are done; M4 parts 1 to 4 (ink, layers, presets, text, stamps, selection, the pen in the desktop app, export with ink) took 50–75 h off |
-| Remaining to **beta** | **~507–1,079 agent-hours** | estimated, uncalibrated: alpha + P1 rows (350–680 h) + stability and performance (100–200 h) |
-| Remaining to **full parity** | **~734–1,525 agent-hours** | estimated, uncalibrated: beta + P2 rows (233–456 h, with the ruler); P3 (ours only) adds 80–170 h |
+| Remaining to **beta** | **~505–1,076 agent-hours** | estimated, uncalibrated: alpha + P1 rows (350–680 h) + stability and performance (100–200 h) |
+| Remaining to **full parity** | **~732–1,522 agent-hours** | estimated, uncalibrated: beta + P2 rows (233–456 h, with the ruler); P3 (ours only) adds 80–170 h |
 
 "Agent-hours" are wall-clock hours for one agent working sequentially, including tests, as in
 PhotoCraft's docs. They are **uncalibrated** until this repository has merged-PR history
@@ -45,7 +45,7 @@ parts.
 - enscore.app was not reachable from our build environment on 2026-10-28; reading it is the first
   re-measure task.
 
-## Feature breadth: 57% (weighted, 2026-10-31)
+## Feature breadth: 58% (weighted, 2026-10-31)
 
 | Component | Weight | Ours / enScore | % | Kind |
 |---|---:|---|---:|---|
@@ -53,11 +53,11 @@ parts.
 | Annotation (ANNO) | 20% | 16 / 18 | 89% | measured |
 | Library, page editing, navigation (LIB, PAGE, NAV) | 15% | 23 / 28 | 82% | measured |
 | Setlists (LIST) | 10% | 5 / 7 | 71% | measured |
-| Import, export, scanning, IMSLP, forScore (IMP, EXP) | 10% | 1 / 12 | 8% | measured |
+| Import, export, scanning, IMSLP, forScore (IMP, EXP) | 10% | 2 / 12 | 17% | measured |
 | Practice, audio, MIDI (PRAC, PLAY, MIDI) | 10% | 2 / 23 | 9% | measured |
 | Sync and backup (SYNC) | 5% | 0 / 8 | 0% | measured |
 | Platforms and languages (PLAT) | 5% | 1 / 5 | 20% | measured |
-| **Weighted** | 100% | | **57%** | |
+| **Weighted** | 100% | | **58%** | |
 
 Measured on the M4 branch, merged with M3 done (READ, TURN and PLAT rows come from M3; main's
 30% was measured before the feature map's M4 rows went live). Annotation rows are `partial`: the engine draws, erases and stores ink with tests, but
@@ -136,6 +136,7 @@ performance hardening before beta 100–200.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-31 | patch | IMP-3 photos as a score: breadth 57% → 58% (65 of 124 rows); beta ~505–1,076 h, full ~732–1,522 h |
 | 2026-10-31 | patch | PAGE-6 manuscript paper: 64 of 124 rows (breadth stays 57%); beta ~507–1,079 h, full ~734–1,525 h |
 | 2026-10-31 | patch | READ-7, TURN-7, NAV-2, NAV-3, PRAC-2: breadth 54% → 57% (63 of 124 rows); beta ~510–1,085 h, full ~737–1,531 h |
 | 2026-10-31 | patch | LIB-6 (search inside scores): breadth 53% → 54% (58 of 124 rows); beta ~520–1,105 h, full ~747–1,551 h |

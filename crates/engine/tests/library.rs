@@ -472,3 +472,40 @@ fn page_6_manuscript_paper_is_a_new_library_score() {
         "bad_params"
     );
 }
+
+#[test]
+fn imp_3_photos_become_a_score() {
+    let dir = temp("images");
+    let mut paths = Vec::new();
+    for (i, (w, h)) in [(60u32, 80u32), (60, 80), (90, 40)].iter().enumerate() {
+        let rgba = vec![180u8; (w * h * 4) as usize];
+        let png = scorecraft_codecs::png::encode_premultiplied(*w, *h, &rgba).unwrap();
+        let p = dir.join(format!("page{i}.png"));
+        std::fs::write(&p, png).unwrap();
+        paths.push(p.to_string_lossy().into_owned());
+    }
+    let mut s = Session::new();
+    fixed_clock(&mut s);
+    s.create_memory_library().unwrap();
+    let r = run(
+        &mut s,
+        "library.import.images",
+        json!({ "paths": paths, "title": "Phone scans" }),
+    );
+    assert_eq!(r["imported"], true);
+    assert_eq!(s.reader_state().unwrap()["pageCount"], 3);
+    assert_eq!(
+        run(&mut s, "library.scores", json!({}))["scores"][0]["title"],
+        "Phone scans"
+    );
+    let junk = dir.join("notes.txt");
+    std::fs::write(&junk, "hello").unwrap();
+    assert_eq!(
+        fails(
+            &mut s,
+            "library.import.images",
+            json!({ "paths": [junk.to_string_lossy()] })
+        ),
+        "invalid_pdf"
+    );
+}

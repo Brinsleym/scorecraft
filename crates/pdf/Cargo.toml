@@ -13,6 +13,7 @@ pdfcraft-render = { workspace = true }
 pdfcraft-fonts = { workspace = true }
 pdfcraft-cos = { workspace = true }
 pdfcraft-organize = { workspace = true }
+png = { workspace = true }
 bytemuck = { workspace = true }
 
 [features]

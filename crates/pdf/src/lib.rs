@@ -19,6 +19,7 @@ mod document;
 mod error;
 pub mod export;
 mod fonts;
+pub mod images;
 pub mod manuscript;
 
 pub use document::{
@@ -28,6 +29,7 @@ pub use document::{
 pub use error::PdfError;
 pub use export::{ExportMark, ExportMode, ExportPage, InkFill, MarkKind, export_pdf};
 pub use fonts::interface_font;
+pub use images::pdf_from_images;
 pub use manuscript::{Paper, manuscript};
 
 /// The crate's package name, used in diagnostics.
