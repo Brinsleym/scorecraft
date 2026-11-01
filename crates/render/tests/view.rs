@@ -153,3 +153,59 @@ fn dropping_a_view_with_queued_work_stops_the_worker() {
     v.prefetch(&(0..20).collect::<Vec<_>>(), 1.0);
     drop(v);
 }
+
+fn red_line() -> scorecraft_render::PageInk {
+    use scorecraft_doc::{Color, InkPoint, Stroke, Tool};
+    scorecraft_render::PageInk {
+        key: 7,
+        marks: Arc::new(vec![scorecraft_doc::AnnotationKind::Stroke(Stroke {
+            tool: Tool::Pen,
+            color: Color::RED,
+            width: 10.0,
+            nib: Default::default(),
+            points: vec![InkPoint::new(100.0, 396.0), InkPoint::new(500.0, 396.0)],
+        })]),
+        curve: scorecraft_ink::PressureCurve::default(),
+    }
+}
+
+#[test]
+fn ink_is_drawn_in_the_background_before_a_turn_needs_it() {
+    let mut v = view(3);
+    v.start_worker().unwrap();
+    v.set_ink(1, Some(red_line()));
+    assert_eq!(v.ink_key(1), Some(7));
+    v.prefetch(&[1], 1.0);
+    assert!(v.wait_for_prefetch(Duration::from_secs(30)));
+    assert!(v.is_inked_cached(1, 1.0), "the worker drew the ink");
+    let inked = v.inked_page(1, 1.0).unwrap();
+    let plain = v.page(1, 1.0).unwrap();
+    assert!(!Arc::ptr_eq(&inked, &plain));
+    let s = ZoomBucket::of(1.0).unwrap().scale();
+    let y = ((792.0 - 396.0) * s) as u32;
+    let px = inked.pixel((300.0 * s) as u32, y).unwrap();
+    assert!(px[0] > 200 && px[1] < 60, "{px:?}");
+    assert_ne!(plain.pixel((300.0 * s) as u32, y), Some(px));
+    // A page without ink is the plain page; clearing ink returns to it.
+    assert!(Arc::ptr_eq(
+        &v.inked_page(0, 1.0).unwrap(),
+        &v.page(0, 1.0).unwrap()
+    ));
+    v.set_ink(1, None);
+    assert!(Arc::ptr_eq(&v.inked_page(1, 1.0).unwrap(), &plain));
+}
+
+#[test]
+fn ink_without_a_worker_is_drawn_by_run_prefetch_or_on_demand() {
+    let mut v = view(2);
+    v.set_ink(0, Some(red_line()));
+    assert!(!v.is_inked_cached(0, 1.0));
+    v.prefetch(&[0], 1.0);
+    assert_eq!(v.run_prefetch(4), 1);
+    assert!(v.is_inked_cached(0, 1.0));
+    v.set_ink(1, Some(red_line()));
+    let _ = v.page(1, 1.0).unwrap();
+    assert!(!v.is_inked_cached(1, 1.0), "cached plain, not yet inked");
+    let _ = v.inked_page(1, 1.0).unwrap();
+    assert!(v.is_inked_cached(1, 1.0));
+}

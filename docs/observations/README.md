@@ -43,4 +43,5 @@ Numbered steps: what the user does, what enScore does in response.
 | File | Feature-map ids | Source |
 |---|---|---|
 | [public-listings-2026-10-28.md](public-listings-2026-10-28.md) | all | Public store listings and partner pages |
-| [screenshots/README.md](screenshots/README.md) | LIB, LIST, IMP | Index of 17 user screenshots (Library, Lists) and 6 store promo images (images not committed) |
+| [screenshots/README.md](screenshots/README.md) | LIB, LIST, IMP, ANNO | Index of 23 user screenshots (Library, Lists, Markup) and 6 store promo images (images not committed) |
+| [anno-markup-toolbar.md](anno-markup-toolbar.md) | ANNO-1, -3, -4, -6..8, -12, -14, PAGE-7, NAV-1 | Owner's observation of the markup toolbar on Windows, 2026-10-31 |

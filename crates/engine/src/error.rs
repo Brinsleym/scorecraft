@@ -20,6 +20,9 @@ pub enum EngineError {
     Edit(scorecraft_ops::OpError),
     /// The library store failed (unreadable, too new, not a library); carries its stable code.
     Store(scorecraft_format::StoreError),
+    /// Pen samples could not make a stroke (none usable, too many, far off the page); carries the
+    /// ink layer's stable code.
+    Ink(scorecraft_ink::InkError),
 }
 
 impl EngineError {
@@ -34,6 +37,7 @@ impl EngineError {
             EngineError::Io(_) => "io_error",
             EngineError::Edit(e) => e.code(),
             EngineError::Store(e) => e.code(),
+            EngineError::Ink(e) => e.code(),
         }
     }
 }
@@ -51,6 +55,7 @@ impl fmt::Display for EngineError {
             EngineError::Io(why) => f.write_str(why),
             EngineError::Edit(e) => e.fmt(f),
             EngineError::Store(e) => e.fmt(f),
+            EngineError::Ink(e) => e.fmt(f),
         }
     }
 }
@@ -72,5 +77,11 @@ impl From<scorecraft_ops::OpError> for EngineError {
 impl From<scorecraft_format::StoreError> for EngineError {
     fn from(e: scorecraft_format::StoreError) -> Self {
         EngineError::Store(e)
+    }
+}
+
+impl From<scorecraft_ink::InkError> for EngineError {
+    fn from(e: scorecraft_ink::InkError) -> Self {
+        EngineError::Ink(e)
     }
 }

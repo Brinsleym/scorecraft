@@ -310,8 +310,12 @@ impl Session {
 
     /// Queues the pages a turn will show next for background rendering.
     pub(crate) fn prefetch_reader(&mut self) {
+        let lib = self.library.as_ref().map(|l| &l.lib);
+        let curve = self.markup.curve;
         if let Some(open) = self.score.as_mut() {
             let list = open.reader.prefetch_list();
+            let score = crate::markup::library_score(lib, open.library_score);
+            crate::markup::sync_ink(&open.view, score, curve, list.iter().map(|p| p.0));
             open.view.prefetch_each(&list);
         }
     }
@@ -321,7 +325,18 @@ impl Session {
     /// waits on rendering and missing bitmaps come back as `None`. `None` with no score open.
     pub fn reader_frame(&mut self, render: bool) -> Option<Vec<FrameSlot>> {
         self.refresh_reader();
+        let lib = self.library.as_ref().map(|l| &l.lib);
+        let curve = self.markup.curve;
         let open = self.score.as_mut()?;
+        let score = crate::markup::library_score(lib, open.library_score);
+        let on_screen: Vec<usize> = open
+            .reader
+            .frame()
+            .slots
+            .iter()
+            .filter_map(|s| open.reader.shown.get(s.page).map(|p| p.file_page))
+            .collect();
+        crate::markup::sync_ink(&open.view, score, curve, on_screen);
         let frame = open.reader.frame();
         let mut out = Vec::with_capacity(frame.slots.len());
         for slot in frame.slots {
@@ -329,8 +344,10 @@ impl Session {
                 continue;
             };
             let scale = open.reader.render_scale(&slot);
+            // A page cached without its ink yet (just marked) is drawn now: a page is never
+            // shown without its ink.
             let bitmap = if render || open.view.is_cached(shown.file_page, scale) {
-                open.view.page(shown.file_page, scale).ok()
+                open.view.inked_page(shown.file_page, scale).ok()
             } else {
                 None
             };

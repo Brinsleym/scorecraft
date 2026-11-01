@@ -207,7 +207,7 @@ cargo test --workspace                           # the test suite
 | [`AGENTS.md`](AGENTS.md) | Guide for agents and contributors: rules, workspace map, checks before you finish |
 | [`ROADMAP.md`](ROADMAP.md) | One-page status: stage, parity numbers, what's next |
 | [`docs/clean-room.md`](docs/clean-room.md) | The clean-room methodology |
-| [`docs/feature-map.md`](docs/feature-map.md) | All 122 enScore features with ids, commands, crates, priorities, estimates |
+| [`docs/feature-map.md`](docs/feature-map.md) | All 124 enScore features with ids, commands, crates, priorities, estimates |
 | [`docs/architecture.md`](docs/architecture.md) | Crates, layers, document model, rendering, sync |
 | [`docs/target-app-parity.md`](docs/target-app-parity.md), [`docs/gaps.md`](docs/gaps.md), [`docs/roadmap.md`](docs/roadmap.md) | Parity assessment, ranked gaps, milestones and alpha gate |
 | [`docs/contributing.md`](docs/contributing.md), [`docs/development.md`](docs/development.md) | How to contribute, build, test and drive the app |

@@ -63,8 +63,17 @@ mod tests {
             all["commands"].as_array().unwrap().len(),
             s.commands().len()
         );
-        let none = s
+        let ink = s
             .dispatch("engine.commands.list", &json!({"filter": "annotate."}))
+            .unwrap();
+        let ink = ink["commands"].as_array().unwrap();
+        assert!(!ink.is_empty());
+        assert!(
+            ink.iter()
+                .all(|c| c["id"].as_str().unwrap().starts_with("annotate."))
+        );
+        let none = s
+            .dispatch("engine.commands.list", &json!({"filter": "sync."}))
             .unwrap();
         assert!(none["commands"].as_array().unwrap().is_empty());
     }

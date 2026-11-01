@@ -172,7 +172,7 @@ pub const FEATURES: &[Feature] = &[
     },
     Feature {
         id: "ANNO-4",
-        title: "Custom pen colours and widths, saved presets",
+        title: "Custom pen colours and widths, saved presets: eight changeable swatches, a fixed palette of extra colours that replaces the selected swatch, a width slider per tool",
         priority: "P1",
         commands: &["annotate.pen.preset.set"],
     },
@@ -196,14 +196,14 @@ pub const FEATURES: &[Feature] = &[
     },
     Feature {
         id: "ANNO-8",
-        title: "Typed text annotations, movable and editable",
+        title: "Typed text annotations, movable and editable: plain text with no background, wrapped to a maximum width, kept inside the page, a grip handle to move; Type with Touch",
         priority: "P0",
         commands: &["annotate.text.add", "annotate.text.edit"],
     },
     Feature {
         id: "ANNO-9",
-        title: "Stamps: fingerings, dynamics, bowings and other music symbols (from an OFL SMuFL font)",
-        priority: "P1",
+        title: "Stamps (ScoreCraft's own; not an enScore feature, per the owner's observation): dynamics pp to ff in the Edwin font, crescendo and diminuendo hairpins with stretch and move handles",
+        priority: "P3",
         commands: &["annotate.stamp.place"],
     },
     Feature {
@@ -216,13 +216,13 @@ pub const FEATURES: &[Feature] = &[
         id: "ANNO-11",
         title: "Pen shortcuts (stylus double-tap / barrel button switches tool)",
         priority: "P2",
-        commands: &["input.pen.shortcut.map"],
+        commands: &["annotate.pen.button", "annotate.pen.buttonTool"],
     },
     Feature {
         id: "ANNO-12",
-        title: "Select, move, resize and recolour existing annotations (lasso)",
+        title: "Select, move, copy, resize, recolour and delete existing annotations with a rectangle (the same rectangle starts a Score Snip or Score Shortcut)",
         priority: "P1",
-        commands: &["annotate.select", "annotate.transform"],
+        commands: &["annotate.select.rect", "annotate.select.move"],
     },
     Feature {
         id: "ANNO-13",
@@ -232,9 +232,9 @@ pub const FEATURES: &[Feature] = &[
     },
     Feature {
         id: "ANNO-14",
-        title: "Palm rejection and \"pen only\" drawing mode",
+        title: "Palm rejection while the pen draws, \"pen only\" drawing by default with Draw with Touch, and a touch lock",
         priority: "P0",
-        commands: &["input.pen.only"],
+        commands: &["input.pen.only", "input.touch.lock"],
     },
     Feature {
         id: "ANNO-15",
@@ -246,7 +246,19 @@ pub const FEATURES: &[Feature] = &[
         id: "ANNO-16",
         title: "Shapes and lines (straight line, circle) snapped from strokes",
         priority: "P2",
-        commands: &["annotate.tool.shape"],
+        commands: &["annotate.shapes"],
+    },
+    Feature {
+        id: "ANNO-17",
+        title: "Ruler: a straight edge across the whole screen width to rule lines against, moved up and down; its button is hidden unless a setting shows it",
+        priority: "P2",
+        commands: &["annotate.ruler.show", "annotate.ruler.set"],
+    },
+    Feature {
+        id: "ANNO-18",
+        title: "Turn the ruler to any angle, with its angle shown (lowest priority, owner 2026-10-31)",
+        priority: "P3",
+        commands: &["annotate.ruler.rotate"],
     },
     Feature {
         id: "LIB-1",

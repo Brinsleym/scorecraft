@@ -13,11 +13,13 @@
 )]
 
 mod keys;
+mod palm;
 mod touch;
 
 pub use keys::{
     Action, Chord, DEFAULT_DEBOUNCE_MS, KeyGate, MAX_ENTRIES, PROFILES, PedalMap, Profile,
 };
+pub use palm::{Filtered, MAX_POINTERS, PEN_LIFT_GRACE_MS, PalmFilter, Phase, PointerKind};
 pub use touch::{Gesture, MAX_TAP_TRAVEL, MIN_SWIPE, Zone, classify, tap_zone};
 
 /// The crate's package name, used by `cargo xtask layers` smoke tests and diagnostics.

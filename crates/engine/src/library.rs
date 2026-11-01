@@ -4,7 +4,7 @@
 
 use std::collections::BTreeSet;
 
-use scorecraft_doc::{IdGen, Library};
+use scorecraft_doc::{DeviceId, Hlc, IdGen, Library};
 use scorecraft_format::{DirStorage, MemStorage, Storage, Store};
 use scorecraft_ops::{Applied, History, Scope, Touched, Transaction, Undone};
 
@@ -22,6 +22,8 @@ pub(crate) struct LibrarySession {
     pub(crate) location: String,
     /// Records that could not be read when it opened, for `library.verify`.
     pub(crate) unreadable: Vec<String>,
+    /// This session's hybrid logical clock; every marking is stamped with it (architecture §9).
+    pub(crate) hlc: Hlc,
 }
 
 impl LibrarySession {
@@ -195,10 +197,13 @@ impl Session {
         &mut self,
         store: Store<AnyStorage>,
         lib: Library,
-        ids: IdGen,
+        mut ids: IdGen,
         location: &str,
         unreadable: Vec<String>,
     ) {
+        // A device id per session until device identity is stored with sync (M8).
+        let now = self.now_ms();
+        let device: DeviceId = ids.id(now);
         self.library = Some(LibrarySession {
             store,
             lib,
@@ -206,6 +211,7 @@ impl Session {
             ids,
             location: location.to_owned(),
             unreadable,
+            hlc: Hlc::new(0, 0, device),
         });
     }
 

@@ -291,7 +291,10 @@ pub(crate) fn annotation_ok(a: &scorecraft_doc::Annotation, pages: u32) -> bool 
             s.width.is_finite() && s.points.iter().all(scorecraft_doc::InkPoint::is_finite)
         }
         K::Text(t) => t.rect.is_finite() && t.style.size.is_finite(),
-        K::Stamp(s) => s.rect.is_finite(),
+        K::Stamp(s) => s.rect.is_finite() && s.size.is_finite(),
+        K::Hairpin(h) => {
+            h.from.is_finite() && h.to.is_finite() && h.opening.is_finite() && h.width.is_finite()
+        }
         K::Snip(s) => {
             s.from.rect.is_finite()
                 && s.to.rect.is_finite()

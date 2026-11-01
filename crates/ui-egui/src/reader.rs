@@ -12,6 +12,7 @@ use egui::{
 use scorecraft_engine::{FrameSlot, Session, unturn};
 use serde_json::{Value, json};
 
+use crate::ink::InkCanvas;
 use crate::theme::Tokens;
 
 /// What the canvas asks the shell to do after a frame.
@@ -33,6 +34,8 @@ pub struct ReaderCanvas {
     panned: bool,
     /// Last reader area sent to the engine (points) and pixels per point.
     sent_viewport: Option<(Vec2, f32)>,
+    /// Markup on the pages: pens, the ruler, the selection.
+    pub ink: InkCanvas,
 }
 
 /// The engine's name for an egui key, with modifiers.
@@ -80,6 +83,7 @@ impl ReaderCanvas {
         // The engine's new reader starts with a default viewport: send ours again.
         self.sent_viewport = None;
         self.press = None;
+        self.ink.reset();
     }
 
     /// Draws the reader in `ui`'s remaining space and handles its input. `keys` is false while
@@ -100,9 +104,73 @@ impl ReaderCanvas {
         }
         let ctx = ui.ctx().clone();
         self.sync_viewport(&ctx, rect, session, &mut out);
-        self.input(&ctx, &response, rect, session, keys, &mut out);
+        let markup = session
+            .dispatch("annotate.state", &json!({}))
+            .unwrap_or(Value::Null);
+        let ink = self.ink.input(&ctx, rect, session, &markup, &mut out.error);
+        self.input(
+            &ctx,
+            &response,
+            rect,
+            session,
+            keys,
+            ink.block_reader,
+            &mut out,
+        );
         self.paint(ui, &ctx, rect, session, tokens);
+        let now = ctx.input(|i| i.time);
+        let textures = &self.textures;
+        self.ink
+            .settle(now, &|page| textures.get(&page).map(|(a, _)| *a));
+        // The markup state may have changed with this frame's gestures.
+        let markup = session
+            .dispatch("annotate.state", &json!({}))
+            .unwrap_or(markup);
+        self.ink.paint(&ui.painter_at(rect), rect, session, &markup);
+        self.text_entry(&ctx, rect, session, &mut out);
         out
+    }
+
+    /// The box a new text note is typed into (ANNO-8).
+    fn text_entry(&mut self, ctx: &Context, rect: Rect, session: &mut Session, out: &mut Outcome) {
+        let Some(entry) = self.ink.text.as_mut() else {
+            return;
+        };
+        let (mut add, mut cancel) = (false, false);
+        egui::Window::new("Text Note")
+            .collapsible(false)
+            .resizable(false)
+            .fixed_pos(rect.min + entry.at.to_vec2() + egui::vec2(0.0, 28.0))
+            .show(ctx, |ui| {
+                let r = ui.add(
+                    egui::TextEdit::multiline(&mut entry.text)
+                        .desired_rows(3)
+                        .desired_width(260.0),
+                );
+                r.request_focus();
+                ui.horizontal(|ui| {
+                    add = ui.button("Add").clicked();
+                    cancel = ui.button("Cancel").clicked();
+                });
+            });
+        if ctx.input(|i| i.key_pressed(Key::Escape)) {
+            cancel = true;
+        }
+        if add && !entry.text.trim().is_empty() {
+            let r = session.dispatch(
+                "annotate.text.add",
+                &json!({
+                    "text": entry.text,
+                    "x": entry.at.x,
+                    "y": entry.at.y,
+                    "device": entry.device.id(),
+                }),
+            );
+            note(out, r);
+            self.ink.text = None;
+        } else if add || cancel {
+            self.ink.text = None;
+        }
     }
 
     fn sync_viewport(
@@ -132,6 +200,7 @@ impl ReaderCanvas {
             .unwrap_or(1.0)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn input(
         &mut self,
         ctx: &Context,
@@ -139,6 +208,7 @@ impl ReaderCanvas {
         rect: Rect,
         session: &mut Session,
         keys: bool,
+        blocked: bool,
         out: &mut Outcome,
     ) {
         if keys {
@@ -159,6 +229,11 @@ impl ReaderCanvas {
                     );
                 }
             }
+        }
+        if blocked {
+            // Markup has the pointer: no turns, pans or zooms (ANNO-14).
+            self.press = None;
+            return;
         }
         // Pinch (or Ctrl + scroll) zooms; scrolling a zoomed page pans it.
         let (pinch, scroll) = ctx.input(|i| (i.zoom_delta(), i.smooth_scroll_delta));

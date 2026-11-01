@@ -16,6 +16,8 @@ pub struct Session {
     pub(crate) pedal_map: scorecraft_input::PedalMap,
     /// One turn per physical press.
     pub(crate) key_gate: scorecraft_input::KeyGate,
+    /// Markup tools, colours, widths and *Draw with Touch* (ANNO-1..7, ANNO-14).
+    pub(crate) markup: crate::markup::Markup,
 }
 
 impl Default for Session {
@@ -33,6 +35,7 @@ impl Session {
             clock: crate::library::default_clock(),
             pedal_map: scorecraft_input::PedalMap::default(),
             key_gate: scorecraft_input::KeyGate::new(scorecraft_input::DEFAULT_DEBOUNCE_MS),
+            markup: crate::markup::Markup::default(),
         }
     }
 

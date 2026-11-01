@@ -45,6 +45,19 @@ fn config_dir() -> Option<PathBuf> {
     }
 }
 
+/// Where the library lives: beside the settings on Windows and macOS, in `$XDG_DATA_HOME`
+/// (`~/.local/share/scorecraft`) on Linux.
+fn library_dir() -> Option<PathBuf> {
+    if cfg!(any(windows, target_os = "macos")) {
+        return config_dir().map(|d| d.join("Library.scorecraft"));
+    }
+    std::env::var_os("XDG_DATA_HOME")
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))
+        .map(|d| d.join("scorecraft").join("Library.scorecraft"))
+}
+
 fn settings_path() -> Option<PathBuf> {
     config_dir().map(|d| d.join("settings.json"))
 }
@@ -77,6 +90,30 @@ impl Platform for Desktop {
 
     fn set_keep_awake(&mut self, on: bool) -> Result<(), String> {
         self.keep_awake.set(on).map_err(|e| e.to_string())
+    }
+
+    fn pick_export_path(&mut self, name: &str) -> Option<String> {
+        #[cfg(any(windows, target_os = "macos"))]
+        {
+            rfd::FileDialog::new()
+                .add_filter("PDF", &["pdf"])
+                .set_file_name(name)
+                .save_file()
+                .map(|p| p.to_string_lossy().into_owned())
+        }
+        #[cfg(not(any(windows, target_os = "macos")))]
+        {
+            let _ = name;
+            None
+        }
+    }
+
+    fn library_dir(&self) -> Option<String> {
+        let dir = library_dir()?;
+        if let Some(parent) = dir.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        Some(dir.to_string_lossy().into_owned())
     }
 
     fn save_settings(&mut self, settings: &Settings) {

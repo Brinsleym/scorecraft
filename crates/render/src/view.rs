@@ -1,12 +1,13 @@
 //! A score's rendered pages: cache hits for page turns, renders on a miss, and background
 //! pre-rendering of the pages a turn will show next (architecture §7).
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 
 use scorecraft_pdf::{Bitmap, Document, PdfError, Tile};
 
-use crate::{CacheStats, Filter, Region, TileCache, TileKey, ZoomBucket};
+use crate::ink::{compose, page_to_bitmap};
+use crate::{CacheStats, Filter, PageInk, Region, TileCache, TileKey, ZoomBucket};
 
 /// Side of a zoom tile in device pixels.
 pub const TILE_SIDE: u32 = 512;
@@ -49,6 +50,8 @@ struct Shared {
 struct State {
     cache: TileCache,
     queue: VecDeque<TileKey>,
+    /// The ink each page carries, set by the engine; pages without an entry have none.
+    ink: HashMap<usize, PageInk>,
     /// The worker is rendering a request (native only; the web build has no worker).
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     busy: bool,
@@ -74,6 +77,7 @@ impl ScoreView {
         let state = State {
             cache: TileCache::new(budget),
             queue: VecDeque::new(),
+            ink: HashMap::new(),
             busy: false,
             closing: false,
         };
@@ -117,6 +121,52 @@ impl ScoreView {
         let bitmap = Arc::new(self.doc.render(page, key.zoom.scale())?);
         self.shared.lock().cache.insert(key, bitmap.clone());
         Ok(bitmap)
+    }
+
+    /// Sets the ink page `page` carries (`None`: no ink). Inked bitmaps of its old ink stay in the
+    /// cache until evicted, so undo is instant too.
+    pub fn set_ink(&self, page: usize, ink: Option<PageInk>) {
+        let mut state = self.shared.lock();
+        match ink {
+            Some(i) if !i.marks.is_empty() => {
+                state.ink.insert(page, i);
+            }
+            _ => {
+                state.ink.remove(&page);
+            }
+        }
+    }
+
+    /// The [`PageInk::key`] of the ink page `page` carries, if any.
+    pub fn ink_key(&self, page: usize) -> Option<u64> {
+        self.shared.lock().ink.get(&page).map(|i| i.key)
+    }
+
+    /// Page `page` at `scale` with its ink drawn on: a cache hit, or drawn now (and rendered now
+    /// if needed) and cached. Pages without ink are [`ScoreView::page`].
+    pub fn inked_page(&mut self, page: usize, scale: f32) -> Result<Arc<Bitmap>, PdfError> {
+        let base = self.page(page, scale)?;
+        let key = self.key(page, scale, Region::Page)?;
+        let Some((inked_key, ink)) = ink_job(&self.shared.lock(), key) else {
+            return Ok(base);
+        };
+        if let Some(hit) = self.shared.lock().cache.get(&inked_key) {
+            return Ok(hit);
+        }
+        let bitmap = draw_ink(&self.doc, key.page, key.filter, &base, &ink);
+        self.shared.lock().cache.insert(inked_key, bitmap.clone());
+        Ok(bitmap)
+    }
+
+    /// Whether page `page` at `scale` is cached with its ink (or has none), so
+    /// [`ScoreView::inked_page`] returns without drawing.
+    pub fn is_inked_cached(&self, page: usize, scale: f32) -> bool {
+        let Ok(key) = self.key(page, scale, Region::Page) else {
+            return false;
+        };
+        let state = self.shared.lock();
+        state.cache.contains(&key)
+            && ink_job(&state, key).is_none_or(|(k, _)| state.cache.contains(&k))
     }
 
     /// Columns and rows of [`TILE_SIDE`] tiles covering page `page` at `scale`.
@@ -183,7 +233,7 @@ impl ScoreView {
                 filter: self.filter,
                 region: Region::Page,
             };
-            if !state.cache.contains(&key) && !state.queue.contains(&key) {
+            if needs_work(&state, key) && !state.queue.contains(&key) {
                 state.queue.push_back(key);
             }
         }
@@ -207,8 +257,22 @@ impl ScoreView {
             if key.filter != self.filter {
                 continue;
             }
-            if let Ok(bitmap) = self.doc.render(key.page, key.zoom.scale()) {
-                self.shared.lock().cache.insert(key, Arc::new(bitmap));
+            let cached = self.shared.lock().cache.get(&key);
+            let base = match cached {
+                Some(b) => Some(b),
+                None => self
+                    .doc
+                    .render(key.page, key.zoom.scale())
+                    .ok()
+                    .map(Arc::new)
+                    .inspect(|b| self.shared.lock().cache.insert(key, b.clone())),
+            };
+            if let Some(base) = base {
+                let job = ink_job(&self.shared.lock(), key);
+                if let Some((inked_key, ink)) = job {
+                    let bitmap = draw_ink(&self.doc, key.page, key.filter, &base, &ink);
+                    self.shared.lock().cache.insert(inked_key, bitmap);
+                }
             }
             done += 1;
         }
@@ -324,7 +388,7 @@ fn worker(shared: &Shared, mut doc: Document, mut filter: Filter) {
                     return;
                 }
                 if let Some(key) = state.queue.pop_front() {
-                    if !state.cache.contains(&key) {
+                    if needs_work(&state, key) {
                         state.busy = true;
                         break key;
                     }
@@ -343,14 +407,61 @@ fn worker(shared: &Shared, mut doc: Document, mut filter: Filter) {
         }
         // A failed render is not cached: the page is rendered again, and the error reported,
         // when it is shown.
-        let rendered = doc.render(key.page, key.zoom.scale());
+        let cached = shared.lock().cache.get(&key);
+        let base = match cached {
+            Some(b) => Some(b),
+            None => doc.render(key.page, key.zoom.scale()).ok().map(Arc::new),
+        };
         let mut state = shared.lock();
-        if let Ok(bitmap) = rendered {
-            state.cache.insert(key, Arc::new(bitmap));
+        if let Some(base) = base {
+            state.cache.insert(key, base.clone());
+            // Then the page's ink, so a turn to it never waits on drawing either.
+            if let Some((inked_key, ink)) = ink_job(&state, key)
+                && !state.cache.contains(&inked_key)
+            {
+                drop(state);
+                let bitmap = draw_ink(&doc, key.page, key.filter, &base, &ink);
+                state = shared.lock();
+                state.cache.insert(inked_key, bitmap);
+            }
         }
         state.busy = false;
         if state.queue.is_empty() {
             shared.idle.notify_all();
         }
     }
+}
+
+/// The inked-page key and ink for plain page `key`, if its page carries ink.
+fn ink_job(state: &State, key: TileKey) -> Option<(TileKey, PageInk)> {
+    let ink = state.ink.get(&key.page)?;
+    Some((
+        TileKey {
+            region: Region::Inked { ink: ink.key },
+            ..key
+        },
+        ink.clone(),
+    ))
+}
+
+/// Whether pre-rendering `key` has anything to do: render the page, or draw its ink.
+fn needs_work(state: &State, key: TileKey) -> bool {
+    !state.cache.contains(&key)
+        || ink_job(state, key).is_some_and(|(k, _)| !state.cache.contains(&k))
+}
+
+/// `base` (page `page` of `doc`) with `ink` drawn on, under `filter`.
+fn draw_ink(
+    doc: &Document,
+    page: usize,
+    filter: Filter,
+    base: &Arc<Bitmap>,
+    ink: &PageInk,
+) -> Arc<Bitmap> {
+    let marks: Vec<&scorecraft_doc::AnnotationKind> = ink.marks.iter().collect();
+    doc.page(page)
+        .ok()
+        .and_then(|g| page_to_bitmap(g, base))
+        .and_then(|m| compose(base, m, &marks, filter, &ink.curve))
+        .map_or_else(|| base.clone(), Arc::new)
 }

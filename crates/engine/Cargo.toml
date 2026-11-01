@@ -13,12 +13,14 @@ base64 = { workspace = true }
 scorecraft-doc = { workspace = true }
 scorecraft-format = { workspace = true }
 scorecraft-geom = { workspace = true }
+scorecraft-ink = { workspace = true }
 scorecraft-input = { workspace = true }
 scorecraft-layout = { workspace = true }
 scorecraft-ops = { workspace = true }
 scorecraft-codecs = { workspace = true }
 scorecraft-pdf = { workspace = true }
 scorecraft-render = { workspace = true }
+scorecraft-text = { workspace = true }
 serde_json = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

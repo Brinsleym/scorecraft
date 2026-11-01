@@ -34,6 +34,7 @@ pub enum AnnotationKind {
     Stroke(Stroke),
     Text(TextNote),
     Stamp(Stamp),
+    Hairpin(Hairpin),
     Snip(Snip),
     Shortcut(Shortcut),
 }
@@ -45,6 +46,7 @@ impl AnnotationKind {
             AnnotationKind::Stroke(_) => "stroke",
             AnnotationKind::Text(_) => "text",
             AnnotationKind::Stamp(_) => "stamp",
+            AnnotationKind::Hairpin(_) => "hairpin",
             AnnotationKind::Snip(_) => "snip",
             AnnotationKind::Shortcut(_) => "shortcut",
         }
@@ -61,6 +63,24 @@ pub enum Tool {
     Highlighter,
     /// Opaque page-coloured paint that covers what's beneath.
     Whiteout,
+}
+
+/// The shape of the tip a stroke was drawn with.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Nib {
+    /// A round tip: round ends and joins, the same width in every direction.
+    #[default]
+    Round,
+    /// An upright chisel, a third as wide as it is tall, swept along the stroke: the
+    /// highlighter's default (`docs/spec/ink.md`, ANNO-3).
+    Chisel,
+}
+
+impl Nib {
+    pub fn is_round(&self) -> bool {
+        *self == Nib::Round
+    }
 }
 
 /// One pen sample, in source-page PDF points.
@@ -113,8 +133,11 @@ pub struct Stroke {
     #[serde(default)]
     pub tool: Tool,
     pub color: Color,
-    /// Nominal width in points at full pressure.
+    /// Nominal width in points at full pressure (a chisel's height).
     pub width: f32,
+    /// Round unless drawn with a chisel; older files have no field and load as round.
+    #[serde(default, skip_serializing_if = "Nib::is_round")]
+    pub nib: Nib,
     pub points: Vec<InkPoint>,
 }
 
@@ -171,12 +194,36 @@ pub struct TextNote {
     pub style: TextStyle,
 }
 
-/// A music symbol stamp (a SMuFL glyph: fermata, breath mark, dynamics, fingerings).
+/// A stamp (ANNO-9, ScoreCraft's own): a dynamic set as text ("mf", in Edwin Bold Italic), or a
+/// music symbol by SMuFL code point.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Stamp {
-    /// The SMuFL code point, e.g. `0xE4C0` for a fermata.
+    /// The SMuFL code point, e.g. `0xE4C0` for a fermata; 0 for a text stamp.
+    #[serde(default)]
     pub glyph: u32,
+    /// A dynamic's letters (`pp` … `ff`); empty for a SMuFL glyph.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub text: String,
+    /// Size in points; 0 in older files means "fit the box".
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub size: f32,
     pub rect: Rect,
+    pub color: Color,
+}
+
+/// A crescendo or diminuendo hairpin (ANNO-9): two lines meeting at a point and opening to
+/// `opening` points apart at the other end. `from` and `to` are its ends in page space; a
+/// crescendo opens towards `to`, a diminuendo towards `from`.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Hairpin {
+    pub from: scorecraft_geom::Point,
+    pub to: scorecraft_geom::Point,
+    pub crescendo: bool,
+    /// The gap at the open end, in points.
+    pub opening: f32,
+    /// Line width in points.
+    pub width: f32,
     pub color: Color,
 }
 
@@ -221,6 +268,7 @@ mod tests {
                 tool: Tool::Highlighter,
                 color: Color::HIGHLIGHT,
                 width: 8.0,
+                nib: Default::default(),
                 points: vec![InkPoint::new(1.0, 2.0)],
             }),
         };
@@ -242,6 +290,7 @@ mod tests {
             tool: Tool::Pen,
             color: Color::BLACK,
             width: 2.0,
+            nib: Default::default(),
             points: vec![InkPoint::new(10.0, 10.0), InkPoint::new(20.0, 30.0)],
         };
         assert_eq!(s.bounds(), Some(Rect::new(9.0, 9.0, 21.0, 31.0)));
@@ -250,5 +299,27 @@ mod tests {
             ..s
         };
         assert_eq!(empty.bounds(), None);
+    }
+
+    #[test]
+    fn nib_is_omitted_when_round_and_round_when_missing() {
+        let s = Stroke {
+            tool: Tool::Highlighter,
+            color: Color::HIGHLIGHT,
+            width: 12.0,
+            nib: Nib::Chisel,
+            points: vec![InkPoint::new(0.0, 0.0)],
+        };
+        let v = serde_json::to_value(&s).unwrap();
+        assert_eq!(v["nib"], "chisel");
+        let round = Stroke {
+            nib: Nib::Round,
+            ..s.clone()
+        };
+        let mut v = serde_json::to_value(&round).unwrap();
+        assert!(v.get("nib").is_none());
+        v.as_object_mut().unwrap().remove("tool");
+        let back: Stroke = serde_json::from_value(v).unwrap();
+        assert_eq!(back.nib, Nib::Round);
     }
 }

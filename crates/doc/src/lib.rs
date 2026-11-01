@@ -27,8 +27,8 @@ mod score;
 mod validate;
 
 pub use annotation::{
-    Annotation, AnnotationKind, InkPoint, PageArea, PageKey, Shortcut, Snip, Stamp, Stroke,
-    TextNote, TextStyle, Tool,
+    Annotation, AnnotationKind, Hairpin, InkPoint, Nib, PageArea, PageKey, Shortcut, Snip, Stamp,
+    Stroke, TextNote, TextStyle, Tool,
 };
 pub use blob::BlobRef;
 pub use color::Color;

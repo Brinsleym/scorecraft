@@ -5,6 +5,9 @@
 //! ([`TileCache`]), and a [`ScoreView`] that renders on a miss and pre-renders the
 //! [`neighbours`] of the current page on a background thread.
 //!
+//! [`ink`] draws a page's strokes onto its bitmap: the CPU oracle for ink (spec
+//! `docs/spec/ink.md`).
+//!
 //! Layer L3 in the workspace map (`docs/architecture.md` §2–3).
 #![deny(
     clippy::unwrap_used,
@@ -17,11 +20,13 @@
 
 mod cache;
 mod filter;
+pub mod ink;
 mod view;
 mod zoom;
 
 pub use cache::{CacheStats, Region, TileCache, TileKey};
 pub use filter::Filter;
+pub use ink::PageInk;
 pub use view::{ScoreView, TILE_SIDE, neighbours};
 pub use zoom::ZoomBucket;
 

@@ -48,6 +48,9 @@ scorecraft-testkit = { path = "crates/testkit" }
 # [patch.crates-io] entry below uses this one revision (PDFCraft 0.15.0, main on 2026-10-30).
 # Only scorecraft-pdf may depend on them (`cargo xtask layers`).
 pdfcraft-render = { git = "https://github.com/storytold/pdfcraft", rev = "65ff3a00c04ad5189f4a0abedcdf7104f14e2aed" }
+pdfcraft-fonts = { git = "https://github.com/storytold/pdfcraft", rev = "65ff3a00c04ad5189f4a0abedcdf7104f14e2aed" }
+pdfcraft-cos = { git = "https://github.com/storytold/pdfcraft", rev = "65ff3a00c04ad5189f4a0abedcdf7104f14e2aed" }
+pdfcraft-organize = { git = "https://github.com/storytold/pdfcraft", rev = "65ff3a00c04ad5189f4a0abedcdf7104f14e2aed" }
 
 # The Craft suite's shared UI (architecture §16). craft-libs pins the suite's egui fork; the
 # [patch.crates-io] egui and winit entries below use the revisions this craft-libs revision pins.
@@ -65,6 +68,8 @@ png = "0.18"
 proptest = { version = "1", default-features = false, features = ["std"] }
 serde = { version = "1", features = ["derive"] }
 sha2 = "0.11"
+# Font outlines and metrics for text notes and stamps; the version PDFCraft's fonts crate uses.
+skrifa = "0.44"
 serde_json = "1"
 uuid = { version = "1", default-features = false, features = ["std", "serde"] }
 toml = "0.9"

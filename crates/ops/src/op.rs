@@ -81,6 +81,12 @@ pub enum Op {
         score: ScoreId,
         layer: Layer,
     },
+    /// Moves the layer at `from` to `to` in drawing order (ANNO-10).
+    MoveLayer {
+        score: ScoreId,
+        from: usize,
+        to: usize,
+    },
     // ---- annotations (on source page `page`)
     InsertAnnotation {
         score: ScoreId,
@@ -195,6 +201,7 @@ impl Op {
             | InsertLayer { score, .. }
             | RemoveLayer { score, .. }
             | SetLayer { score, .. }
+            | MoveLayer { score, .. }
             | InsertAnnotation { score, .. }
             | RemoveAnnotation { score, .. }
             | SetAnnotation { score, .. }
@@ -374,6 +381,15 @@ impl Op {
                     .ok_or_else(|| OpError::Missing(format!("layer {}", layer.id)))?;
                 let old = std::mem::replace(slot, layer);
                 SetLayer { score, layer: old }
+            }
+            MoveLayer { score, from, to } => {
+                let s = score_mut(lib, score)?;
+                move_item(&mut s.layers, from, to, "layer")?;
+                MoveLayer {
+                    score,
+                    from: to,
+                    to: from,
+                }
             }
             InsertAnnotation {
                 score,

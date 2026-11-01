@@ -399,3 +399,51 @@ fn undo_is_disabled_until_something_changes() {
         "bad_params"
     );
 }
+
+#[test]
+fn opening_a_file_twice_reuses_its_library_score() {
+    let dir = temp("openfile");
+    let lib_path = dir.join("Music.scorecraft").to_string_lossy().into_owned();
+    let a = pdf(&dir, "sonata.pdf", 2, "Sonata", "Mozart");
+    let copy = dir.join("copy.pdf");
+    std::fs::copy(&a, &copy).unwrap();
+    let mut s = Session::new();
+    fixed_clock(&mut s);
+    assert_eq!(
+        fails(&mut s, "library.openFile", json!({ "path": a })),
+        "disabled"
+    );
+    run(&mut s, "library.create", json!({ "path": lib_path }));
+    let first = run(&mut s, "library.openFile", json!({ "path": a }));
+    assert_eq!(first["imported"], true);
+    // The same bytes under another name are the same score.
+    let again = run(
+        &mut s,
+        "library.openFile",
+        json!({ "path": copy.to_string_lossy() }),
+    );
+    assert_eq!(again["imported"], false);
+    assert_eq!(again["score"], first["score"]);
+    assert_eq!(
+        run(&mut s, "library.scores", json!({}))["scores"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    // Markup works on it: it is a library score.
+    let st = run(
+        &mut s,
+        "annotate.stroke",
+        json!({ "points": [[100, 100], [200, 100]], "space": "page", "page": 1 }),
+    );
+    assert_eq!(st["drawn"], true);
+    assert_eq!(
+        fails(
+            &mut s,
+            "library.openFile",
+            json!({ "path": dir.join("none.pdf").to_string_lossy() })
+        ),
+        "io_error"
+    );
+}

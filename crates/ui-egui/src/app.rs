@@ -20,6 +20,16 @@ pub trait Platform {
     fn set_keep_awake(&mut self, on: bool) -> Result<(), String>;
     /// Stores the settings for the next launch.
     fn save_settings(&mut self, _settings: &Settings) {}
+    /// Where the library lives (markings are kept there). `None` keeps a library in memory for
+    /// the session only.
+    fn library_dir(&self) -> Option<String> {
+        None
+    }
+    /// Asks where to save an exported PDF, suggesting `name`. `None` if cancelled or there is no
+    /// dialog.
+    fn pick_export_path(&mut self, _name: &str) -> Option<String> {
+        None
+    }
 }
 
 /// A platform that does nothing (tests, snapshots).
@@ -57,6 +67,8 @@ pub struct App {
     sent_full_screen: Option<bool>,
     /// The theme last applied to egui.
     applied_theme: Option<Theme>,
+    /// The open score's id in the library, for undo.
+    score_id: Option<String>,
 }
 
 fn bool_param(params: &Value, key: &str) -> Result<Option<bool>, EngineError> {
@@ -73,8 +85,27 @@ fn bool_param(params: &Value, key: &str) -> Result<Option<bool>, EngineError> {
 impl App {
     pub fn new(platform: Box<dyn Platform>, settings: Settings) -> App {
         let mut session = Session::new();
-        settings.apply_to_session(&mut session);
         let mut state = UiState::new();
+        // Scores open through the library, so markings are kept with them (ANNO-15).
+        let opened = match platform.library_dir() {
+            Some(dir) => {
+                let id = if std::path::Path::new(&dir).exists() {
+                    "library.open"
+                } else {
+                    "library.create"
+                };
+                session.dispatch(id, &json!({ "path": dir })).map(|_| ())
+            }
+            None => session.create_memory_library().map(|_| ()),
+        };
+        if let Err(e) = opened {
+            state.message = Some(format!(
+                "The library couldn't be opened ({e}); markings made now won't be kept."
+            ));
+            let _ = session.create_memory_library();
+        }
+        settings.apply_to_session(&mut session);
+        settings.apply_markup(&mut session);
         state.theme = settings.theme;
         state.keep_awake.wanted = settings.keep_awake;
         App {
@@ -85,12 +116,17 @@ impl App {
             platform,
             sent_full_screen: None,
             applied_theme: None,
+            score_id: None,
         }
     }
 
     /// Opens a score file and applies the saved reader preferences.
     pub fn open_path(&mut self, path: &str) -> Result<Value, EngineError> {
-        self.command("score.open", &json!({ "path": path }))
+        if self.session.library().is_some() {
+            self.command("library.openFile", &json!({ "path": path }))
+        } else {
+            self.command("score.open", &json!({ "path": path }))
+        }
     }
 
     /// After a score opens, by any route: fresh textures, the saved reader preferences, and
@@ -122,17 +158,44 @@ impl App {
         } else {
             self.session.dispatch(id, params)
         };
-        if r.is_ok() && id == "score.open" {
+        if let (Ok(v), true) = (&r, id == "score.open" || id == "library.openFile") {
+            self.score_id = v
+                .get("score")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+                .or_else(|| {
+                    params
+                        .get("score")
+                        .and_then(Value::as_str)
+                        .map(str::to_owned)
+                });
             self.opened(params);
             return r;
         }
+        // Markup settings are kept between launches; gestures and queries are not settings.
+        let markup_setting = (id.starts_with("annotate.")
+            && !matches!(
+                id,
+                "annotate.stroke"
+                    | "annotate.state"
+                    | "annotate.page.list"
+                    | "annotate.ruler.set"
+                    | "annotate.mode.set"
+            )
+            && !id.starts_with("annotate.select.")
+            && !id.starts_with("annotate.text.")
+            && !id.starts_with("annotate.stamp.")
+            && !id.starts_with("annotate.layer."))
+            || id == "input.pen.only"
+            || id == "input.touch.lock";
         let changes_prefs = id.starts_with("view.layout")
             || id.starts_with("view.turn.halfPage")
             || id.starts_with("view.turn.alternating")
             || id == "view.zoom.landscapeFit"
             || id == "input.pedal.map"
             || id == "ui.theme.set"
-            || id == "ui.power.keepAwake";
+            || id == "ui.power.keepAwake"
+            || markup_setting;
         if r.is_ok() && changes_prefs {
             self.save();
         }
@@ -220,6 +283,24 @@ impl App {
                 )
                 .show(ui, |ui| self.toolbar(ui, &tokens));
         }
+        let markup = self
+            .session
+            .dispatch("annotate.state", &json!({}))
+            .unwrap_or(Value::Null);
+        if self.state.chrome
+            && self.session.has_score()
+            && markup.get("mode").and_then(Value::as_bool) == Some(true)
+        {
+            egui::Panel::top("markup")
+                .exact_size(tokens.toolbar_height)
+                .resizable(false)
+                .frame(
+                    egui::Frame::NONE
+                        .fill(tokens.toolbar_bg)
+                        .inner_margin(egui::Margin::symmetric(8, 4)),
+                )
+                .show(ui, |ui| self.markup_bar(ui, &tokens, &markup));
+        }
         if let Some(msg) = self.state.message.clone() {
             egui::Panel::bottom("message")
                 .resizable(false)
@@ -255,6 +336,32 @@ impl App {
             });
     }
 
+    fn markup_bar(&mut self, ui: &mut Ui, tokens: &Tokens, markup: &Value) {
+        let mut run = Vec::new();
+        let mut changed = false;
+        let mut show_ruler = self.settings.show_ruler_button;
+        crate::markup_bar::bar(
+            ui,
+            tokens,
+            markup,
+            self.score_id.as_deref(),
+            &mut self.reader.ink,
+            crate::markup_bar::BarSettings {
+                show_ruler_button: &mut show_ruler,
+                changed: &mut changed,
+            },
+            &mut run,
+        );
+        if changed {
+            self.settings.show_ruler_button = show_ruler;
+            self.save();
+        }
+        for (id, p) in run {
+            let r = self.command(id, &p);
+            self.report(r);
+        }
+    }
+
     fn report(&mut self, r: Result<Value, EngineError>) {
         match r {
             Ok(_) => self.state.message = None,
@@ -288,6 +395,21 @@ impl App {
         let dropped = ctx.input(|i| i.raw.dropped_files.first().map(|f| f.path().to_path_buf()));
         if let Some(path) = dropped {
             let r = self.open_path(&path.to_string_lossy());
+            self.report(r);
+        }
+    }
+
+    /// Exports the open score with its visible layers' ink (EXP-2).
+    fn export(&mut self, mode: &str) {
+        let name = self
+            .settings
+            .last_score
+            .as_deref()
+            .and_then(|p| std::path::Path::new(p).file_stem())
+            .map(|s| format!("{} (marked).pdf", s.to_string_lossy()))
+            .unwrap_or_else(|| "Score (marked).pdf".to_owned());
+        if let Some(path) = self.platform.pick_export_path(&name) {
+            let r = self.command("score.export.pdf", &json!({ "path": path, "mode": mode }));
             self.report(r);
         }
     }
@@ -350,6 +472,18 @@ impl App {
             if self.icon_button(ui, tokens, "Open Score…", false, Icon::Open) {
                 self.pick_and_open();
             }
+            if has {
+                ui.menu_button("Export", |ui| {
+                    if ui.button("PDF with ink drawn in…").clicked() {
+                        self.export("flatten");
+                        ui.close();
+                    }
+                    if ui.button("PDF with ink as annotations…").clicked() {
+                        self.export("annotations");
+                        ui.close();
+                    }
+                });
+            }
             ui.add_enabled_ui(has, |ui| {
                 if self.icon_button(ui, tokens, "Previous Page", false, Icon::Previous) {
                     run.push(("view.turn.previous", json!({})));
@@ -405,6 +539,16 @@ impl App {
                 if self.icon_button(ui, tokens, "Zoom In", false, Icon::ZoomIn) {
                     run.push(("view.zoom.set", json!({ "zoom": (zoom * 1.25).min(8.0) })));
                 }
+                ui.separator();
+                let marking = self
+                    .session
+                    .dispatch("annotate.state", &json!({}))
+                    .ok()
+                    .and_then(|m| m.get("mode").and_then(Value::as_bool))
+                    .unwrap_or(false);
+                if self.icon_button(ui, tokens, "Markup", marking, Icon::Markup) {
+                    run.push(("annotate.mode.set", json!({ "on": !marking })));
+                }
             });
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 let dark = self.state.theme == Theme::Dark;
@@ -457,6 +601,7 @@ enum Icon {
     FullScreen,
     Awake,
     Theme,
+    Markup,
 }
 
 fn paint_icon(ui: &Ui, rect: Rect, c: Color32, icon: Icon) {
@@ -592,6 +737,16 @@ fn paint_icon(ui: &Ui, rect: Rect, c: Color32, icon: Icon) {
                 );
             }
         }
+        Icon::Markup => {
+            // A pen, nib down to the left.
+            let (a, b) = (pos2(r.left(), r.bottom()), pos2(r.right(), r.top()));
+            p.line_segment([a + vec2(3.0, -3.0), b], Stroke::new(3.0, c));
+            p.add(egui::Shape::convex_polygon(
+                vec![a, a + vec2(6.0, 0.0), a + vec2(0.0, -6.0)],
+                c,
+                Stroke::NONE,
+            ));
+        }
         Icon::Theme => {
             let ctr = r.center();
             let rad = r.width() * 0.45;
@@ -711,6 +866,168 @@ mod tests {
             app.settings.last_score.as_deref(),
             Some(&*second.to_string_lossy())
         );
+    }
+
+    /// Runs one frame per entry of `script` at 1280 × 800, each with its events, 16 ms apart.
+    fn script(app: &mut App, ctx: &Context, start: f64, script: Vec<Vec<egui::Event>>) {
+        for (k, events) in script.into_iter().enumerate() {
+            let input = egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(1280.0, 800.0))),
+                time: Some(start + k as f64 * 0.016),
+                events,
+                ..Default::default()
+            };
+            let mut out = ctx.run_ui(input, |ui| app.ui(ui));
+            out.textures_delta.clear();
+        }
+    }
+
+    fn touch(id: u64, phase: egui::TouchPhase, x: f32, y: f32, pen: bool) -> egui::Event {
+        egui::Event::Touch {
+            device_id: egui::TouchDeviceId(1),
+            id: egui::TouchId(id),
+            phase,
+            pos: pos2(x, y),
+            force: pen.then_some(0.6),
+        }
+    }
+
+    /// A drag from (`x0`, `y`) to (`x1`, `y`) by touch `id`, one sample per frame.
+    fn drag(id: u64, x0: f32, x1: f32, y: f32, pen: bool) -> Vec<Vec<egui::Event>> {
+        use egui::TouchPhase::{End, Move, Start};
+        let mut v = vec![vec![touch(id, Start, x0, y, pen)]];
+        for k in 1..8 {
+            let x = x0 + (x1 - x0) * k as f32 / 8.0;
+            v.push(vec![touch(id, Move, x, y, pen)]);
+        }
+        v.push(vec![touch(id, End, x1, y, pen)]);
+        v
+    }
+
+    fn strokes_on_page(app: &mut App) -> usize {
+        app.session
+            .dispatch("annotate.page.list", &json!({}))
+            .unwrap()["annotations"]
+            .as_array()
+            .unwrap()
+            .len()
+    }
+
+    fn markup_app() -> (App, Context) {
+        let (mut app, _) = app_with_score(3);
+        let ctx = Context::default();
+        frames(&mut app, &ctx, 2, Vec::new());
+        app.command("annotate.mode.set", &json!({ "on": true }))
+            .unwrap();
+        frames(&mut app, &ctx, 1, Vec::new());
+        (app, ctx)
+    }
+
+    #[test]
+    fn a_pen_draws_in_markup_mode_and_a_finger_only_with_draw_with_touch() {
+        let (mut app, ctx) = markup_app();
+        script(&mut app, &ctx, 1.0, drag(7, 400.0, 700.0, 300.0, true));
+        script(&mut app, &ctx, 2.0, vec![Vec::new(), Vec::new()]);
+        assert_eq!(strokes_on_page(&mut app), 1, "the pen drew");
+        assert_eq!(app.session.reader_state().unwrap()["page"], 1);
+        // Without Draw with Touch, a finger's drag is left to the reader (egui-winit turns it
+        // into pointer events there): no ink.
+        script(&mut app, &ctx, 3.0, drag(8, 900.0, 300.0, 400.0, false));
+        script(&mut app, &ctx, 4.0, vec![Vec::new(), Vec::new()]);
+        assert_eq!(strokes_on_page(&mut app), 1, "the finger drew nothing");
+        // With it, the finger draws.
+        app.command("input.pen.only", &json!({ "on": false }))
+            .unwrap();
+        script(&mut app, &ctx, 5.0, drag(10, 450.0, 700.0, 500.0, false));
+        script(&mut app, &ctx, 6.0, vec![Vec::new()]);
+        assert_eq!(strokes_on_page(&mut app), 2, "{:?}", app.state.message);
+    }
+
+    #[test]
+    fn ink_20_a_hand_leaning_while_the_pen_draws_does_nothing() {
+        use egui::TouchPhase::{End, Move, Start};
+        let (mut app, ctx) = markup_app();
+        let mut s = vec![vec![touch(7, Start, 400.0, 300.0, true)]];
+        // The palm lands while the pen is down, drags and lifts.
+        s.push(vec![
+            touch(7, Move, 450.0, 300.0, true),
+            touch(9, Start, 1100.0, 500.0, false),
+        ]);
+        s.push(vec![
+            touch(7, Move, 500.0, 300.0, true),
+            touch(9, Move, 600.0, 520.0, false),
+        ]);
+        s.push(vec![touch(9, End, 300.0, 540.0, false)]);
+        s.push(vec![touch(7, Move, 550.0, 300.0, true)]);
+        s.push(vec![touch(7, End, 600.0, 300.0, true)]);
+        s.push(Vec::new());
+        script(&mut app, &ctx, 1.0, s);
+        assert_eq!(app.session.reader_state().unwrap()["page"], 1, "no turn");
+        assert_eq!(strokes_on_page(&mut app), 1, "the stroke is unaffected");
+    }
+
+    #[test]
+    fn ink_17_18_the_mouse_draws_only_with_draw_with_touch() {
+        let (mut app, ctx) = markup_app();
+        let button = |pressed, x| egui::Event::PointerButton {
+            pos: pos2(x, 300.0),
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        let mouse = |start: f64, app: &mut App| {
+            let mut s = vec![vec![
+                egui::Event::PointerMoved(pos2(400.0, 300.0)),
+                button(true, 400.0),
+            ]];
+            for k in 1..6 {
+                s.push(vec![egui::Event::PointerMoved(pos2(
+                    400.0 + k as f32 * 40.0,
+                    300.0,
+                ))]);
+            }
+            s.push(vec![button(false, 640.0)]);
+            s.push(Vec::new());
+            script(app, &ctx, start, s);
+        };
+        mouse(1.0, &mut app);
+        assert_eq!(strokes_on_page(&mut app), 0, "pen only by default");
+        app.command("input.pen.only", &json!({ "on": false }))
+            .unwrap();
+        mouse(2.0, &mut app);
+        assert_eq!(strokes_on_page(&mut app), 1);
+        assert_eq!(app.session.reader_state().unwrap()["page"], 1);
+    }
+
+    #[test]
+    fn markup_tools_and_colours_come_back_next_launch() {
+        let (mut app, _) = markup_app();
+        app.command("annotate.tool.highlighter", &json!({}))
+            .unwrap();
+        app.command("annotate.swatch.select", &json!({ "index": 3 }))
+            .unwrap();
+        app.command("annotate.style.set", &json!({ "width": 20.0 }))
+            .unwrap();
+        app.command("annotate.shapes", &json!({ "on": true }))
+            .unwrap();
+        app.command("input.pen.only", &json!({ "on": false }))
+            .unwrap();
+        let before = app.session.dispatch("annotate.state", &json!({})).unwrap();
+        let saved = Settings::parse(&app.settings.to_json_string());
+        let mut next = App::new(Box::new(NoPlatform), saved);
+        let after = next.session.dispatch("annotate.state", &json!({})).unwrap();
+        for key in [
+            "tool",
+            "highlighter",
+            "highlighterSwatch",
+            "penSwatches",
+            "shapes",
+            "penOnly",
+            "pen",
+        ] {
+            assert_eq!(after[key], before[key], "{key}");
+        }
+        assert_eq!(after["mode"], false, "markup mode itself is not kept");
     }
 
     #[test]

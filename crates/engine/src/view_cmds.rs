@@ -32,7 +32,7 @@ pub fn specs() -> Vec<CommandSpec> {
             label: "Render Page",
             menu: "",
             shortcut: None,
-            params: r#"{"page":int?,"dpi":number=144,"filter":"normal|dark|sepia"?,"out":path?,"prefetch":bool=true}"#,
+            params: r#"{"page":int?,"dpi":number=144,"filter":"normal|dark|sepia"?,"ink":bool=true,"out":path?,"prefetch":bool=true}"#,
             ours: false,
             enabled: score_open,
             run: render,
@@ -90,12 +90,15 @@ fn bookmark_goto(session: &mut Session, params: &Value) -> Result<Value, EngineE
 }
 
 /// Renders a page (1-based `page`, default the current one) through the page cache and makes it
-/// the current page. With `out` (a `.png` path) the bitmap is written there. With `prefetch`, the
+/// the current page. A library score's visible ink is drawn on unless `ink` is false. With `out` (a `.png` path) the bitmap is written there. With `prefetch`, the
 /// pages a turn will show next are pre-rendered in the background.
 fn render(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
     const ID: &str = "view.render";
     let p = params_object(ID, params)?;
-    reject_unknown_keys(ID, p, &["page", "dpi", "filter", "out", "prefetch"])?;
+    reject_unknown_keys(ID, p, &["page", "dpi", "filter", "ink", "out", "prefetch"])?;
+    let with_ink = opt_bool(ID, p, "ink")?.unwrap_or(true);
+    let lib = session.library.as_ref().map(|l| &l.lib);
+    let curve = session.markup.curve;
     let score = session
         .score
         .as_mut()
@@ -126,7 +129,13 @@ fn render(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
     // `dpi` is at most MAX_DPI, so the f32 scale is finite and positive.
     let scale = (dpi / f64::from(scorecraft_pdf::POINTS_PER_INCH)) as f32;
     let cached = score.view.is_cached(page, scale);
-    let bitmap = score.view.page(page, scale)?;
+    let library_score = crate::markup::library_score(lib, score.library_score);
+    crate::markup::sync_ink(&score.view, library_score, curve, [page]);
+    let bitmap = if with_ink {
+        score.view.inked_page(page, scale)?
+    } else {
+        score.view.page(page, scale)?
+    };
     score.reader.goto_file_page(page);
     if prefetch {
         score.view.prefetch(&neighbours(page, count), scale);

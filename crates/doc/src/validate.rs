@@ -184,7 +184,10 @@ fn annotation_is_finite(k: &AnnotationKind) -> bool {
             s.width.is_finite() && s.points.iter().all(crate::InkPoint::is_finite)
         }
         AnnotationKind::Text(t) => t.rect.is_finite() && t.style.size.is_finite(),
-        AnnotationKind::Stamp(s) => s.rect.is_finite(),
+        AnnotationKind::Stamp(s) => s.rect.is_finite() && s.size.is_finite(),
+        AnnotationKind::Hairpin(h) => {
+            h.from.is_finite() && h.to.is_finite() && h.opening.is_finite() && h.width.is_finite()
+        }
         AnnotationKind::Snip(s) => s.from.rect.is_finite() && s.to.rect.is_finite(),
         AnnotationKind::Shortcut(s) => {
             s.at.rect.is_finite() && s.target_rect.is_none_or(|r| r.is_finite())

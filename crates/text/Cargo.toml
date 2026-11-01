@@ -7,8 +7,12 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false
+build = "build.rs"
 
 [dependencies]
+scorecraft-geom = { workspace = true }
+scorecraft-pdf = { workspace = true }
+skrifa = { workspace = true }
 
 [lints]
 workspace = true

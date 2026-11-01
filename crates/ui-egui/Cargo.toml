@@ -15,6 +15,7 @@ egui = { workspace = true, features = ["default_fonts"] }
 scorecraft-codecs = { workspace = true }
 scorecraft-engine = { workspace = true }
 scorecraft-geom = { workspace = true }
+scorecraft-input = { workspace = true }
 scorecraft-pdf = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

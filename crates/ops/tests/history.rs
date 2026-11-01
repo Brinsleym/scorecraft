@@ -27,7 +27,7 @@ fn nth<T: Clone>(it: impl Iterator<Item = T>, n: u16) -> Option<T> {
 /// Builds a transaction for `pick` against `lib`, or `None` when the pick has no target.
 fn build(lib: &Library, g: &mut IdGen, (kind, a, b, c): Pick) -> Option<(String, Transaction)> {
     let score = nth(lib.scores.values(), a);
-    let tx = match kind % 22 {
+    let tx = match kind % 23 {
         0 => {
             let s = score?;
             edit::rotate_page(lib, s.id, b as usize % s.pages.len().max(1), Rotation::R90).ok()?
@@ -83,6 +83,7 @@ fn build(lib: &Library, g: &mut IdGen, (kind, a, b, c): Pick) -> Option<(String,
                         tool: Tool::Pen,
                         color: Color::BLACK,
                         width: 1.0,
+                        nib: Default::default(),
                         points: vec![InkPoint::new(f32::from(b), f32::from(c))],
                     }),
                 }),
@@ -197,6 +198,15 @@ fn build(lib: &Library, g: &mut IdGen, (kind, a, b, c): Pick) -> Option<(String,
             score: nth(lib.trash.keys().copied(), b)?,
         }),
         20 => edit::empty_trash(lib).ok()?,
+        21 => {
+            let s = score?;
+            let n = s.layers.len().max(1);
+            Transaction::single(Op::MoveLayer {
+                score: s.id,
+                from: b as usize % n,
+                to: c as usize % n,
+            })
+        }
         _ => {
             let s = score?;
             let n = s.pages.len() as u32;

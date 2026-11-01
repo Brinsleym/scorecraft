@@ -96,6 +96,15 @@ pub fn specs() -> Vec<CommandSpec> {
             import_files as _,
         ),
         spec(
+            "library.openFile",
+            "Open Score…",
+            "File",
+            r#"{"path":path,"password":string?}"#,
+            true,
+            library_open,
+            open_file as _,
+        ),
+        spec(
             "library.folder.new",
             "New Folder",
             "Library",
@@ -340,6 +349,45 @@ fn import_files(session: &mut Session, params: &Value) -> Result<Value, EngineEr
     };
     l.commit(&label, Transaction::new(ops))?;
     Ok(edited(l, json!({ "imported": imported, "failed": failed })))
+}
+
+/// Opens a score file through the library: the score already holding the same file (by its
+/// content) if there is one in the library and not in the trash, else a new import. What the app
+/// does with a file the player picks or drops, so markings stay with the score.
+fn open_file(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
+    const ID: &str = "library.openFile";
+    let p = params_object(ID, params)?;
+    reject_unknown_keys(ID, p, &["path", "password"])?;
+    let path = req_str(ID, p, "path")?;
+    let password = opt_str(ID, p, "password")?;
+    let bytes = crate::score_cmds::read_score(path)?;
+    let now = session.now_ms();
+    let l = session.lib_mut(ID)?;
+    let blob = l.store.put_blob(&bytes)?;
+    let existing = l
+        .lib
+        .scores
+        .values()
+        .find(|s| s.source.blob == blob && !l.lib.is_trashed(s.id))
+        .map(|s| s.id);
+    let (id, imported) = match existing {
+        Some(id) => (id, false),
+        None => {
+            let score = import_one(l, path, None, now)?;
+            let id = score.id;
+            l.commit(
+                "Import Score",
+                Transaction::single(Op::InsertScore {
+                    score: Box::new(score),
+                }),
+            )?;
+            (id, true)
+        }
+    };
+    let mut v = session.open_library_score(id, password)?;
+    crate::commands::set(&mut v, "score", json!(id.to_string()));
+    crate::commands::set(&mut v, "imported", json!(imported));
+    Ok(v)
 }
 
 fn import_one(

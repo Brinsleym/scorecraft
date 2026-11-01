@@ -1,7 +1,7 @@
 //! scorecraft-pdf: the one door to PDFCraft's PDF crates (`docs/architecture.md` §15).
 //!
 //! Opens a score, reports its pages, metadata and outline, rasterises pages and tiles, and
-//! extracts text. No `pdfcraft-*` type appears in this API, so the backend can be bumped, forked
+//! extracts text, and hands out the font bytes PDFCraft embeds. No `pdfcraft-*` type appears in this API, so the backend can be bumped, forked
 //! or replaced by touching this crate only. Every call returns a [`PdfError`] instead of
 //! panicking, whatever the input.
 //!
@@ -17,12 +17,16 @@
 
 mod document;
 mod error;
+pub mod export;
+mod fonts;
 
 pub use document::{
     Bitmap, Document, MAX_PIXELS, MAX_SIDE, Metadata, OutlineEntry, PageGeometry, PageText,
     PaperColors, TextGlyph, Tile, device_pixels, fit_scale,
 };
 pub use error::PdfError;
+pub use export::{ExportMark, ExportMode, ExportPage, InkFill, MarkKind, export_pdf};
+pub use fonts::interface_font;
 
 /// The crate's package name, used in diagnostics.
 pub const CRATE_NAME: &str = env!("CARGO_PKG_NAME");

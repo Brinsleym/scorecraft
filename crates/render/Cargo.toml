@@ -9,10 +9,15 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+scorecraft-doc = { workspace = true }
+scorecraft-geom = { workspace = true }
+scorecraft-ink = { workspace = true }
 scorecraft-pdf = { workspace = true }
+scorecraft-text = { workspace = true }
 
 [dev-dependencies]
 scorecraft-testkit = { workspace = true }
+uuid = { workspace = true }
 
 [lints]
 workspace = true

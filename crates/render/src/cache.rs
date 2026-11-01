@@ -14,6 +14,9 @@ pub enum Region {
     Page,
     /// One [`crate::TILE_SIDE`]-pixel tile of the page, by column and row.
     Tile { col: u32, row: u32 },
+    /// The whole page with its ink drawn on; `ink` is the [`crate::PageInk::key`] it was drawn
+    /// from, so changed ink is a different entry.
+    Inked { ink: u64 },
 }
 
 /// What a cached bitmap shows.

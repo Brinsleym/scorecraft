@@ -13,22 +13,29 @@
     clippy::unreachable
 )]
 
+mod annotate_cmds;
 pub mod commands;
 mod edit_cmds;
 mod engine_cmds;
 mod error;
+mod export_cmds;
 pub mod feature_catalog;
 mod input_cmds;
+mod layer_cmds;
 mod library;
 mod library_cmds;
 mod list_cmds;
+mod markup;
 mod page_cmds;
 pub mod parity;
 mod reader;
 mod reader_cmds;
 mod score_cmds;
+mod select_cmds;
 mod session;
 mod snapshot;
+mod stamp_cmds;
+mod text_cmds;
 mod view_cmds;
 
 pub use commands::{CommandInfo, CommandSpec, registry};

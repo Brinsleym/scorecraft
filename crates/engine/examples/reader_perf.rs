@@ -2,7 +2,9 @@
 //! every bitmap of the new view being ready to draw. Prints one JSON line, as
 //! `crates/pdf/examples/perf.rs` does; `cargo xtask perf` runs both.
 //!
-//! With a path argument the first PDF in that directory is used, else a synthetic score.
+//! With a path argument the first PDF in that directory is used, else a synthetic score. The
+//! score is imported into a memory library and every page is marked up (pen strokes and a
+//! highlighter, as a heavily marked part), so the turn includes drawing ink onto the new pages.
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -37,6 +39,65 @@ fn score(dir: Option<&str>) -> Option<(Vec<u8>, &'static str)> {
     ))
 }
 
+/// Strokes per page: a heavily marked part.
+const STROKES_PER_PAGE: usize = 30;
+
+/// Imports `bytes` into a memory library, opens it, and marks every page.
+fn marked_up(s: &mut Session, bytes: &[u8]) -> Result<(), String> {
+    let dir = std::env::temp_dir().join(format!("scorecraft-perf-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join("perf.pdf");
+    std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
+    s.create_memory_library().map_err(|e| e.to_string())?;
+    let r = s
+        .dispatch(
+            "library.import.files",
+            &json!({ "paths": [path.to_string_lossy()] }),
+        )
+        .map_err(|e| e.to_string())?;
+    let _ = std::fs::remove_dir_all(&dir);
+    let id = r
+        .pointer("/imported/0/score")
+        .and_then(serde_json::Value::as_str)
+        .ok_or("the import failed")?
+        .to_owned();
+    let open = s
+        .dispatch("score.open", &json!({ "score": id }))
+        .map_err(|e| e.to_string())?;
+    let pages = open
+        .get("pages")
+        .and_then(serde_json::Value::as_array)
+        .map_or(0, Vec::len);
+    for page in 1..=pages {
+        for k in 0..STROKES_PER_PAGE {
+            let y = 60.0 + k as f64 * 22.0;
+            let pts: Vec<_> = (0..120)
+                .map(|i| {
+                    json!([
+                        40.0 + f64::from(i) * 4.5,
+                        y + (f64::from(i) * 0.4).sin() * 6.0,
+                        0.7
+                    ])
+                })
+                .collect();
+            let tool = if k % 10 == 9 {
+                "annotate.tool.highlighter"
+            } else {
+                "annotate.tool.pen"
+            };
+            s.dispatch(tool, &json!({})).map_err(|e| e.to_string())?;
+            s.dispatch(
+                "annotate.stroke",
+                &json!({ "space": "page", "page": page, "points": pts }),
+            )
+            .map_err(|e| e.to_string())?;
+        }
+    }
+    s.dispatch("view.page.goto", &json!({ "page": 1 }))
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 fn main() {
     let arg = std::env::args().nth(1);
     let Some((bytes, source)) = score(arg.as_deref()) else {
@@ -44,10 +105,17 @@ fn main() {
         return;
     };
     let mut s = Session::new();
-    if let Err(e) = s.open_score_bytes(Arc::new(bytes), None, "perf.pdf") {
-        eprintln!("perf: {e}");
-        return;
-    }
+    let source = match marked_up(&mut s, &bytes) {
+        Ok(()) => format!("{source}+ink"),
+        Err(e) => {
+            eprintln!("perf: {e}; timing turns without ink");
+            if let Err(e) = s.open_score_bytes(Arc::new(bytes), None, "perf.pdf") {
+                eprintln!("perf: {e}");
+                return;
+            }
+            source.to_owned()
+        }
+    };
     // A Windows tablet in landscape at 150% scaling.
     let _ = s.dispatch(
         "view.viewport.set",
