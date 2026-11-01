@@ -259,8 +259,10 @@ ScoreCraft's own additions, beyond what was observed:
 - Only markings on visible, unlocked layers are selected. A selection is kept until another
   rectangle, *Deselect* or opening another score; after undo takes some of its markings away, the
   actions apply to the ones left, and with none left they are refused. A moved or copied
-  selection's rectangle centre lands on the drop point, kept on the target page; notes and stamps
-  stay inside it. Scaling keeps widths, text and stamp sizes inside their tools' ranges.
+  selection's rectangle centre lands on the drop point, kept on the target page, and then the
+  whole selection (ink widths included) is shifted so nothing in it crosses the page's edge.
+  Growing a selection stops where it would no longer fit on the page, and it is nudged back
+  inside the same way (owner, 2026-11-01). Scaling keeps widths, text and stamp sizes inside their tools' ranges.
   Recolouring leaves whiteout paper-coloured.
 
 ### ANNO-13 Undo and redo
@@ -392,6 +394,7 @@ ScoreCraft's own additions, beyond what was observed:
 | INK-4 | A stroke with pressures 0.1 then 1.0 | its outline is built | it is narrower at the start than the end, and never narrower than 25% of the width |
 | INK-5 | A highlighter stroke that crosses itself over white paper | the page is composed | the crossing pixel has the same colour as a pixel the stroke covers once |
 | INK-50 | Two highlighter strokes crossing, of one colour and then of two; a pen stroke after them; and a flattened export of two overlapping highlighters | the page is composed; the export is rendered | the crossing is no darker than one stroke; with two colours it shows the later one unmixed; the pen is on top; the exported overlap matches a single stroke |
+| INK-51 | A pen line selected on a 612 × 792 pt page | it is dropped past the bottom-right corner, grown 10×, then dropped past the top-left corner | the whole line, ink width included, ends at the right and top edges; grown, it is as wide as the page and no wider; it never crosses an edge |
 | INK-6 | A highlighter over black notation | the page is composed | the notation pixel stays black |
 | INK-7 | Whiteout over notation, then a pen stroke over it | the page is composed | the notation is covered by paper colour and the pen shows on top |
 | INK-8 | Three strokes, the eraser crosses two | one stroke-eraser gesture | two strokes are removed in one undo step |
@@ -412,7 +415,7 @@ ScoreCraft's own additions, beyond what was observed:
 | INK-24 | Markup mode, touch lock on | a touch taps the right third, pinches, or (with *Draw with Touch*) draws | nothing happens; a pen still draws |
 | INK-25 | The second swatch selected | the player picks the palette's lavender | the second swatch becomes lavender and the active tool draws in it |
 | INK-26 | The palette | a colour that isn't one of its 30 is asked for | it is refused |
-| INK-27 | The ruler shown across the screen | a pen stroke starts 5 pixels from its edge and wobbles along it | the stored stroke is a straight line along the edge |
+| INK-27 | The ruler shown across the screen, moved up | a pen stroke starts 5 pixels from its bottom edge and wobbles along it; another starts near the top edge and wanders away from it | each stored stroke is a straight line along its edge |
 | INK-29 | The default highlighter | a horizontal and a vertical stroke and a tap are drawn | the horizontal band is three times as thick as the vertical one, ends are cut vertically, the tap is an upright rectangle |
 | INK-30 | *Round highlighter ends* on | a highlighter stroke is drawn | it has round ends and the same thickness in every direction; strokes drawn before keep the chisel |
 | INK-31 | The pen just lifted | a touch starts 20 ms later, then another 200 ms later | the first is ignored, the second turns or zooms as usual |
@@ -471,12 +474,14 @@ None left from the spec. Answered by the owner on 2026-11-01. Marked *(to build)
   stroke, and colours do not blend; the later stroke shows. Built in the reader and in flattened
   export (INK-50); see the requirement under the highlighter.
 - **The chisel stays upright on the page** when the page is rotated (as built).
-- **Text notes** have a preset maximum width per tool preset, and nothing (notes, stamps,
-  selections, snips) can be moved past the page's edges: a drag stops at the edge *(to build:
-  clamping in every move)*.
+- **Text notes** have a preset maximum width (86% of the page, not set by the user), and
+  nothing (notes, stamps, hairpins, selections) can be moved past the page's edges: a drag stops
+  at the edge. Built: notes and stamps were already kept inside; moving or growing a selection
+  now keeps every marking in it on the page, and growing stops where it would no longer fit
+  (INK-51).
 - **The ruler moves up and down.** A stroke that starts close to its top or bottom edge snaps to
-  that edge and stays on it until the pen lifts *(to build: moving the band, and snapping to
-  both edges)*.
+  that edge and stays on it until the pen lifts, wherever the pen wanders. Built (INK-27):
+  `annotate.ruler.set` and dragging the band move it, and the whole stroke is ruled at lift.
 
 Answered by the owner on 2026-10-31: highlighter build-up within a stroke and its ends (chisel,
 screenshot 26; round ends as a setting); the eraser's size (the one width slider) and the pressure
@@ -488,6 +493,7 @@ swatches and palette (screenshot 28); the stylus shortcut (pen and eraser).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-01 | minor | Built: nothing a selection carries leaves the page (INK-51); the ruler's two edges hold a stroke until lift (INK-27) |
 | 2026-11-01 | minor | Built: one highlighter layer in the reader and in flattened export (knockout group); INK-50 |
 | 2026-11-01 | minor | Owner's answers: one highlighter layer with no build-up or mixing; chisel upright on the page; preset note widths; nothing moves past the page edge; ruler moves and strokes snap to its edges until lift |
 | 2026-10-31 | minor | M4 part 5: export with ink, how it is written; INK-47..49 |

@@ -504,6 +504,26 @@ fn ink_27_ruler_straightens_strokes_that_start_at_its_edge() {
         list["annotations"][1]["points"].as_array().unwrap().len(),
         10
     );
+    // From near the top edge, wandering off it: snapped to the top edge until the pen lifts.
+    let top = 300.0 - crate::markup::RULER_HALF_HEIGHT;
+    let wander: Vec<Value> = (0..20)
+        .map(|i| {
+            json!([
+                x0 + 10.0 + f64::from(i) * 8.0,
+                top - 4.0 + f64::from(i) * 3.0
+            ])
+        })
+        .collect();
+    run(&mut s, "annotate.stroke", json!({ "points": wander }));
+    let list = run(&mut s, "annotate.page.list", json!({}));
+    let pts = list["annotations"][2]["points"].as_array().unwrap();
+    assert_eq!(pts.len(), 2, "still ruled after leaving the edge");
+    assert!((pts[0]["y"].as_f64().unwrap() - pts[1]["y"].as_f64().unwrap()).abs() < 1e-3);
+    let first = list["annotations"][0]["points"][0]["y"].as_f64().unwrap();
+    assert!(
+        (pts[0]["y"].as_f64().unwrap() - first).abs() > 1.0,
+        "the top edge, not the bottom one"
+    );
     // Out of range moves are kept on screen; leaving markup mode removes the ruler.
     let st = run(&mut s, "annotate.ruler.set", json!({ "y": -50 }));
     assert_eq!(st["ruler"]["y"], 0.0);

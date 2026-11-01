@@ -308,3 +308,42 @@ fn ink_42_the_pen_button_switches_pen_and_eraser() {
         "bad_params"
     );
 }
+
+#[test]
+fn ink_51_nothing_a_selection_carries_leaves_the_page() {
+    let (mut s, id) = setup("edges");
+    // A line 100 wide (pen width 2) on a 612 x 792 page.
+    run(&mut s, "annotate.stroke", line(1, 100.0, 200.0, 500.0));
+    let width = f64::from(stroke(&on(&s, &id, 0)[0].1).width);
+    run(
+        &mut s,
+        "annotate.select.rect",
+        rect(90.0, 480.0, 210.0, 520.0),
+    );
+    // Dropped on the right edge: the whole line stops at the edge, not just its centre.
+    run(
+        &mut s,
+        "annotate.select.move",
+        json!({ "x": 612.0, "y": 900.0, "space": "page", "page": 1 }),
+    );
+    let st = stroke(&on(&s, &id, 0)[0].1).clone();
+    let b = st.bounds().unwrap();
+    assert!((b.x1 - 612.0).abs() < 1e-3, "{b:?}");
+    assert!((b.y1 - 792.0).abs() < 1e-3, "{b:?}");
+    assert!((f64::from(st.points[0].x) - (512.0 - width / 2.0)).abs() < 1e-3);
+    // Growing it 10x would make it wider than the page: it stops at the page's width and stays
+    // on the page.
+    run(&mut s, "annotate.select.scale", json!({ "factor": 10.0 }));
+    let b = stroke(&on(&s, &id, 0)[0].1).bounds().unwrap();
+    assert!(b.x0 >= -1e-3 && b.x1 <= 612.0 + 1e-3, "{b:?}");
+    assert!(b.y0 >= -1e-3 && b.y1 <= 792.0 + 1e-3, "{b:?}");
+    assert!(b.width() > 600.0, "{b:?}");
+    // And to the far corner: it still stays inside.
+    run(
+        &mut s,
+        "annotate.select.move",
+        json!({ "x": -50.0, "y": -50.0, "space": "page", "page": 1 }),
+    );
+    let b = stroke(&on(&s, &id, 0)[0].1).bounds().unwrap();
+    assert!(b.x0 >= -1e-3 && b.y0 >= -1e-3, "{b:?}");
+}

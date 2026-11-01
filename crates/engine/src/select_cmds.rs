@@ -348,6 +348,30 @@ fn select_delete(session: &mut Session, params: &Value) -> Result<Value, EngineE
     Ok(json!({ "deleted": marks.len() }))
 }
 
+/// The area the markings cover, ink widths included, or `None` when they have none.
+fn extent(marks: &[Annotation]) -> Option<Rect> {
+    marks
+        .iter()
+        .filter_map(|a| match &a.kind {
+            AnnotationKind::Stroke(s) => s.bounds(),
+            AnnotationKind::Text(t) => Some(t.rect),
+            AnnotationKind::Stamp(st) => Some(st.rect),
+            AnnotationKind::Hairpin(h) => Some(
+                Rect::from_points(h.from, h.to).inflate(f64::from(h.opening.max(h.width)) / 2.0),
+            ),
+            AnnotationKind::Snip(_) | AnnotationKind::Shortcut(_) => None,
+        })
+        .filter(|r| r.is_finite())
+        .reduce(Rect::union)
+}
+
+/// How far `r` has to move to lie inside `page` (to its top-left corner when it is larger).
+/// Nothing a selection carries may leave the page (owner, 2026-11-01).
+fn shift_inside(r: Rect, page: Rect) -> Vec2 {
+    let fitted = fit_inside(r, page);
+    Vec2::new(fitted.x0 - r.x0, fitted.y1 - r.y1)
+}
+
 /// Moves (or copies) the selection so its rectangle's centre lands on the drop point, on the
 /// same page or another. Copies get new ids; moved markings keep theirs.
 fn drop_at(
@@ -366,7 +390,11 @@ fn drop_at(
         at.x.clamp(bounds.x0, bounds.x1),
         at.y.clamp(bounds.y0, bounds.y1),
     );
-    let d: Vec2 = to - sel.rect.center();
+    let mut d: Vec2 = to - sel.rect.center();
+    if let Some(r) = extent(&marks) {
+        let moved = Rect::new(r.x0 + d.x, r.y0 + d.y, r.x1 + d.x, r.y1 + d.y);
+        d = d + shift_inside(moved, bounds);
+    }
     let key = page_key(file_page)?;
     let same_page = key == sel.page;
     let mut changed = Vec::with_capacity(marks.len());
@@ -480,7 +508,22 @@ fn select_scale(session: &mut Session, params: &Value) -> Result<Value, EngineEr
     let (mut sel, marks) = current(session, ID)?;
     let bounds = page_rect(session, file_page_of(ID, sel.page)?)?;
     let c = sel.rect.center();
-    let map = move |q: Point| c + (q - c) * factor;
+    // Growing stops where the markings would no longer fit on the page; then they are nudged
+    // back inside it.
+    let mut factor = factor;
+    let mut nudge = Vec2::new(0.0, 0.0);
+    if let Some(r) = extent(&marks) {
+        if factor > 1.0 && r.width() > 0.0 && r.height() > 0.0 {
+            let room = (bounds.width() / r.width()).min(bounds.height() / r.height());
+            factor = factor.min(room.max(1.0));
+        }
+        let (a, b) = (
+            c + (Point::new(r.x0, r.y0) - c) * factor,
+            c + (Point::new(r.x1, r.y1) - c) * factor,
+        );
+        nudge = shift_inside(Rect::new(a.x, a.y, b.x, b.y), bounds);
+    }
+    let map = move |q: Point| c + (q - c) * factor + nudge;
     let (a, b) = (
         map(Point::new(sel.rect.x0, sel.rect.y0)),
         map(Point::new(sel.rect.x1, sel.rect.y1)),
