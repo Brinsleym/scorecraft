@@ -7,9 +7,7 @@ use serde_json::{Value, json};
 
 use scorecraft_layout::{Layout, TurnMode};
 
-use crate::commands::{
-    CommandSpec, bad, opt_bool, opt_f64, opt_str, params_object, reject_unknown_keys,
-};
+use crate::commands::{CommandSpec, bad, opt_f64, opt_str, params_object, reject_unknown_keys};
 use crate::reader::ReaderState;
 use crate::score_cmds::score_open;
 use crate::{EngineError, Session};
@@ -17,19 +15,46 @@ use crate::{EngineError, Session};
 /// Library settings key holding a score's own choice: `reader.<score id>`.
 const KEY: &str = "reader.";
 
+/// The layout asked for: one page, two, or automatic (one or two from the reader area's shape).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LayoutChoice {
+    Auto,
+    Single,
+    TwoPage,
+}
+
+impl LayoutChoice {
+    pub fn id(self) -> &'static str {
+        match self {
+            LayoutChoice::Auto => "auto",
+            LayoutChoice::Single => "single",
+            LayoutChoice::TwoPage => "twoPage",
+        }
+    }
+
+    pub fn from_id(id: &str) -> Option<LayoutChoice> {
+        match id {
+            "auto" => Some(LayoutChoice::Auto),
+            "single" => Some(LayoutChoice::Single),
+            "twoPage" => Some(LayoutChoice::TwoPage),
+            _ => None,
+        }
+    }
+}
+
 /// A layout, turn mode and half-page split.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ReaderChoice {
-    pub layout: Layout,
+    pub layout: LayoutChoice,
     pub mode: TurnMode,
     pub split: f64,
 }
 
 impl Default for ReaderChoice {
-    /// One page at a time, a whole page per turn.
+    /// The automatic layout, a whole page per turn (owner, 2026-11-01).
     fn default() -> Self {
         ReaderChoice {
-            layout: Layout::Single,
+            layout: LayoutChoice::Auto,
             mode: TurnMode::Full,
             split: 0.5,
         }
@@ -39,14 +64,26 @@ impl Default for ReaderChoice {
 impl ReaderChoice {
     pub(crate) fn of(r: &ReaderState) -> ReaderChoice {
         ReaderChoice {
-            layout: r.reader.layout(),
+            layout: if r.auto_layout {
+                LayoutChoice::Auto
+            } else {
+                match r.reader.layout() {
+                    Layout::Single => LayoutChoice::Single,
+                    Layout::TwoPage => LayoutChoice::TwoPage,
+                }
+            },
             mode: r.reader.mode(),
             split: r.reader.split(),
         }
     }
 
     pub(crate) fn apply(self, r: &mut ReaderState) {
-        r.reader.set_layout(self.layout);
+        r.auto_layout = self.layout == LayoutChoice::Auto;
+        match self.layout {
+            LayoutChoice::Auto => r.resolve_layout(),
+            LayoutChoice::Single => r.reader.set_layout(Layout::Single),
+            LayoutChoice::TwoPage => r.reader.set_layout(Layout::TwoPage),
+        }
         r.reader.set_split(self.split);
         r.reader.set_mode(self.mode);
     }
@@ -54,23 +91,19 @@ impl ReaderChoice {
     pub fn to_json(self) -> Value {
         json!({
             "layout": self.layout.id(),
-            "firstAlone": matches!(self.layout, Layout::TwoPage { first_alone: true }),
             "mode": self.mode.id(),
             "split": self.split,
         })
     }
 
-    /// Reads one written by [`Self::to_json`]; anything it can't read keeps `self`'s value.
+    /// Reads one written by [`Self::to_json`]; anything it can't read keeps `self`'s value. An
+    /// older `firstAlone` is ignored: the feature is gone.
     fn read(self, v: &Value) -> ReaderChoice {
-        let first_alone = v
-            .get("firstAlone")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
-        let layout = match v.get("layout").and_then(Value::as_str) {
-            Some("single") => Layout::Single,
-            Some("twoPage") => Layout::TwoPage { first_alone },
-            _ => self.layout,
-        };
+        let layout = v
+            .get("layout")
+            .and_then(Value::as_str)
+            .and_then(LayoutChoice::from_id)
+            .unwrap_or(self.layout);
         let mode = v
             .get("mode")
             .and_then(Value::as_str)
@@ -108,7 +141,7 @@ pub fn specs() -> Vec<CommandSpec> {
             label: "Default Layout and Turns",
             menu: "",
             shortcut: None,
-            params: r#"{"layout":"single|twoPage"?,"firstAlone":bool?,"mode":"full|halfPage|alternating"?,"split":number?}"#,
+            params: r#"{"layout":"auto|single|twoPage"?,"mode":"full|halfPage|alternating"?,"split":number?}"#,
             ours: true,
             enabled: crate::commands::always,
             run: defaults_set as _,
@@ -131,22 +164,11 @@ pub fn specs() -> Vec<CommandSpec> {
 fn defaults_set(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
     const ID: &str = "view.defaults.set";
     let p = params_object(ID, params)?;
-    reject_unknown_keys(ID, p, &["layout", "firstAlone", "mode", "split"])?;
+    reject_unknown_keys(ID, p, &["layout", "mode", "split"])?;
     let mut d = session.reader_default;
-    let first_alone = opt_bool(ID, p, "firstAlone")?;
-    match opt_str(ID, p, "layout")? {
-        Some("single") => d.layout = Layout::Single,
-        Some("twoPage") => {
-            d.layout = Layout::TwoPage {
-                first_alone: first_alone.unwrap_or(false),
-            }
-        }
-        Some(_) => return Err(bad(ID, "`layout` must be single or twoPage".into())),
-        None => {
-            if let (Some(fa), Layout::TwoPage { .. }) = (first_alone, d.layout) {
-                d.layout = Layout::TwoPage { first_alone: fa };
-            }
-        }
+    if let Some(l) = opt_str(ID, p, "layout")? {
+        d.layout = LayoutChoice::from_id(l)
+            .ok_or_else(|| bad(ID, "`layout` must be auto, single or twoPage".into()))?;
     }
     if let Some(m) = opt_str(ID, p, "mode")? {
         d.mode = mode_from_id(m)

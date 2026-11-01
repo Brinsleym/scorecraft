@@ -12,8 +12,8 @@ use crate::state::{Theme, UiState};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
+    /// The default layout: `auto` (one page or two from the window), `single` or `twoPage`.
     pub layout: String,
-    pub first_alone: bool,
     pub mode: String,
     pub split: f64,
     pub fit_width: bool,
@@ -41,8 +41,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Settings {
-            layout: "single".into(),
-            first_alone: false,
+            layout: "auto".into(),
             mode: "full".into(),
             split: 0.5,
             fit_width: false,
@@ -93,10 +92,6 @@ impl Settings {
             if let Some(v) = s("mode") {
                 self.mode = v;
             }
-            self.first_alone = d
-                .get("firstAlone")
-                .and_then(Value::as_bool)
-                .unwrap_or(false);
             self.split = d.get("split").and_then(Value::as_f64).unwrap_or(0.5);
         }
         if let Some(st) = session.reader_state() {
@@ -264,7 +259,6 @@ impl Settings {
             "view.defaults.set",
             &json!({
                 "layout": self.layout,
-                "firstAlone": self.first_alone,
                 "mode": self.mode,
                 "split": self.split,
             }),
@@ -300,6 +294,6 @@ mod tests {
         assert_eq!(Settings::parse(&s.to_json_string()), s);
         // Unknown and missing fields are fine.
         let p = Settings::parse(r#"{"mode":"halfPage","future":1}"#);
-        assert_eq!((p.mode.as_str(), p.layout.as_str()), ("halfPage", "single"));
+        assert_eq!((p.mode.as_str(), p.layout.as_str()), ("halfPage", "auto"));
     }
 }

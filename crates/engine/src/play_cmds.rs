@@ -189,17 +189,12 @@ fn carry_reader(session: &mut Session, st: &Value) {
     // A score with its own layout and turn mode keeps them (PT-14); any other takes the last
     // score's, without making them its own.
     if session.own_choice().is_none() {
-        let first_alone = st
-            .get("firstAlone")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
-        let _ = match st.get("layout").and_then(Value::as_str) {
-            Some("twoPage") => session.dispatch(
-                "view.layout.twoPage",
-                &json!({ "firstAlone": first_alone, "remember": false }),
-            ),
-            _ => session.dispatch("view.layout.single", &json!({ "remember": false })),
+        let layout = match st.get("layoutChoice").and_then(Value::as_str) {
+            Some("auto") => "view.layout.auto",
+            Some("twoPage") => "view.layout.twoPage",
+            _ => "view.layout.single",
         };
+        let _ = session.dispatch(layout, &json!({ "remember": false }));
         let _ = match st.get("mode").and_then(Value::as_str) {
             Some("halfPage") => session.dispatch(
                 "view.turn.halfPage",

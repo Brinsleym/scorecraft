@@ -194,3 +194,43 @@ fn perf_11_a_snip_is_drawn_into_its_page() {
         "page 1 now shows the snip"
     );
 }
+
+#[test]
+fn clear_ink_removes_the_shown_pages_markings_but_keeps_shortcuts_and_undoes() {
+    let (mut s, id) = setup("clear");
+    run(&mut s, "view.layout.single", json!({}));
+    run(&mut s, "annotate.mode.set", json!({ "on": true }));
+    for page in [1, 2] {
+        run(
+            &mut s,
+            "annotate.text.add",
+            json!({ "text": "rit.", "x": 100, "y": 700, "space": "page", "page": page }),
+        );
+    }
+    run(
+        &mut s,
+        "nav.shortcut.add",
+        json!({ "x0": 500, "y0": 700, "x1": 560, "y1": 740, "space": "page", "page": 1, "target": 3 }),
+    );
+    let r = run(&mut s, "annotate.clear", json!({}));
+    assert_eq!(r["cleared"], 1, "only page 1 is on screen");
+    assert!(
+        kinds(&s, &id, 0)
+            .iter()
+            .all(|k| matches!(k, AnnotationKind::Shortcut(_))),
+        "the shortcut stays"
+    );
+    assert_eq!(kinds(&s, &id, 1).len(), 1, "page 2 keeps its note");
+    run(&mut s, "edit.undo", json!({ "score": id }));
+    assert_eq!(kinds(&s, &id, 0).len(), 2, "one undo brings it back");
+    let r = run(&mut s, "annotate.clear", json!({ "pages": "all" }));
+    assert_eq!(r["cleared"], 2);
+    let r = run(&mut s, "annotate.clear", json!({}));
+    assert_eq!(r["cleared"], 0);
+    assert_eq!(
+        s.dispatch("annotate.clear", &json!({ "pages": "some" }))
+            .unwrap_err()
+            .code(),
+        "bad_params"
+    );
+}

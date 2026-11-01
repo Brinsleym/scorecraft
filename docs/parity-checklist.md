@@ -35,7 +35,7 @@ their parity docs track them.
 | Id | Feature | Commands |
 |---|---|---|
 | READ-1 | Open a PDF score and render its pages crisply at any zoom, fast enough to turn without a visible delay | `score.open`, `view.render` |
-| READ-2 | Single-page layout | `view.layout.single` |
+| READ-2 | Single-page layout, and the automatic layout (one page or two from the window's shape; the default) | `view.layout.single`, `view.layout.auto` |
 | READ-3 | Two-page spread layout, with correct first-page placement for spreads | `view.layout.twoPage` |
 | READ-4 | Full-screen (chrome hidden) performance mode | `ui.view.fullScreen` |
 | READ-5 | Half-page turns: the next system appears before the full turn | `view.turn.halfPage` |
@@ -55,7 +55,7 @@ their parity docs track them.
 | ANNO-3 | Highlighter that blends with the print like a real one (translucent multiply, no build-up within a stroke; stronger option) | `annotate.tool.highlighter` |
 | ANNO-4 | Custom pen colours and widths, saved presets: eight changeable swatches, a fixed palette of extra colours that replaces the selected swatch, a width slider per tool | `annotate.pen.preset.set` |
 | ANNO-5 | Whiteout: cover printed marks, then write over them | `annotate.tool.whiteout` |
-| ANNO-6 | Stroke eraser (removes whole strokes) | `annotate.tool.strokeEraser` |
+| ANNO-6 | Stroke eraser (removes whole strokes), and Clear Ink for the pages on screen or the whole score | `annotate.tool.strokeEraser`, `annotate.clear` |
 | ANNO-7 | Pixel eraser (erases part of a stroke) | `annotate.tool.pixelEraser` |
 | ANNO-8 | Typed text annotations, movable and editable: plain text with no background, wrapped to a maximum width, kept inside the page, a grip handle to move; Type with Touch | `annotate.text.add`, `annotate.text.edit` |
 | ANNO-9 | Stamps (ScoreCraft's own; not an enScore feature, per the owner's observation): dynamics pp to ff in the Edwin font, crescendo and diminuendo hairpins with stretch and move handles | `annotate.stamp.place` |
