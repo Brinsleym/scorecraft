@@ -176,6 +176,8 @@ pub static PROFILES: [Profile; 4] = [
             ("ArrowUp", Action::Previous),
             ("PageUp", Action::Previous),
             ("Shift+Space", Action::Previous),
+            ("Enter", Action::Next),
+            ("Backspace", Action::Previous),
             ("Home", Action::First),
             ("End", Action::Last),
         ],

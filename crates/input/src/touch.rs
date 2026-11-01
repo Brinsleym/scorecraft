@@ -1,5 +1,9 @@
-//! Taps and swipes on the reader (TURN-1, TURN-2): which part of the screen a tap hit and whether
-//! a pointer movement was a swipe.
+//! Taps, swipes and the scroll wheel on the reader (TURN-1, TURN-2): which part of the screen a
+//! tap hit, whether a pointer movement was a swipe, and when wheel movement turns a page.
+//!
+//! Tap zones are fixed (owner, 2026-11-01, as enScore): the reader is split into two equal halves,
+//! left turns back and right turns forward. A thin band along the top shows or hides the
+//! controls, so the whole page height below it turns.
 
 use crate::Action;
 
@@ -9,14 +13,24 @@ pub const MIN_SWIPE: f64 = 60.0;
 /// Longest travel, in frontend pixels, that still counts as a tap.
 pub const MAX_TAP_TRAVEL: f64 = 12.0;
 
-/// The thirds of the reader area.
+/// The share of the reader's height, from the top, that shows or hides the controls.
+pub const CONTROLS_BAND: f64 = 0.12;
+
+/// Wheel travel, in frontend pixels, that turns one page.
+pub const WHEEL_STEP: f64 = 60.0;
+
+/// After a wheel turn, further wheel movement is ignored for this long, so one flick of a
+/// trackpad turns one page.
+pub const WHEEL_COOLDOWN_MS: u64 = 350;
+
+/// The parts of the reader area.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Zone {
-    /// Left third: turn back.
+    /// Left half: turn back.
     Back,
-    /// Middle third: show or hide the controls.
+    /// The band along the top: show or hide the controls.
     Controls,
-    /// Right third: turn forward.
+    /// Right half: turn forward.
     Forward,
 }
 
@@ -39,19 +53,69 @@ impl Zone {
     }
 }
 
-/// The zone a tap at `x` hits in an area `width` wide. Positions outside the area clamp to its
-/// edges; a non-number position or an empty area hits the controls zone (no turn by accident).
-pub fn tap_zone(x: f64, width: f64) -> Zone {
+/// The zone a tap at `x`, `y` hits in an area `width` by `height`. A tap in the top
+/// [`CONTROLS_BAND`] shows or hides the controls; otherwise the left half turns back and the
+/// right half forward. `y` may be `None` (or the height unknown): halves only. Positions outside
+/// the area clamp to its edges; a non-number `x` or an empty area hits the controls zone (no
+/// turn by accident).
+pub fn tap_zone(x: f64, y: Option<f64>, width: f64, height: f64) -> Zone {
     if !(x.is_finite() && width.is_finite() && width > 0.0) {
         return Zone::Controls;
     }
-    let f = (x / width).clamp(0.0, 1.0);
-    if f < 1.0 / 3.0 {
+    if let Some(y) = y
+        && y.is_finite()
+        && height.is_finite()
+        && height > 0.0
+        && y / height < CONTROLS_BAND
+    {
+        return Zone::Controls;
+    }
+    if (x / width).clamp(0.0, 1.0) < 0.5 {
         Zone::Back
-    } else if f > 2.0 / 3.0 {
-        Zone::Forward
     } else {
-        Zone::Controls
+        Zone::Forward
+    }
+}
+
+/// Turns pages from scroll-wheel movement: wheel travel adds up until it reaches
+/// [`WHEEL_STEP`], then one page turns (down: forward, up: back) and the wheel rests for
+/// [`WHEEL_COOLDOWN_MS`].
+#[derive(Debug, Clone, Default)]
+pub struct WheelGate {
+    travel: f64,
+    resting_until: u64,
+}
+
+impl WheelGate {
+    pub fn new() -> WheelGate {
+        WheelGate::default()
+    }
+
+    /// `dy` pixels of wheel movement at `now_ms` (positive: content moves up, i.e. the wheel
+    /// turned down). Returns the turn, if any.
+    pub fn wheel(&mut self, dy: f64, now_ms: u64) -> Option<Action> {
+        if !dy.is_finite() || dy == 0.0 {
+            return None;
+        }
+        if now_ms < self.resting_until {
+            self.travel = 0.0;
+            return None;
+        }
+        if self.travel.signum() != dy.signum() {
+            self.travel = 0.0;
+        }
+        self.travel += dy;
+        if self.travel.abs() < WHEEL_STEP {
+            return None;
+        }
+        let action = if self.travel > 0.0 {
+            Action::Next
+        } else {
+            Action::Previous
+        };
+        self.travel = 0.0;
+        self.resting_until = now_ms.saturating_add(WHEEL_COOLDOWN_MS);
+        Some(action)
     }
 }
 
@@ -101,15 +165,35 @@ mod tests {
     use super::*;
 
     #[test]
-    fn thirds() {
-        assert_eq!(tap_zone(10.0, 900.0), Zone::Back);
-        assert_eq!(tap_zone(450.0, 900.0), Zone::Controls);
-        assert_eq!(tap_zone(899.0, 900.0), Zone::Forward);
-        assert_eq!(tap_zone(-50.0, 900.0), Zone::Back);
-        assert_eq!(tap_zone(5000.0, 900.0), Zone::Forward);
-        assert_eq!(tap_zone(f64::NAN, 900.0), Zone::Controls);
-        assert_eq!(tap_zone(10.0, 0.0), Zone::Controls);
+    fn two_halves_and_a_controls_band() {
+        let z = |x, y| tap_zone(x, y, 900.0, 600.0);
+        assert_eq!(z(10.0, Some(300.0)), Zone::Back);
+        assert_eq!(z(449.0, Some(300.0)), Zone::Back);
+        assert_eq!(z(450.0, Some(300.0)), Zone::Forward);
+        assert_eq!(z(899.0, Some(590.0)), Zone::Forward);
+        assert_eq!(z(450.0, Some(30.0)), Zone::Controls, "the top band");
+        assert_eq!(z(10.0, Some(30.0)), Zone::Controls);
+        assert_eq!(z(450.0, None), Zone::Forward, "no y: halves only");
+        assert_eq!(z(-50.0, Some(300.0)), Zone::Back);
+        assert_eq!(z(5000.0, Some(300.0)), Zone::Forward);
+        assert_eq!(z(f64::NAN, Some(300.0)), Zone::Controls);
+        assert_eq!(z(10.0, Some(f64::NAN)), Zone::Back);
+        assert_eq!(tap_zone(10.0, None, 0.0, 600.0), Zone::Controls);
         assert_eq!(Zone::Forward.action(), Some(Action::Next));
+    }
+
+    #[test]
+    fn the_wheel_turns_one_page_per_step_and_rests() {
+        let mut w = WheelGate::new();
+        assert_eq!(w.wheel(30.0, 0), None);
+        assert_eq!(w.wheel(30.0, 10), Some(Action::Next));
+        // Resting: a trackpad's long flick doesn't turn again.
+        assert_eq!(w.wheel(200.0, 100), None);
+        assert_eq!(w.wheel(-100.0, 400), Some(Action::Previous));
+        // A change of direction starts the count again.
+        assert_eq!(w.wheel(50.0, 1000), None);
+        assert_eq!(w.wheel(-50.0, 1010), None);
+        assert_eq!(w.wheel(f64::NAN, 1020), None);
     }
 
     #[test]

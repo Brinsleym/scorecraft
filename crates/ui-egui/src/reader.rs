@@ -18,7 +18,7 @@ use crate::theme::Tokens;
 /// What the canvas asks the shell to do after a frame.
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Outcome {
-    /// A tap in the middle third: show or hide the controls.
+    /// A tap in the band along the top: show or hide the controls.
     pub toggle_chrome: bool,
     /// An engine error to show.
     pub error: Option<String>,
@@ -249,6 +249,12 @@ impl ReaderCanvas {
                     out,
                     session.dispatch("view.pan", &json!({ "dx": scroll.x, "dy": scroll.y })),
                 );
+            } else if scroll.y != 0.0 {
+                // The wheel turns pages: down forward, up back (the engine adds up the travel).
+                note(
+                    out,
+                    session.dispatch("input.wheel", &json!({ "dy": -scroll.y })),
+                );
             }
         }
         if response.drag_started() || (response.is_pointer_button_down_on() && self.press.is_none())
@@ -266,6 +272,9 @@ impl ReaderCanvas {
                 );
             }
         }
+        if response.secondary_clicked() {
+            note(out, session.dispatch("input.secondaryClick", &json!({})));
+        }
         if response.clicked() {
             let at = response
                 .interact_pointer_pos()
@@ -277,7 +286,10 @@ impl ReaderCanvas {
                 .and_then(|r| r.get("followed").and_then(Value::as_bool))
                 .unwrap_or(false);
             if !followed
-                && let Some(r) = note(out, session.dispatch("input.tap", &json!({ "x": at.x })))
+                && let Some(r) = note(
+                    out,
+                    session.dispatch("input.tap", &json!({ "x": at.x, "y": at.y })),
+                )
             {
                 out.toggle_chrome = r.get("zone").and_then(Value::as_str) == Some("controls");
             }

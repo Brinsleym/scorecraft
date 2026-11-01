@@ -8,6 +8,11 @@ use scorecraft_input::{
     Action, Chord, Gesture, PROFILES, PedalMap, Profile, Zone, classify, tap_zone,
 };
 
+/// The clock's time in milliseconds, for the wheel's rest.
+fn now_ms(s: &Session) -> u64 {
+    (s.clock)()
+}
+
 use crate::commands::{
     CommandSpec, always, bad, opt_bool, opt_f64, opt_str, params_object, reject_unknown_keys,
     req_str,
@@ -46,7 +51,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "input.tap",
             "Tap the Reader",
             "",
-            r#"{"x":number}"#,
+            r#"{"x":number,"y":number?}"#,
             true,
             tap as _,
         ),
@@ -57,6 +62,30 @@ pub fn specs() -> Vec<CommandSpec> {
             r#"{"dx":number,"dy":number=0}"#,
             true,
             swipe as _,
+        ),
+        spec(
+            "input.swipe.set",
+            "Swipe to Turn Pages",
+            "Settings",
+            r#"{"on":bool?}"#,
+            true,
+            swipe_set as _,
+        ),
+        spec(
+            "input.wheel",
+            "Scroll the Reader",
+            "",
+            r#"{"dy":number}"#,
+            true,
+            wheel as _,
+        ),
+        spec(
+            "input.secondaryClick",
+            "Right-Click the Reader",
+            "",
+            "{}",
+            true,
+            secondary_click as _,
         ),
     ]
 }
@@ -185,15 +214,19 @@ fn finite(id: &str, p: Option<&Map<String, Value>>, key: &str) -> Result<Option<
     }
 }
 
-/// A tap at `x` (frontend pixels from the reader area's left edge). The middle third returns
-/// `zone: "controls"` for the frontend to show or hide its controls.
+/// A tap at `x`, `y` (frontend pixels from the reader area's top left). The left half turns
+/// back, the right half forward; the band along the top returns `zone: "controls"` for the
+/// frontend to show or hide its controls.
 fn tap(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
     const ID: &str = "input.tap";
     let p = params_object(ID, params)?;
-    reject_unknown_keys(ID, p, &["x"])?;
+    reject_unknown_keys(ID, p, &["x", "y"])?;
     let x = finite(ID, p, "x")?.ok_or_else(|| bad(ID, "`x` is required".into()))?;
-    let width = s.score.as_ref().map_or(0.0, |o| o.reader.viewport.width);
-    let zone: Zone = tap_zone(x, width);
+    let y = finite(ID, p, "y")?;
+    let (width, height) = s.score.as_ref().map_or((0.0, 0.0), |o| {
+        (o.reader.viewport.width, o.reader.viewport.height)
+    });
+    let zone: Zone = tap_zone(x, y, width, height);
     let mut out = perform(s, zone.action())?;
     crate::commands::set(&mut out, "zone", json!(zone.id()));
     Ok(out)
@@ -212,7 +245,8 @@ fn swipe(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
         return Ok(json!({ "handled": true, "gesture": "pan", "state": state }));
     }
     let g = classify(dx, dy);
-    let mut out = perform(s, g.action())?;
+    let action = if s.swipe_turns { g.action() } else { None };
+    let mut out = perform(s, action)?;
     let name = match g {
         Gesture::Tap => "tap",
         Gesture::SwipeLeft => "swipeLeft",
@@ -221,6 +255,42 @@ fn swipe(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
     };
     crate::commands::set(&mut out, "gesture", json!(name));
     Ok(out)
+}
+
+/// Reads or sets *Swipe to turn pages*; without `on` it reads.
+fn swipe_set(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
+    const ID: &str = "input.swipe.set";
+    let p = params_object(ID, params)?;
+    reject_unknown_keys(ID, p, &["on"])?;
+    if let Some(on) = opt_bool(ID, p, "on")? {
+        s.swipe_turns = on;
+    }
+    Ok(json!({ "on": s.swipe_turns }))
+}
+
+/// `dy` pixels of scroll-wheel movement over the reader (positive: wheel down). Zoomed in, it
+/// pans; otherwise wheel travel turns one page per step (down: forward), then rests briefly.
+fn wheel(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
+    const ID: &str = "input.wheel";
+    let p = params_object(ID, params)?;
+    reject_unknown_keys(ID, p, &["dy"])?;
+    let dy = finite(ID, p, "dy")?.ok_or_else(|| bad(ID, "`dy` is required".into()))?;
+    let zoomed = s.score.as_ref().is_some_and(|o| o.reader.zoom.factor > 1.0);
+    if zoomed {
+        let state = s.dispatch("view.pan", &json!({ "dx": 0, "dy": -dy }))?;
+        return Ok(json!({ "handled": true, "gesture": "pan", "state": state }));
+    }
+    let now = now_ms(s);
+    let action = s.wheel_gate.wheel(dy, now);
+    perform(s, action)
+}
+
+/// A right click on the reader turns back a page.
+fn secondary_click(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
+    const ID: &str = "input.secondaryClick";
+    let p = params_object(ID, params)?;
+    reject_unknown_keys(ID, p, &[])?;
+    perform(s, Some(Action::Previous))
 }
 
 #[cfg(test)]
@@ -321,13 +391,25 @@ mod tests {
         let mut s = session(3);
         s.dispatch("view.viewport.set", &json!({ "width": 900, "height": 600 }))
             .unwrap();
-        let r = s.dispatch("input.tap", &json!({ "x": 850 })).unwrap();
+        let r = s
+            .dispatch("input.tap", &json!({ "x": 850, "y": 300 }))
+            .unwrap();
         assert_eq!((r["zone"].as_str(), page(&r)), (Some("forward"), Some(2)));
-        let r = s.dispatch("input.tap", &json!({ "x": 450 })).unwrap();
+        // Two halves: just right of the middle turns forward.
+        let r = s
+            .dispatch("input.tap", &json!({ "x": 460, "y": 300 }))
+            .unwrap();
+        assert_eq!((r["zone"].as_str(), page(&r)), (Some("forward"), Some(3)));
+        // The band along the top shows or hides the controls.
+        let r = s
+            .dispatch("input.tap", &json!({ "x": 450, "y": 20 }))
+            .unwrap();
         assert_eq!(
             (r["zone"].as_str(), r["handled"].as_bool()),
             (Some("controls"), Some(false))
         );
+        let r = s.dispatch("input.tap", &json!({ "x": 20 })).unwrap();
+        assert_eq!(page(&r), Some(2));
         let r = s.dispatch("input.tap", &json!({ "x": 20 })).unwrap();
         assert_eq!(page(&r), Some(1));
         let r = s
@@ -339,8 +421,62 @@ mod tests {
         );
         let r = s.dispatch("input.swipe", &json!({ "dx": 30 })).unwrap();
         assert_eq!(r["handled"], false);
+        // *Swipe to turn pages* off: a swipe does nothing.
+        let r = s
+            .dispatch("input.swipe.set", &json!({ "on": false }))
+            .unwrap();
+        assert_eq!(r["on"], false);
+        let r = s.dispatch("input.swipe", &json!({ "dx": 200 })).unwrap();
+        assert_eq!(
+            (r["handled"].as_bool(), r["gesture"].as_str()),
+            (Some(false), Some("swipeRight"))
+        );
+        assert_eq!(
+            s.dispatch("input.swipe.set", &json!({})).unwrap()["on"],
+            false
+        );
+        s.dispatch("input.swipe.set", &json!({ "on": true }))
+            .unwrap();
         s.dispatch("view.zoom.set", &json!({ "zoom": 3 })).unwrap();
         let r = s.dispatch("input.swipe", &json!({ "dx": -200 })).unwrap();
+        assert_eq!((r["gesture"].as_str(), page(&r)), (Some("pan"), Some(2)));
+    }
+
+    #[test]
+    fn the_wheel_and_right_click_turn() {
+        let clock = Arc::new(AtomicU64::new(1_000));
+        let c = clock.clone();
+        let mut s = session(3);
+        s.set_clock(Box::new(move || c.load(Ordering::SeqCst)));
+        s.dispatch("view.viewport.set", &json!({ "width": 900, "height": 600 }))
+            .unwrap();
+        let r = s.dispatch("input.wheel", &json!({ "dy": 30 })).unwrap();
+        assert_eq!(r["handled"], false);
+        let r = s.dispatch("input.wheel", &json!({ "dy": 40 })).unwrap();
+        assert_eq!(page(&r), Some(2));
+        // Resting after a turn.
+        let r = s.dispatch("input.wheel", &json!({ "dy": 200 })).unwrap();
+        assert_eq!(r["handled"], false);
+        clock.fetch_add(1_000, Ordering::SeqCst);
+        let r = s.dispatch("input.wheel", &json!({ "dy": -80 })).unwrap();
+        assert_eq!(page(&r), Some(1));
+        let r = s.dispatch("input.secondaryClick", &json!({})).unwrap();
+        assert_eq!(r["action"], "previous");
+        s.dispatch("view.page.goto", &json!({ "page": 3 })).unwrap();
+        let r = s.dispatch("input.secondaryClick", &json!({})).unwrap();
+        assert_eq!(page(&r), Some(2));
+        // Enter and Backspace turn by default.
+        clock.fetch_add(1_000, Ordering::SeqCst);
+        let r = s.dispatch("input.key", &json!({ "key": "Enter" })).unwrap();
+        assert_eq!(page(&r), Some(3));
+        clock.fetch_add(1_000, Ordering::SeqCst);
+        let r = s
+            .dispatch("input.key", &json!({ "key": "Backspace" }))
+            .unwrap();
+        assert_eq!(page(&r), Some(2));
+        // Zoomed in, the wheel pans.
+        s.dispatch("view.zoom.set", &json!({ "zoom": 3 })).unwrap();
+        let r = s.dispatch("input.wheel", &json!({ "dy": 100 })).unwrap();
         assert_eq!((r["gesture"].as_str(), page(&r)), (Some("pan"), Some(2)));
     }
 
