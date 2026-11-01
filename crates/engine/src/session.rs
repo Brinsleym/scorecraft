@@ -18,6 +18,8 @@ pub struct Session {
     pub(crate) key_gate: scorecraft_input::KeyGate,
     /// *Swipe to turn pages* (TURN-2), on by default.
     pub(crate) swipe_turns: bool,
+    /// The layout and turn mode of every score without its own (PT-14).
+    pub(crate) reader_default: crate::reader_choice::ReaderChoice,
     /// Scroll-wheel turns: travel and rest.
     pub(crate) wheel_gate: scorecraft_input::WheelGate,
     /// Markup tools, colours, widths and *Draw with Touch* (ANNO-1..7, ANNO-14).
@@ -50,6 +52,7 @@ impl Session {
             pedal_map: scorecraft_input::PedalMap::default(),
             key_gate: scorecraft_input::KeyGate::new(scorecraft_input::DEFAULT_DEBOUNCE_MS),
             swipe_turns: true,
+            reader_default: crate::reader_choice::ReaderChoice::default(),
             wheel_gate: scorecraft_input::WheelGate::new(),
             markup: crate::markup::Markup::default(),
             library_sort: crate::find_cmds::LibrarySort::default(),

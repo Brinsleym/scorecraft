@@ -85,6 +85,19 @@ them. Written for milestone M3.
 - Editing the score's pages while it is open (hide, move, rotate, range) keeps the same file page
   on screen when it is still shown.
 
+### A default, and a score's own choice (owner, 2026-11-01)
+
+- The layout and turn mode chosen in settings (*Turning* menu, `view.defaults.set`) are the
+  default for every score: single page, whole-page turns until changed. In single-page layout a
+  turn moves one page.
+- Changing the layout or turn mode from a library score's own view (the toolbar, or the
+  `view.layout.*` and `view.turn.*` commands) makes that the score's own choice: it opens that
+  way from then on, whatever the default becomes. *Use these for this score*
+  (`view.override.clear`) forgets it. The choice is kept in the library's settings
+  (`reader.<score id>`), so it syncs, and it is not an undo step.
+- A list carries the last score's layout to the next score (LIST-4) only when the next has no
+  choice of its own, and carrying it does not make it that score's own (`remember: false`).
+
 ### TURN-1 Tap zones, TURN-2 swipes, TURN-3 keys, TURN-4 pedals
 
 - Tap zones are fixed (owner, 2026-11-01, as enScore): tapping or clicking the right half of the
@@ -126,11 +139,13 @@ them. Written for milestone M3.
 | PT-10 | A pre-rendered next page | the user turns | the page is on screen within 16 ms |
 | PT-11 | A pedal sending Page Down | the user presses it | the reader turns forward once |
 | PT-12 | A 900 × 600 reader on page 1 of 3 | taps right of the middle, left of the middle, in the top band; a swipe with *Swipe to turn pages* off | forward, back, the controls zone with no turn; the swipe doesn't turn |
+| PT-14 | Two library scores, default two pages with half-page turns | A opens and is switched to single page and whole turns; B opens; A again; the default becomes alternating; A's choice is forgotten | A opens two pages and half-page, then single and whole; B follows the default; A keeps its own until forgotten, then takes alternating; the choice is in the library settings, not the undo history |
 | PT-13 | The same reader | 30 then 40 px of wheel down; 200 more at once; −80 a second later; a right click; Enter; Backspace; the wheel while zoomed | the second step turns forward; the burst is ignored; then back; back; forward; back; zoomed, it pans |
 
 PT-1 to PT-9 are engine tests (`crates/layout`, `crates/engine/src/reader_cmds.rs`,
 `crates/engine/tests/library.rs`); PT-10 is perf scenario P1; PT-11 comes with the pedal map;
-PT-12 and PT-13 are `crates/engine/src/input_cmds.rs` and `crates/input/src/touch.rs` tests.
+PT-12 and PT-13 are `crates/engine/src/input_cmds.rs` and `crates/input/src/touch.rs` tests;
+PT-14 is `crates/engine/src/reader_choice/tests.rs`.
 
 ## Not in scope
 
@@ -145,7 +160,7 @@ None left. Answered by the owner on 2026-11-01 (enScore's behaviour, and ScoreCr
 
 - **Turn mode is a default with a per-score override.** In single-page mode a turn moves one page.
   The layout and turn mode chosen in settings apply to every score except those changed from the
-  score's own view, which keep their choice *(to build: per-score override)*.
+  score's own view, which keep their choice. Built (PT-14).
 - **Tap zones are fixed, not configurable.** Two equal halves of the window: the left half turns
   back, the right half turns forward. Settings has a *Swipe to turn pages* switch. Built
   (PT-12).
@@ -158,6 +173,7 @@ None left. Answered by the owner on 2026-11-01 (enScore's behaviour, and ScoreCr
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-01 | minor | Built: a default layout and turn mode with each score's own choice over it; PT-14 |
 | 2026-11-01 | minor | Built: two tap halves and a top controls band, *Swipe to turn pages*, Enter and Backspace, wheel and right-click turns; PT-12, PT-13 |
 | 2026-11-01 | minor | Owner's answers: per-score turn mode over a default, two fixed tap zones and a swipe switch, every usual key and pointer input by default |
 | 2026-10-31 | minor | The half-page cut snaps to the gap between systems (gap G2); PERF-15 in `crates/engine/src/reader_cmds.rs`, `scorecraft-layout` test in `snap.rs` |

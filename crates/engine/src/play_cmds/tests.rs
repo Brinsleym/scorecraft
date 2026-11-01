@@ -117,7 +117,9 @@ fn perf_1_turning_past_the_end_opens_the_next_entry_and_back() {
     let r = run(&mut s, "view.turn.previous", json!({}));
     assert_eq!(r["breaks"], json!([]));
     assert_eq!(run(&mut s, "list.state", json!({}))["title"], "A");
-    assert_eq!(page(&mut s), (2, 2));
+    // A was switched to two pages in its own view, so it keeps them (PT-14): its last spread.
+    assert_eq!(s.reader_state().unwrap()["layout"], "twoPage");
+    assert_eq!(page(&mut s), (1, 2));
     // Past the very end, nothing more turns.
     run(&mut s, "list.play", json!({ "list": list, "entry": 3 }));
     run(&mut s, "view.page.goto", json!({ "to": "last" }));

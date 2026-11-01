@@ -61,7 +61,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Single Page",
             "View>Layout",
             None,
-            "{}",
+            r#"{"remember":bool=true}"#,
             false,
             layout_single as _,
         ),
@@ -70,7 +70,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Two Pages",
             "View>Layout",
             None,
-            r#"{"firstAlone":bool=false}"#,
+            r#"{"firstAlone":bool=false,"remember":bool=true}"#,
             false,
             layout_two_page as _,
         ),
@@ -79,7 +79,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Half-Page Turns",
             "View>Turn",
             None,
-            r#"{"on":bool=true,"split":number?,"snap":bool=false}"#,
+            r#"{"on":bool=true,"split":number?,"snap":bool=false,"remember":bool=true}"#,
             false,
             half_page as _,
         ),
@@ -88,7 +88,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Alternating Turns",
             "View>Turn",
             None,
-            r#"{"on":bool=true}"#,
+            r#"{"on":bool=true,"remember":bool=true}"#,
             false,
             alternating as _,
         ),
@@ -231,20 +231,33 @@ fn page_goto(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
     })
 }
 
+/// `remember` (default true): a layout or turn-mode change in a score's view is remembered for
+/// that score (PT-14).
+fn remembering(id: &str, params: &Value) -> Result<bool, EngineError> {
+    Ok(opt_bool(id, params_object(id, params)?, "remember")?.unwrap_or(true))
+}
+
 fn layout_single(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
-    with_reader(s, "view.layout.single", params, &[], |r, _| {
+    const ID: &str = "view.layout.single";
+    let remember = remembering(ID, params)?;
+    let v = with_reader(s, ID, params, &["remember"], |r, _| {
         r.reader.set_layout(Layout::Single);
         Ok(json!({}))
-    })
+    })?;
+    s.remember_view_choice(remember)?;
+    Ok(v)
 }
 
 fn layout_two_page(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
     const ID: &str = "view.layout.twoPage";
-    with_reader(s, ID, params, &["firstAlone"], |r, p| {
+    let remember = remembering(ID, params)?;
+    let v = with_reader(s, ID, params, &["firstAlone", "remember"], |r, p| {
         let first_alone = opt_bool(ID, p, "firstAlone")?.unwrap_or(false);
         r.reader.set_layout(Layout::TwoPage { first_alone });
         Ok(json!({}))
-    })
+    })?;
+    s.remember_view_choice(remember)?;
+    Ok(v)
 }
 
 /// Turns a mode on, or back to full turns if it is the mode in use.
@@ -271,18 +284,27 @@ fn half_page(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
     } else {
         None
     };
-    with_reader(s, ID, params, &["on", "split", "snap"], |r, p| {
-        let on = opt_bool(ID, p, "on")?.unwrap_or(true);
-        if let Some(split) = snapped.or(opt_f64(ID, p, "split")?) {
-            let (lo, hi) = scorecraft_layout::SPLIT_RANGE;
-            if !(lo..=hi).contains(&split) {
-                return Err(bad(ID, format!("`split` must be from {lo} to {hi}")));
+    let remember = remembering(ID, params)?;
+    let v = with_reader(
+        s,
+        ID,
+        params,
+        &["on", "split", "snap", "remember"],
+        |r, p| {
+            let on = opt_bool(ID, p, "on")?.unwrap_or(true);
+            if let Some(split) = snapped.or(opt_f64(ID, p, "split")?) {
+                let (lo, hi) = scorecraft_layout::SPLIT_RANGE;
+                if !(lo..=hi).contains(&split) {
+                    return Err(bad(ID, format!("`split` must be from {lo} to {hi}")));
+                }
+                r.reader.set_split(split);
             }
-            r.reader.set_split(split);
-        }
-        set_mode(r, TurnMode::HalfPage, on);
-        Ok(json!({}))
-    })
+            set_mode(r, TurnMode::HalfPage, on);
+            Ok(json!({}))
+        },
+    )?;
+    s.remember_view_choice(remember)?;
+    Ok(v)
 }
 
 /// `split` snapped to the gap between systems on the page on screen, from a small render of it;
@@ -323,11 +345,14 @@ fn snap_on_screen(s: &mut Session, split: f64) -> f64 {
 
 fn alternating(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
     const ID: &str = "view.turn.alternating";
-    with_reader(s, ID, params, &["on"], |r, p| {
+    let remember = remembering(ID, params)?;
+    let v = with_reader(s, ID, params, &["on", "remember"], |r, p| {
         let on = opt_bool(ID, p, "on")?.unwrap_or(true);
         set_mode(r, TurnMode::Alternating, on);
         Ok(json!({}))
-    })
+    })?;
+    s.remember_view_choice(remember)?;
+    Ok(v)
 }
 
 fn zoom_set(s: &mut Session, params: &Value) -> Result<Value, EngineError> {

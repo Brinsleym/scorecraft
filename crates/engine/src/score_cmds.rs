@@ -123,6 +123,7 @@ impl Session {
             reader,
             library_score: None,
         });
+        self.apply_reader_choice();
         Ok(info)
     }
 
@@ -148,6 +149,8 @@ impl Session {
         if let Some(open) = self.score.as_mut() {
             open.library_score = Some(id);
         }
+        // Its own layout and turn mode if it has them, else the default (PT-14).
+        self.apply_reader_choice();
         self.refresh_reader();
         self.prefetch_reader();
         let l = self.lib_mut(ID)?;

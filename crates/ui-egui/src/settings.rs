@@ -80,19 +80,27 @@ impl Settings {
     /// Takes the reader preferences from the open score's reader, if any, and the rest from the
     /// session and shell.
     pub fn capture(&mut self, session: &mut Session, ui: &UiState) {
-        if let Some(st) = session.reader_state() {
-            let s = |k: &str| st.get(k).and_then(Value::as_str).map(str::to_owned);
+        // The layout and turns for every score; a score's own are kept in its library (PT-14).
+        if let Some(d) = session
+            .dispatch("view.defaults.set", &json!({}))
+            .ok()
+            .and_then(|v| v.get("defaults").cloned())
+        {
+            let s = |k: &str| d.get(k).and_then(Value::as_str).map(str::to_owned);
             if let Some(v) = s("layout") {
                 self.layout = v;
             }
             if let Some(v) = s("mode") {
                 self.mode = v;
             }
-            self.first_alone = st
+            self.first_alone = d
                 .get("firstAlone")
                 .and_then(Value::as_bool)
                 .unwrap_or(false);
-            self.split = st.get("split").and_then(Value::as_f64).unwrap_or(0.5);
+            self.split = d.get("split").and_then(Value::as_f64).unwrap_or(0.5);
+        }
+        if let Some(st) = session.reader_state() {
+            let s = |k: &str| st.get(k).and_then(Value::as_str).map(str::to_owned);
             self.fit_width = st.pointer("/zoom/fit").and_then(Value::as_str) == Some("width");
             if let Some(f) = s("filter") {
                 self.filter = f;
@@ -252,23 +260,20 @@ impl Settings {
             let _ = session.dispatch("input.pedal.map", &json!({ "map": self.pedal_map }));
         }
         let _ = session.dispatch("input.swipe.set", &json!({ "on": self.swipe_turns }));
+        let _ = session.dispatch(
+            "view.defaults.set",
+            &json!({
+                "layout": self.layout,
+                "firstAlone": self.first_alone,
+                "mode": self.mode,
+                "split": self.split,
+            }),
+        );
     }
 
-    /// Applies the reader preferences to a score just opened. Each is best effort.
+    /// Applies the reader preferences to a score just opened. Each is best effort. The layout
+    /// and turn mode are the engine's: the score's own, or the default set at launch.
     pub fn apply_to_reader(&self, session: &mut Session) {
-        let _ = if self.layout == "twoPage" {
-            session.dispatch(
-                "view.layout.twoPage",
-                &json!({ "firstAlone": self.first_alone }),
-            )
-        } else {
-            session.dispatch("view.layout.single", &json!({}))
-        };
-        let _ = match self.mode.as_str() {
-            "halfPage" => session.dispatch("view.turn.halfPage", &json!({ "split": self.split })),
-            "alternating" => session.dispatch("view.turn.alternating", &json!({})),
-            _ => Ok(Value::Null),
-        };
         if self.fit_width {
             let _ = session.dispatch("view.zoom.landscapeFit", &json!({}));
         }

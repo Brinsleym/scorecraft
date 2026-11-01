@@ -186,24 +186,41 @@ fn carry_reader(session: &mut Session, st: &Value) {
     if let Some(vp) = st.get("viewport") {
         let _ = session.dispatch("view.viewport.set", vp);
     }
-    let first_alone = st
-        .get("firstAlone")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let _ = match st.get("layout").and_then(Value::as_str) {
-        Some("twoPage") => {
-            session.dispatch("view.layout.twoPage", &json!({ "firstAlone": first_alone }))
-        }
-        _ => session.dispatch("view.layout.single", &json!({})),
-    };
-    let _ = match st.get("mode").and_then(Value::as_str) {
-        Some("halfPage") => session.dispatch(
-            "view.turn.halfPage",
-            &json!({ "split": st.get("split").cloned().unwrap_or(json!(0.5)) }),
-        ),
-        Some("alternating") => session.dispatch("view.turn.alternating", &json!({})),
-        _ => Ok(Value::Null),
-    };
+    // A score with its own layout and turn mode keeps them (PT-14); any other takes the last
+    // score's, without making them its own.
+    if session.own_choice().is_none() {
+        let first_alone = st
+            .get("firstAlone")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let _ = match st.get("layout").and_then(Value::as_str) {
+            Some("twoPage") => session.dispatch(
+                "view.layout.twoPage",
+                &json!({ "firstAlone": first_alone, "remember": false }),
+            ),
+            _ => session.dispatch("view.layout.single", &json!({ "remember": false })),
+        };
+        let _ = match st.get("mode").and_then(Value::as_str) {
+            Some("halfPage") => session.dispatch(
+                "view.turn.halfPage",
+                &json!({ "split": st.get("split").cloned().unwrap_or(json!(0.5)), "remember": false }),
+            ),
+            Some("alternating") => {
+                session.dispatch("view.turn.alternating", &json!({ "remember": false }))
+            }
+            _ => session
+                .dispatch(
+                    "view.turn.halfPage",
+                    &json!({ "on": false, "remember": false }),
+                )
+                .and_then(|_| {
+                    session.dispatch(
+                        "view.turn.alternating",
+                        &json!({ "on": false, "remember": false }),
+                    )
+                }),
+        };
+    }
     if st.pointer("/zoom/fit").and_then(Value::as_str) == Some("width") {
         let _ = session.dispatch("view.zoom.landscapeFit", &json!({}));
     }

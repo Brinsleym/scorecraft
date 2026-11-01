@@ -35,6 +35,7 @@ mod page_cmds;
 pub mod parity;
 mod play_cmds;
 mod reader;
+mod reader_choice;
 mod reader_cmds;
 mod score_cmds;
 mod select_cmds;
