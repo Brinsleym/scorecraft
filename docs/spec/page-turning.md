@@ -1,6 +1,6 @@
 # Page turning
 
-> **Last reviewed:** 2026-10-31 · **Last updated:** 2026-10-31 · **Change:** minor (the half-page cut snaps between systems; earlier: first version) · **Target:** enScore 3.7 (2026)
+> **Last reviewed:** 2026-10-31 · **Last updated:** 2026-11-01 · **Change:** minor (the owner's answers on turn mode, tap zones and default inputs; earlier: the half-page cut snaps between systems; earlier: first version) · **Target:** enScore 3.7 (2026)
 
 How the reader lays pages out and turns them, and how taps, swipes, keys and foot pedals turn
 them. Written for milestone M3.
@@ -131,14 +131,22 @@ PT-1 to PT-9 are engine tests (`crates/layout`, `crates/engine/src/reader_cmds.r
 
 ## Open questions
 
-- Which part does enScore replace in a half-page turn, top or bottom, and is the split adjustable
-  per page? (Listing S8 says only "show you the next line before you need it".)
-- Exact tap-zone layout and whether it is configurable.
-- Which keys enScore accepts from pedals by default.
+None left. Answered by the owner on 2026-11-01 (enScore's behaviour, and ScoreCraft follows it). Marked *(to build)* where the code does not do it yet.
+
+- **Turn mode is a default with a per-score override.** In single-page mode a turn moves one page.
+  The layout and turn mode chosen in settings apply to every score except those changed from the
+  score's own view, which keep their choice *(to build: per-score override)*.
+- **Tap zones are fixed, not configurable.** Two equal halves of the window: the left half turns
+  back, the right half turns forward. Settings has a *Swipe to turn pages* switch *(to build:
+  two halves instead of thirds, and the switch)*.
+- **Every usual input turns a page by default:** Page Up and Page Down, Home and End (first and
+  last page), the arrow keys, Space, click and right click, the scroll wheel down and up, and a
+  finger swipe left and right *(to build: whichever of these the default map lacks)*.
 
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-01 | minor | Owner's answers: per-score turn mode over a default, two fixed tap zones and a swipe switch, every usual key and pointer input by default |
 | 2026-10-31 | minor | The half-page cut snaps to the gap between systems (gap G2); PERF-15 in `crates/engine/src/reader_cmds.rs`, `scorecraft-layout` test in `snap.rs` |
 | 2026-10-31 | major | First version for M3: layouts, half-page and alternating turns, zoom, go to page, contents, tap, swipe, keys and pedals |

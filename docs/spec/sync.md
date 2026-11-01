@@ -1,6 +1,6 @@
 # Sync
 
-> **Last reviewed:** 2026-10-31 · **Last updated:** 2026-10-31 · **Change:** minor (part 3: syncing through a shared folder; earlier: part 2: every record, revivals, list positions, changes from edits; earlier: first version) · **Target:** enScore 3.7 (2026)
+> **Last reviewed:** 2026-10-31 · **Last updated:** 2026-11-01 · **Change:** minor (the owner's answers on conflicts, Recently Deleted and backends; earlier: part 3: syncing through a shared folder; earlier: part 2: every record, revivals, list positions, changes from edits; earlier: first version) · **Target:** enScore 3.7 (2026)
 
 How two or more devices that change the same library while apart end up with the same library.
 Written for milestone M8, from the owner's design ([architecture §9](../architecture.md#9-sync)).
@@ -107,16 +107,24 @@ peers) and score files come in later parts.
 
 ## Open questions
 
-- How enScore resolves two devices editing the same marking; ScoreCraft's later-clock rule is
-  its own.
-- A folder deleted on one device while another files a score in it leaves the score pointing at
-  a missing folder. `library.verify` reports it; whether the merge should file such scores at
-  the root is open.
+Answered by the owner on 2026-11-01. Marked *(to build)* where the code does not do it yet.
+
+- **Same marking edited on two devices**: the later clock wins (as built).
+- **Recently Deleted holds folders as well as scores**, for 30 days, then they are deleted for
+  good. Recently Deleted syncs, and items in it are read-only until restored *(to build: folders
+  in Recently Deleted, the 30-day purge, read-only)*.
+- **A score filed into a folder another device deleted** points at that recently deleted folder.
+  `library.verify` reports it, and the user is asked whether to restore the folder *(to build:
+  the prompt)*.
+- **Backends, in order**: the Google Drive API next, then Wi-Fi between devices. Device pairing:
+  Sign in with Google first; without an account, devices pair once by QR code. The wire format is
+  JSON, as in the shared folder (decision D5).
 
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-01 | minor | Owner's answers: later clock wins; Recently Deleted holds folders for 30 days, syncs, read-only; restore prompt; Google Drive API next; D5 decided |
 | 2026-10-31 | minor | Part 3: SYNC-1 and SYNC-7 through a shared folder; SYNC-T10..T13 |
 | 2026-10-31 | minor | Part 2: every record of the library, revivals for undone deletes, list positions, changes worked out from edits; SYNC-T6..T9 |
 | 2026-10-31 | major | First version for M8 part 1: merge rules for markings and score details, exchange by what each side has seen |

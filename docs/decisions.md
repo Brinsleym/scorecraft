@@ -6,11 +6,38 @@ this file records the outcome. Newest first.
 
 ## Open
 
-| Id | Question | Options | Needed by |
-|---|---|---|---|
-| D2 | Record encoding on disk | JSON (readable, diffable) vs CBOR (smaller, faster) for score records; ink op logs are binary either way | M1 |
-| D4 | OCR for title/composer detection | `pdfcraft-ocr` (ocrs, on-device; leading option, model licences to confirm before shipping) vs PDF metadata and text layer only | M9 |
-| D5 | Device-to-device sync protocol | Wire format and pairing for Wi-Fi peers and the Google Drive relay (architecture §9): JSON ops vs a compact binary encoding; how optional sign-in links devices | M8 |
+None. D2, D4 and D5 were decided on 2026-11-01 (below).
+
+## 2026-11-01: Owner's answers after M4–M8
+
+Brinsley answered the open questions raised by the M4 to M8 work (PR #25) on 2026-11-01. Each is
+a decision; the behaviour answers are folded into the specs (ink, library, page turning,
+performance, sync) and the [Edit Details note](observations/library-edit-details.md).
+
+- **PR #25 is split by milestone** into stacked PRs (#27 M4, #28 M5, #29 M6, #30 browser, #31
+  pages and import, #25 M8), merged in that order.
+- **The Android shell may use unsafe code** for its `android_main` entry point, under the same
+  exception as `scorecraft-devices`: `unsafe_code = "deny"` for that crate, with a per-block
+  `#[allow]` and a safety comment ([never-crash](standards/never-crash.md)). Android builds and
+  device tests run on the owner's Windows PC (WIN-RB), which gets the Android SDK and NDK.
+- **iPad and iOS are postponed** until the owner or a contributor has a Mac to build and test on.
+  M7 is Android only until then; decision D3 (a Swift pen host) stands for when it resumes.
+- **D2 decided: records stay JSON.** Library format v1's per-record JSON is fast enough (a
+  10,000-score library opens in about 0.2 s) and can be read and repaired by hand or by an agent.
+  Ink and change logs stay binary or compact where they are already.
+- **D4 decided: `pdfcraft-ocr` on device** for title and composer detection (LIB-7, -8), with the
+  PDF's metadata and text layer as the fallback. Model licences are checked before it ships.
+- **D5 decided: sync changes travel as JSON**, the same format the shared-folder backend writes
+  (compressed on the wire). Devices link by **Sign in with Google** first; without an account,
+  two devices **pair once by QR code** and then trust and encrypt to each other. No ScoreCraft
+  account or server is needed for either.
+- **Sync order: the Google Drive API backend next**, then Wi-Fi between devices.
+- **Recently Deleted holds folders as well as scores, for 30 days**, then deletes them for good.
+  It syncs, its items are read-only until restored, and a score that points at a recently deleted
+  folder makes `library.verify` report it and ask whether to restore the folder.
+- **Roadmap order agreed**: the Windows tablet checks for M4 to M6 first, then M8, then M7.
+- **List placeholders are ScoreCraft's own feature** (enScore has none): an editable A4 template
+  page with the placeholder's sanitised name in large centred text.
 
 ## 2026-10-28: Owner's answers to the M0 review
 

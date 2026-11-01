@@ -200,9 +200,10 @@ marks what an agent cannot finish alone (real devices, observation of enScore, l
 - **Rows:** PLAT-1, PLAT-5 (Apple Vision runs the iPad build).
 - **Human:** store accounts, signing, device testing. iOS support in egui/winit is the least mature
   target; decision D3.
-- **Blocked (2026-10-31):** the development container has no Android SDK or NDK and no Xcode, and
-  the Android entry point `android_main` needs `#[no_mangle]`, unsafe code the workspace forbids
-  outside `scorecraft-devices`. The owner decides where it may live.
+- **Unblocked for Android (owner, 2026-11-01):** the Android shell may use the `scorecraft-devices`
+  unsafe exception (`deny` plus a per-block `#[allow]`) for `android_main`; builds and device
+  tests run on the owner's Windows PC with the Android SDK and NDK, not in the cloud container.
+  **iPad and iOS are postponed** until there is a Mac to build and test on.
 
 ### G10. Sync and backup
 

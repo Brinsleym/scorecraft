@@ -45,3 +45,4 @@ Numbered steps: what the user does, what enScore does in response.
 | [public-listings-2026-10-28.md](public-listings-2026-10-28.md) | all | Public store listings and partner pages |
 | [screenshots/README.md](screenshots/README.md) | LIB, LIST, IMP, ANNO | Index of 23 user screenshots (Library, Lists, Markup) and 6 store promo images (images not committed) |
 | [anno-markup-toolbar.md](anno-markup-toolbar.md) | ANNO-1, -3, -4, -6..8, -12, -14, PAGE-7, NAV-1 | Owner's observation of the markup toolbar on Windows, 2026-10-31 |
+| [library-edit-details.md](library-edit-details.md) | LIB-4, LIB-5, LIB-7 | Owner's observation of the Edit Details dialog on Windows, and answers on search and sort, 2026-11-01 |

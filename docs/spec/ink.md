@@ -1,6 +1,6 @@
 # Ink and markup
 
-> **Last reviewed:** 2026-10-31 · **Last updated:** 2026-10-31 · **Change:** minor (M4 part 5: export with ink; earlier: M4 part 4: the pen in the app; earlier: M4 part 3: rectangle select, shapes switch, pen button; earlier: ANNO-8 text notes from the owner's observation; earlier: owner's answers to the open questions; earlier: owner's direction on the toolbar; earlier: first version) · **Target:** enScore 3.7 (2026)
+> **Last reviewed:** 2026-10-31 · **Last updated:** 2026-11-01 · **Change:** minor (the owner's answers on highlighter overlap, notes, page edges and the ruler; earlier: M4 part 5: export with ink; earlier: M4 part 4: the pen in the app; earlier: M4 part 3: rectangle select, shapes switch, pen button; earlier: ANNO-8 text notes from the owner's observation; earlier: owner's answers to the open questions; earlier: owner's direction on the toolbar; earlier: first version) · **Target:** enScore 3.7 (2026)
 
 How the player marks up a score: pens, highlighters, whiteout, erasers, text notes, stamps,
 layers, selection, shapes, and exporting the result. Written for milestone M4.
@@ -455,12 +455,19 @@ lands, and are added to this table. INK-39 to INK-42 are engine tests
 
 ## Open questions
 
-- Whether two separate enScore highlighter strokes darken where they overlap (screenshot 26 shows
-  only strokes crossing themselves). ScoreCraft multiplies again, as two real passes would.
-- Whether enScore's chisel stays upright on screen or on the page when a page is rotated.
-- How enScore sets a note's maximum width (a share of the page, as measured, or a fixed size),
-  and whether it has colour or font options (none show in screenshot 29).
-- How strokes follow enScore's ruler edges; ANNO-17's snapping is ScoreCraft's own until observed.
+None left from the spec. Answered by the owner on 2026-11-01. Marked *(to build)* where the code does not do it yet.
+
+- **Highlighters never build up or mix.** All highlighter ink on a page sits in one layer: where
+  two strokes overlap, of the same colour or different ones, the result is no darker than one
+  stroke, and colours do not blend; the later stroke shows *(to build: today a second stroke
+  multiplies again)*.
+- **The chisel stays upright on the page** when the page is rotated (as built).
+- **Text notes** have a preset maximum width per tool preset, and nothing (notes, stamps,
+  selections, snips) can be moved past the page's edges: a drag stops at the edge *(to build:
+  clamping in every move)*.
+- **The ruler moves up and down.** A stroke that starts close to its top or bottom edge snaps to
+  that edge and stays on it until the pen lifts *(to build: moving the band, and snapping to
+  both edges)*.
 
 Answered by the owner on 2026-10-31: highlighter build-up within a stroke and its ends (chisel,
 screenshot 26; round ends as a setting); the eraser's size (the one width slider) and the pressure
@@ -472,6 +479,7 @@ swatches and palette (screenshot 28); the stylus shortcut (pen and eraser).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-01 | minor | Owner's answers: one highlighter layer with no build-up or mixing; chisel upright on the page; preset note widths; nothing moves past the page edge; ruler moves and strokes snap to its edges until lift |
 | 2026-10-31 | minor | M4 part 5: export with ink, how it is written; INK-47..49 |
 | 2026-10-31 | minor | M4 part 4: the pen in the desktop app (pen told from a finger by pressure, library-backed scores, saved markup state); INK-43..46 |
 | 2026-10-31 | minor | M4 part 3: rectangle select's details (visible, unlocked layers; drop point; ranges kept), shapes as a Markup-menu switch with its thresholds, the pen button's setting; INK-39..42 |
