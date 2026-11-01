@@ -178,3 +178,51 @@ fn snips_go_into_the_export() {
     let frame = pixel(&pdf, 0, 300.0, 30.5);
     assert!(frame.iter().all(|c| *c < 240), "{frame:?}");
 }
+
+#[test]
+fn share_exports_a_library_score_that_is_not_open() {
+    let (mut s, id, dir) = setup("share");
+    red_line(&mut s, 1, 300.0);
+    // A second session on no score: the library alone is enough.
+    let mut other = Session::new();
+    other.create_memory_library().unwrap();
+    let path = dir.join("score.pdf");
+    let r = run(
+        &mut other,
+        "library.import.files",
+        json!({ "paths": [path.to_string_lossy()] }),
+    );
+    let other_id = r["imported"][0]["score"].as_str().unwrap().to_owned();
+    let out = dir.join("shared.pdf");
+    let v = run(
+        &mut other,
+        "score.export.pdf",
+        json!({ "path": out.to_string_lossy(), "score": other_id }),
+    );
+    assert_eq!(v["pages"], 3);
+    assert!(std::fs::read(&out).unwrap().starts_with(b"%PDF"));
+    // Named by id in the first session, the marked score exports its ink.
+    let v = run(
+        &mut s,
+        "score.export.pdf",
+        json!({ "path": out.to_string_lossy(), "score": id }),
+    );
+    assert_eq!(v["markings"], 1);
+    // Without an open score or an id there is nothing to export; a bad id is refused.
+    assert!(
+        other
+            .dispatch(
+                "score.export.pdf",
+                &json!({ "path": out.to_string_lossy() })
+            )
+            .is_err()
+    );
+    assert!(
+        other
+            .dispatch(
+                "score.export.pdf",
+                &json!({ "path": out.to_string_lossy(), "score": "nope" })
+            )
+            .is_err()
+    );
+}

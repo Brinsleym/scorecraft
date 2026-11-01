@@ -1,6 +1,6 @@
 //! The markup toolbar (spec `docs/spec/ink.md`, "The markup toolbar"): *Draw with Touch*, touch
 //! lock, the tools, the eraser's modes, the stamps, eight swatches, the palette, the width
-//! slider, the selection's actions, undo and the markup settings. It reads `annotate.state` and
+//! slider, the selection's actions, and undo. Its settings are on the library's Settings page. It reads `annotate.state` and
 //! returns the commands to run; it changes nothing itself.
 
 use egui::{Color32, Rect, Sense, Stroke, Ui, vec2};
@@ -12,11 +12,9 @@ use crate::theme::Tokens;
 /// A command the bar asks the shell to run.
 pub type Run = Vec<(&'static str, Value)>;
 
-/// Shell-side markup settings the bar changes.
-pub struct BarSettings<'a> {
-    pub show_ruler_button: &'a mut bool,
-    /// Set when a shell setting changed and should be saved.
-    pub changed: &'a mut bool,
+/// Shell-side markup settings the bar follows (changed on the Settings page).
+pub struct BarSettings {
+    pub show_ruler_button: bool,
 }
 
 fn s<'a>(state: &'a Value, path: &str) -> &'a str {
@@ -104,7 +102,7 @@ pub fn bar(
     state: &Value,
     score: Option<&str>,
     ink: &mut InkCanvas,
-    settings: BarSettings<'_>,
+    settings: BarSettings,
     run: &mut Run,
 ) {
     let tool = s(state, "/tool").to_owned();
@@ -156,7 +154,7 @@ pub fn bar(
                 }
             }
         }
-        if *settings.show_ruler_button {
+        if settings.show_ruler_button {
             let on = state.get("ruler").is_some_and(|r| !r.is_null());
             if ui.selectable_label(on, "Ruler").clicked() {
                 run.push(("annotate.ruler.show", json!({ "on": !on })));
@@ -293,38 +291,6 @@ pub fn bar(
                 run.push(("edit.redo", json!({ "score": id })));
             }
         }
-        ui.menu_button("Settings", |ui| {
-            if ui
-                .checkbox(settings.show_ruler_button, "Show ruler button")
-                .changed()
-            {
-                *settings.changed = true;
-            }
-            let mut round = b(state, "/highlighterRoundEnds");
-            if ui.checkbox(&mut round, "Round highlighter ends").changed() {
-                run.push(("annotate.highlighter.roundEnds", json!({ "on": round })));
-            }
-            let mut shapes = b(state, "/shapes");
-            if ui
-                .checkbox(&mut shapes, "Shapes: straighten lines and circles")
-                .changed()
-            {
-                run.push(("annotate.shapes", json!({ "on": shapes })));
-            }
-            ui.label("Pen button switches to");
-            let current = s(state, "/penButton").to_owned();
-            for (id, label) in [
-                ("eraser", "Eraser"),
-                ("highlighter", "Highlighter"),
-                ("pen", "Pen"),
-                ("text", "Text"),
-                ("select", "Select"),
-            ] {
-                if ui.radio(current == id, label).clicked() {
-                    run.push(("annotate.pen.buttonTool", json!({ "tool": id })));
-                }
-            }
-        });
     });
 }
 

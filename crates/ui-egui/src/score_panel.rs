@@ -1,5 +1,5 @@
-//! The Score panel: the open library score's details (LIB-4), its pages (PAGE-1..4) and its
-//! bookmarks (LIB-11). Everything it changes goes through engine commands; it keeps only what
+//! Edit Details: a library score's details (LIB-4), its pages (PAGE-1..4) and its bookmarks
+//! (LIB-11), opened from the score's right-click menu in the library. Everything it changes goes through engine commands; it keeps only what
 //! is being typed.
 
 use egui::{Context, RichText};
@@ -30,6 +30,8 @@ struct Details {
 #[derive(Default)]
 pub struct ScorePanel {
     pub open: bool,
+    /// The library score shown.
+    pub score: Option<String>,
     details: Details,
     bookmark: String,
 }
@@ -103,7 +105,7 @@ impl ScorePanel {
             };
         }
         let mut open = self.open;
-        egui::Window::new("Score")
+        egui::Window::new("Edit Details")
             .open(&mut open)
             .default_width(380.0)
             .resizable(true)
@@ -253,8 +255,11 @@ impl ScorePanel {
                     let bid = b.get("id").and_then(Value::as_str).unwrap_or("").to_owned();
                     let name = b.get("name").and_then(Value::as_str).unwrap_or("");
                     ui.horizontal(|ui| {
-                        if ui.link(name).clicked() {
+                        // Going to a bookmark needs the score open in the reader.
+                        if reader_page.is_some() && ui.link(name).clicked() {
                             run.push(("view.bookmark.goto", json!({ "bookmark": bid })));
+                        } else if reader_page.is_none() {
+                            ui.label(name);
                         }
                         if icons::small_button(ui, Icon::Close, "Remove bookmark").clicked() {
                             run.push((

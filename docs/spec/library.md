@@ -1,6 +1,6 @@
 # Library
 
-> **Last reviewed:** 2026-10-31 · **Last updated:** 2026-11-01 · **Change:** minor (Recently Deleted with folders; earlier: the owner's answers on search and sort; earlier: M5 part 2: covers and the window; earlier: first version) · **Target:** enScore 3.7 (2026)
+> **Last reviewed:** 2026-10-31 · **Last updated:** 2026-11-01 · **Change:** minor (the owner's first hands-on feedback: sidebar, floating toolbar, the score menu, Settings in the library; earlier: Recently Deleted with folders; earlier: the owner's answers on search and sort; earlier: M5 part 2: covers and the window; earlier: first version) · **Target:** enScore 3.7 (2026)
 
 Finding scores in the library: search, sort, the recently opened list, importing a whole folder,
 the library window with covers, and Recently Deleted. Written for milestone M5; Recently Deleted
@@ -80,11 +80,41 @@ LIB-1, -3, -4, -12).
 
 ### LIB-14 The library window
 
-- A grid of covers (each score's first shown page, with its title and composer under it) or a
-  list (title, composer, pages, date added), switched from the toolbar. The search box and the
-  sort sit above it; folders show first, and opening one shows its scores with a way back up.
+The owner's direction (2026-11-01), with enScore's sidebar and toolbar as the arrangement to
+follow (observed in the owner's screenshots 2 and 3; nothing copied):
+
+- **No full-width toolbar.** The library has no score-view toolbar above it. A compact,
+  **resizable left sidebar** lists, one per row with its icon: **Library**, **Lists**,
+  **Recordings**, **Practice**, **Search**, **Recently Deleted**, then a gap, then **Settings** at
+  the bottom. While a score is open, a row at the top goes back to it. Recordings and Practice are
+  placeholders until they are specified; Search finds scores in the library (by their details or
+  inside them, LIB-5, LIB-6), and searching IMSLP for new scores comes later.
+- **Library** shows the folder's name (or *Library*) with a way back up, and a **floating toolbar
+  anchored on the right**: **More** (Select; covers or a list; sync), **Filter** (only the scores
+  matching what is typed, optionally inside them), **Sort** (*By Title*, Composer, Date added,
+  Recently opened, and reverse order), **New Folder** (named in place, made in the folder shown),
+  and **Import** (PDF files, a folder of scores, photos as one score, and new blank manuscript,
+  piano or tablature paper).
+- Below it, a grid of folders (each with a folder icon and its name) and covers (each score's
+  first shown page, with its title and composer under it), or a list (title, composer, pages,
+  date added). Tapping a folder opens it; tapping a score opens it in the reader.
+- **Right-clicking a score** (or a long press) opens its menu, in this order: **Edit Details**
+  (the score's details, pages and bookmarks), **Add to list** (any list, or a new one), **Move to**
+  (a folder, or the library's top level), **Select** (starts selecting, with this score chosen),
+  **Share** (the score as a PDF with its ink drawn in, or as PDF annotations; EXP-2), **Print**
+  (shown but not built yet, EXP-1) and **Delete** (to Recently Deleted). Right-clicking a folder
+  offers *Delete folder*.
+- **Selecting:** taps choose scores instead of opening them; a bar shows how many, with *Add to
+  list*, *Move to*, *Delete* and *Done*.
+- **Settings** is a page of the library, never of the score view: appearance (light or dark),
+  keeping the screen awake while a score is open (on by default), page turning (swipe to turn,
+  the default layout and turns for every score), markup (the ruler button, round highlighter
+  ends, shapes, what the pen's button switches to) and sync.
+- The score view's toolbar keeps only what is used while playing; it has no Score, New, Export,
+  Turning, theme or settings controls. Its page layout drop-down has *Use my defaults* to forget
+  the score's own layout and turns.
 - Covers are rendered in the background and cached; the grid scrolls while they arrive, showing
-  a placeholder until each is ready. Opening a score opens it in the reader.
+  a placeholder until each is ready.
 
 ### LIB-10 Recently Deleted (scores and folders)
 
@@ -130,6 +160,9 @@ LIB-1, -3, -4, -12).
 | LIBS-9 | A portrait score | its cover is asked for at 200 px, then after its first page is turned | 200 px tall, narrower than that; then turned, width and height swapped |
 | LIBS-13 | A score with every Edit Details field filled | each field's text is searched | the score is found by each; difficulty is 0 to 5 and 0 clears it |
 | LIBS-14 | Folder *Horn* with *Etudes* inside, a score in each, a third score at the root | *Horn* is deleted; the first score's details, *Etudes*' name and filing the third score in *Horn* are tried; *Horn* is restored; it is deleted again and the library reopened 29 days later; then, with the etude left filed but in use, 30 days later | two scores and two folders in Recently Deleted, the third score alone in the library; all three refused; everything back in place; nothing removed; verify reports the etude with *Horn* to restore, then the concerto and both folders are removed for good and the etude moves to the root |
+| LIBS-15 | The app with a library score, shown in the library | Settings is tapped at the bottom of the sidebar; then the first row | the Settings page shows; the first row goes back to the score, closing the library |
+| LIBS-16 | The app with a library score | the score menu adds it to a new list *Gig*, moves it to folder *Bach*, then deletes it | *Gig* holds it; *Bach* holds it; it is in Recently Deleted; no errors |
+| LIBS-17 | A library score that is not open | Share exports it, with and without ink | a PDF of its pages, the marked one with its markings; with no score open and no id, nothing is exported; a bad id is refused |
 | LIBS-10 | The app with a library score | the library window is shown | the score's cover arrives without blocking a frame; list view works; opening a score closes the window |
 
 ## Not in scope
@@ -157,6 +190,7 @@ Still open: the questions in the [Edit Details note](../observations/library-edi
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-01 | minor | Owner's first hands-on feedback: the library's sidebar (Library, Lists, Recordings, Practice, Search, Recently Deleted, Settings), the floating toolbar on the right, the score's right-click menu in the owner's order, selecting, Settings as a library page, folder icons; LIBS-15..17 |
 | 2026-11-01 | minor | LIB-10: folders in Recently Deleted with their scores, read-only, restored together, removed after 30 days; scores left in one are reported with a restore prompt; LIBS-14 |
 | 2026-11-01 | minor | Built: search inside words and every Edit Details field (LIBS-13), articles kept in sort |
 | 2026-11-01 | minor | Owner's answers: search inside words and in every Edit Details field; no article stripping in sort |
