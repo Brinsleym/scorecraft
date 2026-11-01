@@ -31,6 +31,10 @@ pub enum LibraryAction {
     Command(&'static str, Value),
     /// Ask the player for a folder and import it.
     ImportFolder,
+    /// Ask the player for a folder to sync through (SYNC-7).
+    ChooseSyncFolder,
+    /// Sync now and report what happened.
+    SyncNow,
 }
 
 enum Cover {
@@ -356,6 +360,9 @@ impl LibraryView {
             // Browsers can't hand over a folder of files here.
             if !cfg!(target_arch = "wasm32") && ui.button("Import Folder…").clicked() {
                 out.push(LibraryAction::ImportFolder);
+            }
+            if !cfg!(target_arch = "wasm32") {
+                sync_buttons(ui, session, &mut out);
             }
         });
         ui.add_space(6.0);
@@ -708,6 +715,57 @@ pub fn day(ms: u64) -> String {
     let m = if mp < 10 { mp + 3 } else { mp - 9 };
     let y = yoe + era * 400 + i64::from(m <= 2);
     format!("{y:04}-{m:02}-{d:02}")
+}
+
+/// Sync through a shared folder: choose one, or sync now with what happened last on hover.
+fn sync_buttons(ui: &mut Ui, session: &mut Session, out: &mut Vec<LibraryAction>) {
+    let status = session
+        .dispatch("sync.status", &json!({}))
+        .unwrap_or(Value::Null);
+    ui.separator();
+    match status.get("backend").and_then(Value::as_str) {
+        Some(folder) => {
+            let waiting = status
+                .get("waitingFiles")
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
+            let mut tip = format!("Syncing through {folder}");
+            if waiting > 0 {
+                tip.push_str(&format!(
+                    "\n{waiting} score files are still on their way from other devices"
+                ));
+            }
+            if let Some(p) = status
+                .get("problems")
+                .and_then(Value::as_array)
+                .and_then(|a| a.last())
+            {
+                tip.push_str(&format!("\nLast problem: {}", p.as_str().unwrap_or("")));
+            }
+            if ui.button("⟳ Sync").on_hover_text(tip).clicked() {
+                out.push(LibraryAction::SyncNow);
+            }
+            if ui
+                .small_button("…")
+                .on_hover_text("Sync through another folder")
+                .clicked()
+            {
+                out.push(LibraryAction::ChooseSyncFolder);
+            }
+        }
+        None => {
+            if ui
+                .button("Sync…")
+                .on_hover_text(
+                    "Sync this library with your other devices through a folder they all \
+                     reach: one Google Drive, OneDrive, Dropbox or iCloud Drive keeps in sync",
+                )
+                .clicked()
+            {
+                out.push(LibraryAction::ChooseSyncFolder);
+            }
+        }
+    }
 }
 
 #[cfg(test)]

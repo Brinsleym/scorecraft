@@ -1,6 +1,6 @@
 # Where ScoreCraft falls short of enScore
 
-> **Last reviewed:** 2026-10-28 · **Last updated:** 2026-10-31 · **Change:** patch (G3: library-loader mutation test; earlier: merged with M3 done on main: M3: G2 and G6 progress from the Windows check; earlier: M4 part 1: G4 stroke engine, highlighter, whiteout, erasers, palm rejection and ruler in the engine; earlier: M1: G3 atomic saves and crash recovery done, G5 store done, G7 setlist model done; earlier: G1: M2 reading done, PDFCraft render gaps listed; earlier: G3: never-crash lints on every crate and `panic_hunt`; earlier: Microsoft Store description: G9, G10, G11, G12, G15 updated; G1 becomes integration of PDFCraft's crates) · **Target:** enScore 3.7 (2026)
+> **Last reviewed:** 2026-10-28 · **Last updated:** 2026-10-31 · **Change:** patch (G10: sync through a shared folder; earlier: G9: M7 blockers; G10: the sync merge core; earlier: G3: library-loader mutation test; earlier: merged with M3 done on main: M3: G2 and G6 progress from the Windows check; earlier: M4 part 1: G4 stroke engine, highlighter, whiteout, erasers, palm rejection and ruler in the engine; earlier: M1: G3 atomic saves and crash recovery done, G5 store done, G7 setlist model done; earlier: G1: M2 reading done, PDFCraft render gaps listed; earlier: G3: never-crash lints on every crate and `panic_hunt`; earlier: Microsoft Store description: G9, G10, G11, G12, G15 updated; G1 becomes integration of PDFCraft's crates) · **Target:** enScore 3.7 (2026)
 
 Every known shortfall against enScore 3.7, one entry each, ranked by user impact on the way to
 alpha and beta. This is the work list agents pick from: take the highest-ranked entry nobody is
@@ -200,12 +200,22 @@ marks what an agent cannot finish alone (real devices, observation of enScore, l
 - **Rows:** PLAT-1, PLAT-5 (Apple Vision runs the iPad build).
 - **Human:** store accounts, signing, device testing. iOS support in egui/winit is the least mature
   target; decision D3.
+- **Blocked (2026-10-31):** the development container has no Android SDK or NDK and no Xcode, and
+  the Android entry point `android_main` needs `#[no_mangle]`, unsafe code the workspace forbids
+  outside `scorecraft-devices`. The owner decides where it may live.
 
 ### G10. Sync and backup
 
-- **Missing:** op-log sync with CRDT merge; folder, WebDAV and self-hosted server backends; backup
-  and restore; account-free operation; enScore's free two-way folder mirror with the computer or
-  OneDrive (SYNC-8, shares the folder backend with SYNC-7).
+- **Done (M8 part 1):** the merge core for markings and score details (`scorecraft-sync`: a set
+  with tombstones, last-writer-wins edits by hybrid logical clock, changes that wait for their
+  score, exchange by what each side has seen), with a three-replica convergence property test.
+- **Done (M8 parts 2–3):** every record merges; the engine turns every edit into changes; sync
+  through a shared folder (`sync.backend.set`, `sync.now`), which a cloud folder can carry.
+- **Missing:** sync off the UI thread (it runs in the frame, every two minutes); the Google Drive
+  API backend; Wi-Fi
+  between devices; log compaction (the log replays in full when a library opens); WebDAV and
+  self-hosted server backends; backup and restore; enScore's free two-way folder mirror with the
+  computer or OneDrive (SYNC-8, shares the folder backend with SYNC-7).
 - **Rows:** SYNC-1..8.
 
 ## Localization gaps
@@ -228,6 +238,7 @@ marks what an agent cannot finish alone (real devices, observation of enScore, l
 
 | Item | Why | What we do instead |
 |---|---|---|
+| 2026-10-31 | patch | G9: M7 blockers recorded (SDKs, `android_main` and the unsafe-code rule); G10: the merge core for markings and score details done |
 | Talking to enScore's servers (sync, detection) | Undocumented private service; using it would mean traffic analysis | Our own sync and on-device detection |
 | Writing `.4sc` files | No way to verify output without the other app's code; black-box writing risks corrupting a user's forScore library | Read only, until someone can verify written files in forScore |
 
@@ -235,6 +246,7 @@ marks what an agent cannot finish alone (real devices, observation of enScore, l
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-31 | patch | G10: every record merges and the engine syncs through a shared folder; background sync, Drive API, Wi-Fi and log compaction left |
 | 2026-10-31 | patch | M3: G2 (40–80 → 15–30 h) and G6 (10–20 → 6–12 h) after the Windows check; half-page split snapping recorded |
 | 2026-10-31 | patch | M1: G3 crash-safe saves (60–120 → 50–100 h), G5 library store and commands (60–120 → 40–80 h), G7 setlist model and commands (40–80 → 30–65 h) |
 | 2026-10-31 | patch | G1: reading lands in M2; six PDFCraft render gaps listed, estimate 15–30 h |

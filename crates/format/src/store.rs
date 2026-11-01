@@ -416,6 +416,33 @@ impl<S: Storage> Store<S> {
         self.storage.write_atomic(&path, data)
     }
 
+    /// A file of sync's own under `sync/` (its device id and change log), part of the library
+    /// but not of the model: open and Verify & Repair leave it alone.
+    pub fn sync_file(&self, name: &str) -> Result<Option<Vec<u8>>, StoreError> {
+        let path = format!("sync/{name}");
+        crate::storage::check_path(&path)?;
+        self.storage.read(&path)
+    }
+
+    /// Writes a file of sync's own (see [`Store::sync_file`]).
+    pub fn set_sync_file(&mut self, name: &str, data: &[u8]) -> Result<(), StoreError> {
+        let path = format!("sync/{name}");
+        crate::storage::check_path(&path)?;
+        self.storage.write_atomic(&path, data)
+    }
+
+    /// The names of sync's files under `sync/<dir>`, relative to `sync/`, sorted.
+    pub fn sync_files(&self, dir: &str) -> Result<Vec<String>, StoreError> {
+        let path = format!("sync/{dir}");
+        crate::storage::check_path(&path)?;
+        Ok(self
+            .storage
+            .list(&path)?
+            .into_iter()
+            .filter_map(|p| p.strip_prefix("sync/").map(str::to_owned))
+            .collect())
+    }
+
     /// A stored file's bytes.
     pub fn blob(&self, b: BlobRef) -> Result<Vec<u8>, StoreError> {
         self.storage

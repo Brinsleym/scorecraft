@@ -67,7 +67,10 @@ impl Session {
         if !(spec.enabled)(self) {
             return Err(EngineError::Disabled(spec.id.to_owned()));
         }
-        (spec.run)(self, params)
+        let out = (spec.run)(self, params);
+        // Whatever the command saved becomes sync changes (when sync is on).
+        self.record_sync();
+        out
     }
 
     /// Whether a registered command is enabled now; `None` if no such command.

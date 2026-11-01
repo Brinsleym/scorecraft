@@ -1,6 +1,6 @@
 # ScoreCraft vs enScore: target-app parity
 
-> **Last reviewed:** 2026-10-28 · **Last updated:** 2026-10-31 · **Change:** patch (five P1 rows: breadth 57%; earlier: LIB-6: breadth 54%; earlier: M6 part 3: breadth 53%; earlier: M6 part 2: breadth 52%, alpha ~105–287 h; earlier: M6 part 1: breadth 51%, alpha ~110–297 h; earlier: M5 part 2: breadth 50%; earlier: M5 part 1: breadth 49%, alpha ~116–309 h; earlier: M4 part 5: breadth 47%, alpha ~121–319 h; earlier: M4 part 4: alpha ~125–325 h; earlier: merged with M3 done on main: M3 reader app done: breadth 30%, alpha ~170–395 h; earlier: M4 part 3: breadth 46%, 47 of 124 rows; earlier: M4 part 2c: breadth 43%, 44 of 124 rows; earlier: M4 part 2b: breadth 42%, 43 of 124 rows; earlier: M4 part 2a: breadth 41%, 42 of 124 rows; earlier: ANNO-18 added, breadth 38%, 40 of 124 rows; earlier: M4 part 1, with M3 below it: breadth 39% measured, 40 of 123 rows, ANNO-17 added; alpha ~200–460 h; earlier: M1 foundation done: breadth 14% measured, alpha ~220–490 h; earlier: M0 skeleton done, remaining hours lowered; earlier: 4 rows added from the Microsoft Store description; estimates lowered for PDFCraft reuse) · **Target:** enScore 3.7 (2026)
+> **Last reviewed:** 2026-10-28 · **Last updated:** 2026-10-31 · **Change:** patch (sync through a shared folder: breadth 59%; earlier: five P1 rows: breadth 57%; earlier: LIB-6: breadth 54%; earlier: M6 part 3: breadth 53%; earlier: M6 part 2: breadth 52%, alpha ~105–287 h; earlier: M6 part 1: breadth 51%, alpha ~110–297 h; earlier: M5 part 2: breadth 50%; earlier: M5 part 1: breadth 49%, alpha ~116–309 h; earlier: M4 part 5: breadth 47%, alpha ~121–319 h; earlier: M4 part 4: alpha ~125–325 h; earlier: merged with M3 done on main: M3 reader app done: breadth 30%, alpha ~170–395 h; earlier: M4 part 3: breadth 46%, 47 of 124 rows; earlier: M4 part 2c: breadth 43%, 44 of 124 rows; earlier: M4 part 2b: breadth 42%, 43 of 124 rows; earlier: M4 part 2a: breadth 41%, 42 of 124 rows; earlier: ANNO-18 added, breadth 38%, 40 of 124 rows; earlier: M4 part 1, with M3 below it: breadth 39% measured, 40 of 123 rows, ANNO-17 added; alpha ~200–460 h; earlier: M1 foundation done: breadth 14% measured, alpha ~220–490 h; earlier: M0 skeleton done, remaining hours lowered; earlier: 4 rows added from the Microsoft Store description; estimates lowered for PDFCraft reuse) · **Target:** enScore 3.7 (2026)
 
 The authoritative answer to "how close is ScoreCraft to enScore, and how much work is left". The
 one-page summary is [`ROADMAP.md`](../ROADMAP.md); the ranked work list is [`gaps.md`](gaps.md);
@@ -55,9 +55,9 @@ parts.
 | Setlists (LIST) | 10% | 5 / 7 | 71% | measured |
 | Import, export, scanning, IMSLP, forScore (IMP, EXP) | 10% | 2 / 12 | 17% | measured |
 | Practice, audio, MIDI (PRAC, PLAY, MIDI) | 10% | 2 / 23 | 9% | measured |
-| Sync and backup (SYNC) | 5% | 0 / 8 | 0% | measured |
+| Sync and backup (SYNC) | 5% | 2 / 8 | 25% | measured |
 | Platforms and languages (PLAT) | 5% | 1 / 5 | 20% | measured |
-| **Weighted** | 100% | | **58%** | |
+| **Weighted** | 100% | | **59%** | |
 
 Measured on the M4 branch, merged with M3 done (READ, TURN and PLAT rows come from M3; main's
 30% was measured before the feature map's M4 rows went live). Annotation rows are `partial`: the engine draws, erases and stores ink with tests, but
@@ -136,6 +136,7 @@ performance hardening before beta 100–200.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-31 | patch | SYNC-1 and SYNC-7: sync through a shared folder; breadth 58% → 59% (67 of 124 rows) |
 | 2026-10-31 | patch | IMP-3 photos as a score: breadth 57% → 58% (65 of 124 rows); beta ~505–1,076 h, full ~732–1,522 h |
 | 2026-10-31 | patch | PAGE-6 manuscript paper: 64 of 124 rows (breadth stays 57%); beta ~507–1,079 h, full ~734–1,525 h |
 | 2026-10-31 | patch | READ-7, TURN-7, NAV-2, NAV-3, PRAC-2: breadth 54% → 57% (63 of 124 rows); beta ~510–1,085 h, full ~737–1,531 h |
