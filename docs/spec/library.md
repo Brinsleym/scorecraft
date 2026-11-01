@@ -1,11 +1,12 @@
 # Library
 
-> **Last reviewed:** 2026-10-31 · **Last updated:** 2026-11-01 · **Change:** minor (the owner's answers on search and sort; earlier: M5 part 2: covers and the window; earlier: first version) · **Target:** enScore 3.7 (2026)
+> **Last reviewed:** 2026-10-31 · **Last updated:** 2026-11-01 · **Change:** minor (Recently Deleted with folders; earlier: the owner's answers on search and sort; earlier: M5 part 2: covers and the window; earlier: first version) · **Target:** enScore 3.7 (2026)
 
 Finding scores in the library: search, sort, the recently opened list, importing a whole folder,
-and the library window with covers. Written for milestone M5. Importing files, folders as places
-to file scores, metadata, the trash and Verify & Repair are M1's
-([feature map](../feature-map.md#lib-library-and-organisation), rows LIB-1, -3, -4, -10, -12).
+the library window with covers, and Recently Deleted. Written for milestone M5; Recently Deleted
+(LIB-10) added on 2026-11-01. Importing files, folders as places to file scores, metadata and
+Verify & Repair are M1's ([feature map](../feature-map.md#lib-library-and-organisation), rows
+LIB-1, -3, -4, -12).
 
 ## Sources
 
@@ -85,6 +86,25 @@ to file scores, metadata, the trash and Verify & Repair are M1's
 - Covers are rendered in the background and cached; the grid scrolls while they arrive, showing
   a placeholder until each is ready. Opening a score opens it in the reader.
 
+### LIB-10 Recently Deleted (scores and folders)
+
+- Deleting a score or a folder sends it to Recently Deleted, never straight to oblivion. A
+  deleted folder takes the folders inside it and every score in them, all marked with the same
+  time and keeping their places; the library window, search and the folder list leave them out.
+- Everything in Recently Deleted is **read-only** until restored: editing a deleted score
+  (details, pages, ink, its folder), renaming or moving a deleted folder, and filing anything into
+  one are refused with "… is in Recently Deleted: restore it to change it".
+- *Restore* on a folder brings back it and what went with it (the folders and scores deleted at
+  the same moment); deleted folders above it come back too, as folders only. Restoring a score
+  filed in a deleted folder brings that folder back (only the folder) so it has somewhere to be.
+- After **30 days** a score or folder is removed for good. This is checked when a library opens
+  and by `library.trash.purge`; it is not an undo step. A score still in use inside a removed
+  folder moves up to the folder above it. *Empty Recently Deleted* removes everything now.
+- Recently Deleted syncs (sync spec): a deleted folder is a folder record with its deletion time.
+  A score another device filed into a folder deleted here stays in use and points at it;
+  `library.verify` and `library.info` list it under `inDeletedFolders` with the folder to restore,
+  verify is not clean, and the library window asks *Restore folder*.
+
 ### LIB-13 Fast with thousands of scores
 
 - With 10,000 scores, opening the library and listing its first screen takes at most 1.5 s on
@@ -109,6 +129,7 @@ to file scores, metadata, the trash and Verify & Repair are M1's
 | LIBS-12 | A score whose notes say "Take the coda with rubato" | "RUBATO" is searched inside scores | that score, with the words around it |
 | LIBS-9 | A portrait score | its cover is asked for at 200 px, then after its first page is turned | 200 px tall, narrower than that; then turned, width and height swapped |
 | LIBS-13 | A score with every Edit Details field filled | each field's text is searched | the score is found by each; difficulty is 0 to 5 and 0 clears it |
+| LIBS-14 | Folder *Horn* with *Etudes* inside, a score in each, a third score at the root | *Horn* is deleted; the first score's details, *Etudes*' name and filing the third score in *Horn* are tried; *Horn* is restored; it is deleted again and the library reopened 29 days later; then, with the etude left filed but in use, 30 days later | two scores and two folders in Recently Deleted, the third score alone in the library; all three refused; everything back in place; nothing removed; verify reports the etude with *Horn* to restore, then the concerto and both folders are removed for good and the etude moves to the root |
 | LIBS-10 | The app with a library score | the library window is shown | the score's cover arrives without blocking a frame; list view works; opening a score closes the window |
 
 ## Not in scope
@@ -136,6 +157,7 @@ Still open: the questions in the [Edit Details note](../observations/library-edi
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-01 | minor | LIB-10: folders in Recently Deleted with their scores, read-only, restored together, removed after 30 days; scores left in one are reported with a restore prompt; LIBS-14 |
 | 2026-11-01 | minor | Built: search inside words and every Edit Details field (LIBS-13), articles kept in sort |
 | 2026-11-01 | minor | Owner's answers: search inside words and in every Edit Details field; no article stripping in sort |
 | 2026-10-31 | patch | LIB-6 search inside scores: PDF text and notes, a lazy on-disk text cache; LIBS-11, -12 |

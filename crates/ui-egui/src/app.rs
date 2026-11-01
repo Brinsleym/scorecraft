@@ -1695,6 +1695,37 @@ mod tests {
     }
 
     #[test]
+    fn lib_10_recently_deleted_shows_folders_and_offers_restore() {
+        let (mut app, _) = app_with_score(1);
+        let ctx = Context::default();
+        let score = app.session.library_score_id().unwrap();
+        let folder = app
+            .command("library.folder.new", &json!({ "name": "Horn" }))
+            .unwrap()["folder"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        app.command(
+            "library.score.move",
+            &json!({ "score": score, "folder": folder }),
+        )
+        .unwrap();
+        app.command("library.folder.delete", &json!({ "folder": folder }))
+            .unwrap();
+        app.command("ui.library.show", &json!({ "on": true }))
+            .unwrap();
+        app.library.show_trash = true;
+        app.library.dirty = true;
+        frames(&mut app, &ctx, 2, Vec::new());
+        app.command("library.trash.restore", &json!({ "folder": folder }))
+            .unwrap();
+        frames(&mut app, &ctx, 2, Vec::new());
+        let info = app.session.dispatch("library.info", &json!({})).unwrap();
+        assert_eq!(info["folders"].as_array().unwrap().len(), 1);
+        assert_eq!(info["trashed"], 0);
+    }
+
+    #[test]
     fn perf_12_a_list_made_in_the_library_window_plays() {
         let (mut app, _) = app_with_score(2);
         let ctx = Context::default();

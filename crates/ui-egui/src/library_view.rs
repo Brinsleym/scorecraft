@@ -137,6 +137,13 @@ pub struct LibraryView {
     pub range_notice: Option<RangeNotice>,
     /// Search inside the scores' PDFs and notes (LIB-6) rather than their details.
     pub full_text: bool,
+    /// Recently Deleted is shown instead of the library (LIB-10).
+    pub show_trash: bool,
+    /// From `library.info`: folders in Recently Deleted, and scores still filed in one.
+    deleted_folders: Value,
+    stranded: Value,
+    /// From `library.scores` with `trashed`, while Recently Deleted is shown.
+    trashed: Value,
 }
 
 /// The quiet notice after adding a score whose library entry has a page range.
@@ -181,6 +188,10 @@ impl Default for LibraryView {
             placeholder_name: String::new(),
             range_notice: None,
             full_text: false,
+            show_trash: false,
+            deleted_folders: Value::Null,
+            stranded: Value::Null,
+            trashed: Value::Null,
         }
     }
 }
@@ -246,6 +257,17 @@ impl LibraryView {
             .unwrap_or(Value::Null);
         self.folders = info.get("folders").cloned().unwrap_or(Value::Null);
         self.lists = info.get("lists").cloned().unwrap_or(Value::Null);
+        self.deleted_folders = info.get("deletedFolders").cloned().unwrap_or(Value::Null);
+        self.stranded = info.get("inDeletedFolders").cloned().unwrap_or(Value::Null);
+        self.trashed = if self.show_trash {
+            session
+                .dispatch("library.scores", &json!({ "trashed": true }))
+                .ok()
+                .and_then(|v| v.get("scores").cloned())
+                .unwrap_or(Value::Null)
+        } else {
+            Value::Null
+        };
         self.list_detail = match &self.open_list {
             Some(id) => session
                 .dispatch("list.get", &json!({ "list": id }))
@@ -433,11 +455,36 @@ impl LibraryView {
                 ui.label(RichText::new(name).strong().color(tokens.text));
             }
             for (id, name, parent) in &folders {
-                if *parent == self.folder && ui.button(format!("📁 {name}")).clicked() {
+                if *parent != self.folder {
+                    continue;
+                }
+                let b = ui.button(format!("📁 {name}"));
+                if b.clicked() {
                     self.folder = Some(id.clone());
                 }
+                b.context_menu(|ui| {
+                    if ui.button("Delete folder").clicked() {
+                        out.push(LibraryAction::Command(
+                            "library.folder.delete",
+                            json!({ "folder": id }),
+                        ));
+                        ui.close();
+                    }
+                });
+            }
+            if ui
+                .selectable_label(self.show_trash, "🗑 Recently Deleted")
+                .clicked()
+            {
+                self.show_trash = !self.show_trash;
+                self.dirty = true;
             }
         });
+        self.stranded_prompt(ui, tokens, &mut out);
+        if self.show_trash {
+            self.trash_ui(ui, tokens, &mut out);
+            return out;
+        }
         if let Some(e) = self.results.get("error").and_then(Value::as_str) {
             ui.colored_label(tokens.error, e);
             return out;
@@ -650,6 +697,94 @@ impl LibraryView {
                             out.push(LibraryAction::Command(
                                 "list.entry.remove",
                                 json!({ "list": list, "entry": entry }),
+                            ));
+                        }
+                    });
+                }
+            });
+    }
+
+    /// Scores still filed in a folder in Recently Deleted (deleted on another device while this
+    /// one filed them): ask whether to restore the folder.
+    fn stranded_prompt(&self, ui: &mut Ui, tokens: &Tokens, out: &mut Vec<LibraryAction>) {
+        let Some(first) = self.stranded.as_array().and_then(|a| a.first()) else {
+            return;
+        };
+        let n = self.stranded.as_array().map_or(0, Vec::len);
+        let (Some(folder), Some(path)) = (
+            first.get("restore").and_then(Value::as_str),
+            first.get("restorePath").and_then(Value::as_str),
+        ) else {
+            return;
+        };
+        ui.horizontal_wrapped(|ui| {
+            ui.label(
+                RichText::new(if n == 1 {
+                    format!("1 score is filed in “{path}”, which is in Recently Deleted.")
+                } else {
+                    format!("{n} scores are filed in folders in Recently Deleted (“{path}”…).")
+                })
+                .color(tokens.text),
+            );
+            if ui.button("Restore folder").clicked() {
+                out.push(LibraryAction::Command(
+                    "library.trash.restore",
+                    json!({ "folder": folder }),
+                ));
+            }
+        });
+    }
+
+    /// Recently Deleted (LIB-10): deleted folders and scores, each with Restore, kept 30 days.
+    fn trash_ui(&self, ui: &mut Ui, tokens: &Tokens, out: &mut Vec<LibraryAction>) {
+        let folders: Vec<Value> = self.deleted_folders.as_array().cloned().unwrap_or_default();
+        let scores: Vec<Value> = self.trashed.as_array().cloned().unwrap_or_default();
+        ui.label(
+            RichText::new("Kept for 30 days, then removed for good. Restore to change them.")
+                .weak(),
+        );
+        if folders.is_empty() && scores.is_empty() {
+            ui.label(RichText::new("Nothing here.").color(tokens.text));
+            return;
+        }
+        if ui.button("Empty Recently Deleted").clicked() {
+            out.push(LibraryAction::Command("library.trash.empty", json!({})));
+        }
+        egui::ScrollArea::vertical()
+            .id_salt("trash")
+            .auto_shrink(false)
+            .show(ui, |ui| {
+                for f in &folders {
+                    let (Some(id), Some(path)) = (
+                        f.get("id").and_then(Value::as_str),
+                        f.get("path").and_then(Value::as_str),
+                    ) else {
+                        continue;
+                    };
+                    ui.horizontal(|ui| {
+                        ui.label(format!("📁 {path}"));
+                        if let Some(at) = f.get("deletedMs").and_then(Value::as_u64) {
+                            ui.label(RichText::new(format!("deleted {}", day(at))).weak());
+                        }
+                        if ui.small_button("Restore").clicked() {
+                            out.push(LibraryAction::Command(
+                                "library.trash.restore",
+                                json!({ "folder": id }),
+                            ));
+                        }
+                    });
+                }
+                for s in &scores {
+                    let Some(id) = s.get("id").and_then(Value::as_str) else {
+                        continue;
+                    };
+                    let title = s.get("title").and_then(Value::as_str).unwrap_or("?");
+                    ui.horizontal(|ui| {
+                        ui.label(format!("🎼 {title}"));
+                        if ui.small_button("Restore").clicked() {
+                            out.push(LibraryAction::Command(
+                                "library.trash.restore",
+                                json!({ "score": id }),
                             ));
                         }
                     });

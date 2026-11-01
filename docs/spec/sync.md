@@ -111,11 +111,12 @@ Answered by the owner on 2026-11-01. Marked *(to build)* where the code does not
 
 - **Same marking edited on two devices**: the later clock wins (as built).
 - **Recently Deleted holds folders as well as scores**, for 30 days, then they are deleted for
-  good. Recently Deleted syncs, and items in it are read-only until restored *(to build: folders
-  in Recently Deleted, the 30-day purge, read-only)*.
+  good. Recently Deleted syncs, and items in it are read-only until restored. Built (library
+  spec LIB-10, LIBS-14): a deleted folder is a folder record with its deletion time, so it syncs
+  like any folder change, and the scores in it go to Recently Deleted with the same time.
 - **A score filed into a folder another device deleted** points at that recently deleted folder.
-  `library.verify` reports it, and the user is asked whether to restore the folder *(to build:
-  the prompt)*.
+  `library.verify` reports it (`inDeletedFolders`, and the library is not clean), and the library
+  window asks whether to restore the folder. Built (LIBS-14).
 - **Backends, in order**: the Google Drive API next, then Wi-Fi between devices. Device pairing:
   Sign in with Google first; without an account, devices pair once by QR code. The wire format is
   JSON, as in the shared folder (decision D5).
@@ -124,6 +125,7 @@ Answered by the owner on 2026-11-01. Marked *(to build)* where the code does not
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-01 | minor | Built: folders in Recently Deleted for 30 days, read-only, synced as folder records; verify reports scores left in one and the window offers to restore it |
 | 2026-11-01 | minor | Owner's answers: later clock wins; Recently Deleted holds folders for 30 days, syncs, read-only; restore prompt; Google Drive API next; D5 decided |
 | 2026-10-31 | minor | Part 3: SYNC-1 and SYNC-7 through a shared folder; SYNC-T10..T13 |
 | 2026-10-31 | minor | Part 2: every record of the library, revivals for undone deletes, list positions, changes worked out from edits; SYNC-T6..T9 |

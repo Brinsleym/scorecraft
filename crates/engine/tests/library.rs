@@ -509,3 +509,142 @@ fn imp_3_photos_become_a_score() {
         "invalid_pdf"
     );
 }
+
+/// Recently Deleted keeps folders too (owner, 2026-11-01): a deleted folder takes its folders
+/// and scores with it, nothing in it can be changed, a restore brings it all back, and 30 days
+/// later it is gone for good. A score left filed in a deleted folder is reported by verify.
+#[test]
+fn lib_10_folders_go_to_recently_deleted_for_30_days() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    const DAY: u64 = 24 * 60 * 60 * 1000;
+    let dir = temp("deleted-folders");
+    let lib_path = dir.join("Music.scorecraft").to_string_lossy().into_owned();
+    let a = pdf(&dir, "a.pdf", 2, "Concerto", "Strauss");
+    let b = pdf(&dir, "b.pdf", 2, "Etude", "Kopprasch");
+    let c = pdf(&dir, "c.pdf", 2, "Loose", "Anon");
+    let t0 = 1_793_404_800_000;
+    let clock = Arc::new(AtomicU64::new(t0));
+    let session = |clock: &Arc<AtomicU64>| {
+        let mut s = Session::new();
+        let c = clock.clone();
+        s.set_clock(Box::new(move || c.load(Ordering::SeqCst)));
+        s
+    };
+    let mut s = session(&clock);
+    run(&mut s, "library.create", json!({ "path": lib_path }));
+    let r = run(
+        &mut s,
+        "library.import.files",
+        json!({ "paths": [a, b, c] }),
+    );
+    let id = |i: usize| r["imported"][i]["score"].as_str().unwrap().to_owned();
+    let (sa, sb, sc) = (id(0), id(1), id(2));
+    let folder = |s: &mut Session, name: &str, parent: Option<&str>| {
+        run(
+            s,
+            "library.folder.new",
+            json!({ "name": name, "parent": parent }),
+        )["folder"]
+            .as_str()
+            .unwrap()
+            .to_owned()
+    };
+    let horn = folder(&mut s, "Horn", None);
+    let etudes = folder(&mut s, "Etudes", Some(&horn));
+    run(
+        &mut s,
+        "library.score.move",
+        json!({ "score": sa, "folder": horn }),
+    );
+    run(
+        &mut s,
+        "library.score.move",
+        json!({ "score": sb, "folder": etudes }),
+    );
+
+    let r = run(&mut s, "library.folder.delete", json!({ "folder": horn }));
+    assert_eq!(r["trashedScores"], 2);
+    let info = run(&mut s, "library.info", json!({}));
+    assert_eq!(info["folders"], json!([]));
+    assert_eq!(info["deletedFolders"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        run(&mut s, "library.scores", json!({}))["scores"][0]["id"],
+        sc
+    );
+    assert_eq!(
+        run(&mut s, "library.scores", json!({ "trashed": true }))["scores"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    // Read-only while deleted.
+    let edit = json!({ "score": sa, "title": "Changed" });
+    assert_eq!(fails(&mut s, "score.metadata.set", edit), "invalid_edit");
+    assert_eq!(
+        fails(
+            &mut s,
+            "library.folder.rename",
+            json!({ "folder": etudes, "name": "X" })
+        ),
+        "invalid_edit"
+    );
+    assert_eq!(
+        fails(
+            &mut s,
+            "library.score.move",
+            json!({ "score": sc, "folder": horn })
+        ),
+        "invalid_edit"
+    );
+    // Restoring the folder brings back its folders and scores, in their places.
+    run(&mut s, "library.trash.restore", json!({ "folder": horn }));
+    let info = run(&mut s, "library.info", json!({}));
+    assert_eq!(info["folders"].as_array().unwrap().len(), 2);
+    assert_eq!(info["trashed"], 0);
+    let got = run(&mut s, "library.score.get", json!({ "score": sb }));
+    assert_eq!(got["folder"], etudes.as_str(), "{got}");
+
+    // Deleted again: 29 days on it is still there; at 30 days it is gone for good.
+    run(&mut s, "library.folder.delete", json!({ "folder": horn }));
+    run(&mut s, "library.close", json!({}));
+    clock.store(t0 + 29 * DAY, Ordering::SeqCst);
+    let mut s = session(&clock);
+    assert_eq!(
+        run(&mut s, "library.open", json!({ "path": lib_path }))["purged"],
+        0
+    );
+    run(&mut s, "library.close", json!({}));
+
+    // Meanwhile another device filed a score in the deleted folder: verify reports it and the
+    // folder can be restored. (Made by editing the library record as a merge would leave it.)
+    let record = Path::new(&lib_path).join("library.json");
+    let mut v: Value = serde_json::from_slice(&std::fs::read(&record).unwrap()).unwrap();
+    v["trash"].as_object_mut().unwrap().remove(&sb);
+    std::fs::write(&record, serde_json::to_vec(&v).unwrap()).unwrap();
+    let mut s = session(&clock);
+    run(&mut s, "library.open", json!({ "path": lib_path }));
+    let v = run(&mut s, "library.verify", json!({}));
+    assert_eq!(v["clean"], false, "{v}");
+    assert_eq!(v["inDeletedFolders"][0]["score"], sb.as_str(), "{v}");
+    assert_eq!(v["inDeletedFolders"][0]["path"], "Horn/Etudes");
+    assert_eq!(v["inDeletedFolders"][0]["restore"], horn.as_str());
+    let info = run(&mut s, "library.info", json!({}));
+    assert_eq!(info["inDeletedFolders"], v["inDeletedFolders"]);
+    run(&mut s, "library.close", json!({}));
+
+    clock.store(t0 + 30 * DAY, Ordering::SeqCst);
+    let mut s = session(&clock);
+    let r = run(&mut s, "library.open", json!({ "path": lib_path }));
+    // The concerto and both folders; the etude was not deleted, so it moves up to the root.
+    assert_eq!(r["purged"], 3, "{r}");
+    let info = run(&mut s, "library.info", json!({}));
+    assert_eq!(info["deletedFolders"], json!([]));
+    assert_eq!(info["folders"], json!([]));
+    assert_eq!(info["scores"], 2);
+    let got = run(&mut s, "library.score.get", json!({ "score": sb }));
+    assert!(got["folder"].is_null(), "{got}");
+    assert_eq!(run(&mut s, "library.verify", json!({}))["clean"], true);
+    let _ = std::fs::remove_dir_all(&dir);
+}

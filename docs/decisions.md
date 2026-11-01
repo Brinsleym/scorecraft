@@ -34,7 +34,8 @@ performance, sync) and the [Edit Details note](observations/library-edit-details
 - **Sync order: the Google Drive API backend next**, then Wi-Fi between devices.
 - **Recently Deleted holds folders as well as scores, for 30 days**, then deletes them for good.
   It syncs, its items are read-only until restored, and a score that points at a recently deleted
-  folder makes `library.verify` report it and ask whether to restore the folder.
+  folder makes `library.verify` report it and ask whether to restore the folder. Built: library
+  spec LIB-10.
 - **Roadmap order agreed**: the Windows tablet checks for M4 to M6 first, then M8, then M7.
 - **List placeholders are ScoreCraft's own feature** (enScore has none): an editable A4 template
   page with the placeholder's sanitised name in large centred text.

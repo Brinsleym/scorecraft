@@ -14,6 +14,10 @@ pub struct Folder {
     /// `None` for a top-level folder.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent: Option<FolderId>,
+    /// When it was deleted (Unix milliseconds): it is in Recently Deleted, read-only, and is
+    /// removed for good 30 days later. `None` for a folder in use.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deleted_ms: Option<u64>,
 }
 
 /// What a setlist entry plays.
@@ -116,6 +120,18 @@ impl Library {
         self.trash.contains_key(&id)
     }
 
+    /// The folder or one above it is in Recently Deleted.
+    pub fn folder_deleted(&self, folder: FolderId) -> bool {
+        std::iter::once(folder)
+            .chain(self.ancestors(folder))
+            .any(|f| self.folders.get(&f).is_some_and(|f| f.deleted_ms.is_some()))
+    }
+
+    /// Folders not in Recently Deleted (nor inside one that is).
+    pub fn live_folders(&self) -> impl Iterator<Item = &Folder> {
+        self.folders.values().filter(|f| !self.folder_deleted(f.id))
+    }
+
     /// The pages of list placeholders: library scores that belong to a list entry and are kept
     /// out of the library's own listings, search and recent list.
     pub fn placeholder_pages(&self) -> std::collections::BTreeSet<ScoreId> {
@@ -186,6 +202,7 @@ mod tests {
                     id: fid(id),
                     name: name.into(),
                     parent,
+                    deleted_ms: None,
                 },
             );
         }

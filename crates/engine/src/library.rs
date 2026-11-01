@@ -34,6 +34,17 @@ impl LibrarySession {
     /// Applies `tx` as one undo step and saves what it touched. If the save fails, the change is
     /// undone in memory too, so memory and disk never disagree, and the error is returned.
     pub(crate) fn commit(&mut self, label: &str, tx: Transaction) -> Result<Applied, EngineError> {
+        // Recently Deleted is read-only until restored.
+        scorecraft_ops::edit::check_not_deleted(&self.lib, &tx)?;
+        self.commit_unchecked(label, tx)
+    }
+
+    /// [`Self::commit`] without the Recently Deleted check, for removing what is in it.
+    pub(crate) fn commit_unchecked(
+        &mut self,
+        label: &str,
+        tx: Transaction,
+    ) -> Result<Applied, EngineError> {
         let applied = self.history.commit(&mut self.lib, label, tx)?;
         if applied.inverse.is_empty() {
             return Ok(applied);
