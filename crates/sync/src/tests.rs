@@ -64,7 +64,9 @@ fn rename(score: ScoreId, lib: &Library, title: &str) -> Op {
     metadata.title = title.into();
     Op::SetScore {
         score,
-        field: ScoreField::Metadata { metadata },
+        field: ScoreField::Metadata {
+            metadata: Box::new(metadata),
+        },
     }
 }
 

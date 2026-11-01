@@ -36,6 +36,10 @@ pub struct Source {
     pub page_count: u32,
 }
 
+fn is_zero(n: &u8) -> bool {
+    *n == 0
+}
+
 /// Title, composer and the rest of the searchable fields (LIB-4).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -50,9 +54,26 @@ pub struct Metadata {
     pub genre: String,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub tags: Vec<String>,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub lyricist: String,
+    /// Instruments and voices, one per entry ("Piano", "SATB").
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub instruments: Vec<String>,
+    /// 1 to 5 stars; 0 is not set.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub difficulty: u8,
+    /// As typed: "1720", "c. 1720", "1801–02".
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub year: String,
+    /// "Op. 27 No. 2", "BWV 1007".
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub catalogue: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub publisher: String,
     /// User-defined fields.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub custom: BTreeMap<String, String>,
+    /// The Description field of Edit Details.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub notes: String,
     /// Fields filled in by detection rather than typed (LIB-7), so a re-run doesn't overwrite

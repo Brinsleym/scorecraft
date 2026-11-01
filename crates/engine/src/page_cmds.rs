@@ -37,7 +37,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "score.metadata.set",
             "Edit Score Info…",
             "Score",
-            r#"{"score":id,"title":string?,"composer":string?,"arranger":string?,"key":string?,"genre":string?,"tags":[string]?,"notes":string?,"custom":{string:string|null}?}"#,
+            r#"{"score":id,"title":string?,"composer":string?,"arranger":string?,"lyricist":string?,"key":string?,"genre":string?,"year":string?,"catalogue":string?,"publisher":string?,"notes":string?,"tags":[string]?,"instruments":[string]?,"difficulty":0..5?,"custom":{string:string|null}?}"#,
             library_open,
             metadata_set as _,
         ),
@@ -118,8 +118,19 @@ fn position(
 fn metadata_set(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
     const ID: &str = "score.metadata.set";
     let p = params_object(ID, params)?;
-    let fields = ["title", "composer", "arranger", "key", "genre", "notes"];
-    let mut allowed = vec!["score", "tags", "custom"];
+    let fields = [
+        "title",
+        "composer",
+        "arranger",
+        "lyricist",
+        "key",
+        "genre",
+        "year",
+        "catalogue",
+        "publisher",
+        "notes",
+    ];
+    let mut allowed = vec!["score", "tags", "instruments", "difficulty", "custom"];
     allowed.extend(fields);
     reject_unknown_keys(ID, p, &allowed)?;
     let id: ScoreId = req_id(ID, p, "score")?;
@@ -138,8 +149,12 @@ fn metadata_set(session: &mut Session, params: &Value) -> Result<Value, EngineEr
                 "title" => &mut m.title,
                 "composer" => &mut m.composer,
                 "arranger" => &mut m.arranger,
+                "lyricist" => &mut m.lyricist,
                 "key" => &mut m.key,
                 "genre" => &mut m.genre,
+                "year" => &mut m.year,
+                "catalogue" => &mut m.catalogue,
+                "publisher" => &mut m.publisher,
                 _ => &mut m.notes,
             };
             *slot = v.trim().to_owned();
@@ -148,17 +163,27 @@ fn metadata_set(session: &mut Session, params: &Value) -> Result<Value, EngineEr
             changed.push(key);
         }
     }
-    if let Some(tags) = opt_str_list(ID, p, "tags", MAX_TAGS)? {
-        let mut clean: Vec<String> = Vec::new();
-        for t in tags {
-            check_len(ID, "tags", &t, MAX_NAME)?;
-            let t = t.trim().to_owned();
-            if !t.is_empty() && !clean.contains(&t) {
-                clean.push(t);
+    for key in ["tags", "instruments"] {
+        if let Some(list) = opt_str_list(ID, p, key, MAX_TAGS)? {
+            let mut clean: Vec<String> = Vec::new();
+            for t in list {
+                check_len(ID, key, &t, MAX_NAME)?;
+                let t = t.trim().to_owned();
+                if !t.is_empty() && !clean.contains(&t) {
+                    clean.push(t);
+                }
             }
+            if key == "tags" {
+                m.tags = clean;
+            } else {
+                m.instruments = clean;
+            }
+            changed.push(key);
         }
-        m.tags = clean;
-        changed.push("tags");
+    }
+    if let Some(d) = opt_int(ID, p, "difficulty", 0, 5)? {
+        m.difficulty = u8::try_from(d).unwrap_or(0);
+        changed.push("difficulty");
     }
     match p.and_then(|o| o.get("custom")) {
         None | Some(Value::Null) => {}

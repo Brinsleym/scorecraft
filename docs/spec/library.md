@@ -19,19 +19,21 @@ to file scores, metadata, the trash and Verify & Repair are M1's
 ## Terms
 
 - **Library scores**: every score in the library that isn't in the trash.
-- **Search fields**: title, composer, arranger, key, genre, tags, the file name, and the name of
-  the folder the score is filed in (and the folders above it).
+- **Search fields**: every field of Edit Details (title, composer, tags, key, arranger, lyricist,
+  instruments and voices, genre, difficulty as "N stars", year composed, catalogue number,
+  publisher or edition, description), the file name, and the name of the folder the score is
+  filed in (and the folders above it).
 
 ## Requirements
 
 ### LIB-5 Search
 
 - A query is split into words at spaces and punctuation. A score matches when **every** word of
-  the query is the start of some word in its search fields ("moz son" finds *Sonata in A* by
-  *W. A. Mozart*). Words are compared without case and without accents (*Dvořák* is found by
+  the query is inside some word of its search fields ("moz son" finds *Sonata in A* by
+  *W. A. Mozart*, and so does "nata"). Words are compared without case and without accents (*Dvořák* is found by
   "dvorak", *Fauré* by "faure"); `ß` matches "ss".
-- Results are ranked: a word matching a whole word counts more than one matching its start; a
-  match in the title more than in the composer, and the composer more than the other fields.
+- Results are ranked: a word matching a whole word counts more than one matching its start, and
+  that more than one inside a word; a match in the title more than in the composer, and the composer more than the other fields.
   Ties keep the current sort order. Up to 500 results are returned; the count says how many
   matched.
 - Search can be limited to one folder (with the folders inside it) and can include the trash.
@@ -45,8 +47,8 @@ to file scores, metadata, the trash and Verify & Repair are M1's
   **date added** (newest first) or **recently opened** (most recent first; never-opened scores
   last, by title). Each can be reversed.
 - Comparing names ignores case and accents, compares runs of digits as numbers (*Etude 2*
-  before *Etude 10*), and ignores a leading "The", "A" or "An" (English titles only). A score
-  with no title sorts by its file name.
+  before *Etude 10*), and keeps leading articles: *The Swan* sorts under T (owner, 2026-11-01).
+  A score with no title sorts by its file name.
 - The chosen sort is kept between launches; search results use it to break ties.
 
 ### LIB-15 Recently opened
@@ -106,6 +108,7 @@ to file scores, metadata, the trash and Verify & Repair are M1's
 | LIBS-11 | Two scores whose pages print their numbers (3 pages and 2) | "3" is searched inside scores; then "2"; then again after the session forgets its index | the 3-page score, page 3, snippet "3"; both; the first again, from the library's cache |
 | LIBS-12 | A score whose notes say "Take the coda with rubato" | "RUBATO" is searched inside scores | that score, with the words around it |
 | LIBS-9 | A portrait score | its cover is asked for at 200 px, then after its first page is turned | 200 px tall, narrower than that; then turned, width and height swapped |
+| LIBS-13 | A score with every Edit Details field filled | each field's text is searched | the score is found by each; difficulty is 0 to 5 and 0 clears it |
 | LIBS-10 | The app with a library score | the library window is shown | the score's cover arrives without blocking a frame; list view works; opening a score closes the window |
 
 ## Not in scope
@@ -114,16 +117,18 @@ to file scores, metadata, the trash and Verify & Repair are M1's
 
 ## Open questions
 
-Answered by the owner on 2026-11-01, see [the Edit Details note](../observations/library-edit-details.md). Marked *(to build)* where the code does not do it yet.
+Answered by the owner on 2026-11-01, see [the Edit Details note](../observations/library-edit-details.md). All three are built.
 
 - **Search matches inside words**: "nata" finds *Sonata*. A match at a word start still ranks
-  above one inside a word *(to build: today only word starts match)*.
+  above one inside a word. Built (LIBS-1, LIBS-2). The full-text search inside scores (LIB-6)
+  still matches word starts, through its sorted index.
 - **Search covers every Edit Details field**: title, composer, tags, key, arranger, lyricist,
   instruments and voices, genre, difficulty, year composed, catalogue number, publisher or
   edition, description. Ranking stays ScoreCraft's own: title, then composer, then the rest
-  *(to build: the fields `doc::Metadata` lacks, and searching them)*.
-- **Sorting does not ignore leading articles**: *The Lark Ascending* sorts under T *(to build:
-  today the sort key drops "the", "a" and "an")*.
+  Built: `doc::Metadata` has the new fields, `score.metadata.set` takes them, and the Score
+  panel edits them (LIBS-13).
+- **Sorting does not ignore leading articles**: *The Lark Ascending* sorts under T. Built
+  (LIBS-4).
 
 Still open: the questions in the [Edit Details note](../observations/library-edit-details.md#open-questions).
 
@@ -131,6 +136,7 @@ Still open: the questions in the [Edit Details note](../observations/library-edi
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-01 | minor | Built: search inside words and every Edit Details field (LIBS-13), articles kept in sort |
 | 2026-11-01 | minor | Owner's answers: search inside words and in every Edit Details field; no article stripping in sort |
 | 2026-10-31 | patch | LIB-6 search inside scores: PDF text and notes, a lazy on-disk text cache; LIBS-11, -12 |
 | 2026-10-31 | patch | M5 part 3: LIB-13 names perf scenarios P6 and P7 (10,000 scores), first measurement |
