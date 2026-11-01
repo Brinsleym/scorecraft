@@ -87,12 +87,19 @@ them. Written for milestone M3.
 
 ### TURN-1 Tap zones, TURN-2 swipes, TURN-3 keys, TURN-4 pedals
 
-- Tapping the right third of the page turns forward, the left third turns back; the middle third
-  shows or hides the controls. In a two-page layout the thirds are of the whole reader area.
+- Tap zones are fixed (owner, 2026-11-01, as enScore): tapping or clicking the right half of the
+  reader turns forward, the left half turns back. In a two-page layout the halves are of the
+  whole reader area. A tap in the band along the top (12% of the height) shows or hides the
+  controls; ScoreCraft's choice, since two halves leave no middle zone.
 - Swiping left turns forward, swiping right turns back. A swipe needs at least 60 pixels of travel
-  and more horizontal than vertical movement; a shorter movement is a tap.
-- Keys: Right, Down, Page Down and Space turn forward; Left, Up, Page Up and Shift+Space turn back;
-  Home and End go to the first and last page.
+  and more horizontal than vertical movement; a shorter movement is a tap. *Swipe to turn pages*
+  in settings (on by default, kept between launches) turns this off; `input.swipe.set`.
+- Keys: Right, Down, Page Down, Space and Enter turn forward; Left, Up, Page Up, Shift+Space and
+  Backspace turn back; Home and End go to the first and last page.
+- The mouse: a right click anywhere on the reader turns back. The scroll wheel turns pages
+  (down forward, up back): 60 pixels of wheel travel turn one page, then the wheel rests for
+  350 ms so one trackpad flick turns one page. Zoomed in, the wheel pans instead
+  (`input.wheel`, `input.secondaryClick`).
 - Bluetooth foot pedals that act as keyboards work out of the box when they send any of those keys.
   The user can map any key to forward, back, first or last page, and the map is kept between
   launches. A pedal profile lists common pedal key pairs (arrows, Page Up/Down) to pick from.
@@ -118,9 +125,12 @@ them. Written for milestone M3.
 | PT-9 | Any view | the last view is on screen and the user turns forward | nothing changes, the reader reports it didn't turn |
 | PT-10 | A pre-rendered next page | the user turns | the page is on screen within 16 ms |
 | PT-11 | A pedal sending Page Down | the user presses it | the reader turns forward once |
+| PT-12 | A 900 × 600 reader on page 1 of 3 | taps right of the middle, left of the middle, in the top band; a swipe with *Swipe to turn pages* off | forward, back, the controls zone with no turn; the swipe doesn't turn |
+| PT-13 | The same reader | 30 then 40 px of wheel down; 200 more at once; −80 a second later; a right click; Enter; Backspace; the wheel while zoomed | the second step turns forward; the burst is ignored; then back; back; forward; back; zoomed, it pans |
 
 PT-1 to PT-9 are engine tests (`crates/layout`, `crates/engine/src/reader_cmds.rs`,
-`crates/engine/tests/library.rs`); PT-10 is perf scenario P1; PT-11 comes with the pedal map.
+`crates/engine/tests/library.rs`); PT-10 is perf scenario P1; PT-11 comes with the pedal map;
+PT-12 and PT-13 are `crates/engine/src/input_cmds.rs` and `crates/input/src/touch.rs` tests.
 
 ## Not in scope
 
@@ -137,16 +147,18 @@ None left. Answered by the owner on 2026-11-01 (enScore's behaviour, and ScoreCr
   The layout and turn mode chosen in settings apply to every score except those changed from the
   score's own view, which keep their choice *(to build: per-score override)*.
 - **Tap zones are fixed, not configurable.** Two equal halves of the window: the left half turns
-  back, the right half turns forward. Settings has a *Swipe to turn pages* switch *(to build:
-  two halves instead of thirds, and the switch)*.
+  back, the right half turns forward. Settings has a *Swipe to turn pages* switch. Built
+  (PT-12).
 - **Every usual input turns a page by default:** Page Up and Page Down, Home and End (first and
   last page), the arrow keys, Space, click and right click, the scroll wheel down and up, and a
-  finger swipe left and right *(to build: whichever of these the default map lacks)*.
+  finger swipe left and right. Built: Enter and Backspace joined the default map, and the wheel
+  and right click turn (PT-13).
 
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-01 | minor | Built: two tap halves and a top controls band, *Swipe to turn pages*, Enter and Backspace, wheel and right-click turns; PT-12, PT-13 |
 | 2026-11-01 | minor | Owner's answers: per-score turn mode over a default, two fixed tap zones and a swipe switch, every usual key and pointer input by default |
 | 2026-10-31 | minor | The half-page cut snaps to the gap between systems (gap G2); PERF-15 in `crates/engine/src/reader_cmds.rs`, `scorecraft-layout` test in `snap.rs` |
 | 2026-10-31 | major | First version for M3: layouts, half-page and alternating turns, zoom, go to page, contents, tap, swipe, keys and pedals |

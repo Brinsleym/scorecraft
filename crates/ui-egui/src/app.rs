@@ -254,6 +254,7 @@ impl App {
             || id.starts_with("view.turn.alternating")
             || id == "view.zoom.landscapeFit"
             || id == "input.pedal.map"
+            || id == "input.swipe.set"
             || id == "ui.theme.set"
             || id == "ui.power.keepAwake"
             || markup_setting;
@@ -923,6 +924,22 @@ impl App {
                             ui.close();
                         }
                     }
+                });
+                let swipe = self
+                    .session
+                    .dispatch("input.swipe.set", &json!({}))
+                    .ok()
+                    .and_then(|v| v.get("on").and_then(Value::as_bool))
+                    .unwrap_or(true);
+                ui.menu_button("Turning", |ui| {
+                    let mut on = swipe;
+                    if ui.checkbox(&mut on, "Swipe to turn pages").changed() {
+                        run.push(("input.swipe.set", json!({ "on": on })));
+                    }
+                    ui.label(
+                        RichText::new("Tap the left half to go back, the right half to go on.")
+                            .weak(),
+                    );
                 });
                 if st.get("canGoBack").and_then(Value::as_bool) == Some(true)
                     && ui

@@ -34,6 +34,8 @@ pub struct Settings {
     pub library_grid: bool,
     /// The page colours (READ-7): normal, dark or sepia.
     pub filter: String,
+    /// *Swipe to turn pages* (TURN-2).
+    pub swipe_turns: bool,
 }
 
 impl Default for Settings {
@@ -53,6 +55,7 @@ impl Default for Settings {
             library_sort: Value::Null,
             library_grid: true,
             filter: "normal".into(),
+            swipe_turns: true,
         }
     }
 }
@@ -97,6 +100,9 @@ impl Settings {
         }
         if let Ok(m) = session.dispatch("input.pedal.map", &json!({})) {
             self.pedal_map = m.get("map").cloned().unwrap_or(Value::Null);
+        }
+        if let Ok(v) = session.dispatch("input.swipe.set", &json!({})) {
+            self.swipe_turns = v.get("on").and_then(Value::as_bool).unwrap_or(true);
         }
         self.theme = ui.theme;
         self.library_grid = ui.library_grid;
@@ -245,6 +251,7 @@ impl Settings {
         if self.pedal_map.is_object() {
             let _ = session.dispatch("input.pedal.map", &json!({ "map": self.pedal_map }));
         }
+        let _ = session.dispatch("input.swipe.set", &json!({ "on": self.swipe_turns }));
     }
 
     /// Applies the reader preferences to a score just opened. Each is best effort.
