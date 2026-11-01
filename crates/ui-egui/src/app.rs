@@ -249,9 +249,7 @@ impl App {
             || id == "library.sort.set"
             || id == "ui.library.view"
             || id == "view.filter.set";
-        let changes_prefs = id.starts_with("view.layout")
-            || id.starts_with("view.turn.halfPage")
-            || id.starts_with("view.turn.alternating")
+        let changes_prefs = id == "view.defaults.set"
             || id == "view.zoom.landscapeFit"
             || id == "input.pedal.map"
             || id == "input.swipe.set"
@@ -938,10 +936,51 @@ impl App {
                     .ok()
                     .and_then(|v| v.get("on").and_then(Value::as_bool))
                     .unwrap_or(true);
+                let defaults = self
+                    .session
+                    .dispatch("view.defaults.set", &json!({}))
+                    .ok()
+                    .and_then(|v| v.get("defaults").cloned())
+                    .unwrap_or(Value::Null);
                 ui.menu_button("Turning", |ui| {
                     let mut on = swipe;
                     if ui.checkbox(&mut on, "Swipe to turn pages").changed() {
                         run.push(("input.swipe.set", json!({ "on": on })));
+                    }
+                    ui.separator();
+                    // The default for every score; the toolbar changes the open score only.
+                    ui.label("For every score:");
+                    let dl = defaults
+                        .get("layout")
+                        .and_then(Value::as_str)
+                        .unwrap_or("single");
+                    let dm = defaults
+                        .get("mode")
+                        .and_then(Value::as_str)
+                        .unwrap_or("full");
+                    for (id, label) in [("single", "Single page"), ("twoPage", "Two pages")] {
+                        if ui.radio(dl == id, label).clicked() {
+                            run.push(("view.defaults.set", json!({ "layout": id })));
+                        }
+                    }
+                    for (id, label) in [
+                        ("full", "Whole-page turns"),
+                        ("halfPage", "Half-page turns"),
+                        ("alternating", "Alternating turns"),
+                    ] {
+                        if ui.radio(dm == id, label).clicked() {
+                            run.push(("view.defaults.set", json!({ "mode": id })));
+                        }
+                    }
+                    if ui
+                        .button("Use these for this score")
+                        .on_hover_text(
+                            "Forget this score's own layout and turns, chosen from its toolbar",
+                        )
+                        .clicked()
+                    {
+                        run.push(("view.override.clear", json!({})));
+                        ui.close();
                     }
                     ui.label(
                         RichText::new("Tap the left half to go back, the right half to go on.")
