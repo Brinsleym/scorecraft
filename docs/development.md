@@ -188,9 +188,20 @@ device named by `SCORECRAFT_PERF_DEVICE`.
 
 ## Web build
 
-`apps/scorecraft-web` builds with trunk. File access goes through the browser's file APIs and
-OPFS for the library; Web MIDI and the Screen Wake Lock API back MIDI and keep-awake where the
-browser offers them.
+`apps/scorecraft-web` is the desktop shell (`ui-egui`) on eframe's WebGL backend. To run it:
+
+```bash
+cargo build -p scorecraft-web --release --target wasm32-unknown-unknown
+wasm-bindgen --target web --no-typescript --out-dir apps/scorecraft-web/pkg target/wasm32-unknown-unknown/release/scorecraft-web.wasm
+python3 -m http.server -d apps/scorecraft-web 8000
+```
+
+then open <http://localhost:8000>. Install the CLI at the version in `Cargo.lock`
+(`cargo install wasm-bindgen-cli --version 0.2.130 --locked`). Scores come from the file picker
+(the Open button) or a drop. The library runs in memory and is mirrored into the browser's
+IndexedDB (database `scorecraft`), so scores and markings are there after a reload. Settings are
+kept in local storage. Export downloads the file; keep-awake uses the Screen
+Wake Lock API where the browser has it. Not yet: Web MIDI, importing a folder. `cargo xtask wasm` checks it builds.
 
 ## Mobile builds
 

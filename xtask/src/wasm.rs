@@ -1,4 +1,5 @@
-//! `cargo xtask wasm`: every L0–L6 crate must build for `wasm32-unknown-unknown` (AGENTS.md rule 7).
+//! `cargo xtask wasm`: every L0–L6 crate must build for `wasm32-unknown-unknown` (AGENTS.md rule 7),
+//! and so must the browser app, `scorecraft-web`.
 
 use std::path::Path;
 use std::process::Command;
@@ -23,9 +24,14 @@ pub fn run(root: &Path) -> Result<(), String> {
     for name in wasm_crates() {
         cmd.args(["-p", name]);
     }
+    // The browser app itself (its web code compiles only for wasm32).
+    cmd.args(["-p", "scorecraft-web"]);
     let status = cmd.status().map_err(|e| format!("running cargo: {e}"))?;
     if status.success() {
-        println!("wasm: {} crates check for {TARGET}", wasm_crates().len());
+        println!(
+            "wasm: {} crates and the browser app check for {TARGET}",
+            wasm_crates().len()
+        );
         Ok(())
     } else {
         Err(format!(

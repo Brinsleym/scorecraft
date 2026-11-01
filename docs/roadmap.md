@@ -103,6 +103,7 @@ platforms (macOS, Windows, Linux) plus a wasm build.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-31 | patch | The browser build runs the shell (file picker, drops, local-storage settings), checked in Chromium; `cargo xtask wasm` builds it |
 | 2026-10-31 | patch | Alpha gate re-graded: reading, markup, setlists, export, library and page editing code complete in the app; the Score panel (details, pages, bookmarks) added |
 | 2026-10-31 | patch | M6 🟡: part 3, shortcuts and snips; parity floor 57 |
 | 2026-10-31 | patch | M6 🟡: part 2, the metronome; parity floor 55 |

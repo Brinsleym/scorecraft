@@ -25,10 +25,20 @@ pub trait Platform {
     fn library_dir(&self) -> Option<String> {
         None
     }
+    /// A library storage the platform keeps itself (the browser's, backed by IndexedDB), and
+    /// whether it already holds a library. Asked once, before [`Platform::library_dir`].
+    fn library_storage(&mut self) -> Option<(scorecraft_engine::AnyStorage, bool)> {
+        None
+    }
     /// Asks where to save an exported PDF, suggesting `name`. `None` if cancelled or there is no
     /// dialog.
     fn pick_export_path(&mut self, _name: &str) -> Option<String> {
         None
+    }
+    /// Hands a file to the player when there is no save dialog (the browser downloads it).
+    /// `false` when the platform can't.
+    fn save_bytes(&mut self, _name: &str, _bytes: &[u8]) -> bool {
+        false
     }
     /// Asks for a folder to import. `None` if cancelled or there is no dialog.
     fn pick_folder(&mut self) -> Option<String> {
@@ -106,16 +116,22 @@ impl App {
         let mut session = Session::new();
         let mut state = UiState::new();
         // Scores open through the library, so markings are kept with them (ANNO-15).
-        let opened = match platform.library_dir() {
-            Some(dir) => {
-                let id = if std::path::Path::new(&dir).exists() {
-                    "library.open"
-                } else {
-                    "library.create"
-                };
-                session.dispatch(id, &json!({ "path": dir })).map(|_| ())
-            }
-            None => session.create_memory_library().map(|_| ()),
+        let mut platform = platform;
+        let own = platform.library_storage();
+        let opened = match own {
+            Some((storage, true)) => session.open_library_in(storage, "browser").map(|_| ()),
+            Some((storage, false)) => session.create_library_in(storage, "browser"),
+            None => match platform.library_dir() {
+                Some(dir) => {
+                    let id = if std::path::Path::new(&dir).exists() {
+                        "library.open"
+                    } else {
+                        "library.create"
+                    };
+                    session.dispatch(id, &json!({ "path": dir })).map(|_| ())
+                }
+                None => session.create_memory_library().map(|_| ()),
+            },
         };
         if let Err(e) = opened {
             state.message = Some(format!(
@@ -421,6 +437,8 @@ impl App {
             .fill(tokens.toolbar_bg)
             .inner_margin(egui::Margin::same(12))
             .show(ui, |ui| {
+                // The window fills the reader area, whatever its contents.
+                ui.set_min_size(ui.available_size());
                 let actions = self.library.show(ui, &mut self.session, tokens);
                 for a in actions {
                     match a {
@@ -615,7 +633,12 @@ impl App {
         }
     }
 
+    /// A file dropped on the window opens (native builds: the drop gives a path; the browser
+    /// build reads dropped files itself, asynchronously, and calls [`App::open_bytes`]).
     fn dropped_files(&mut self, ctx: &Context) {
+        if cfg!(target_arch = "wasm32") {
+            return;
+        }
         let dropped = ctx.input(|i| i.raw.dropped_files.first().map(|f| f.path().to_path_buf()));
         if let Some(path) = dropped {
             let r = self.open_path(&path.to_string_lossy());
@@ -623,18 +646,56 @@ impl App {
         }
     }
 
+    /// Opens a score from its bytes through the library (the browser's picked or dropped files).
+    pub fn open_bytes(&mut self, name: &str, bytes: Vec<u8>) -> Result<Value, EngineError> {
+        let r = self.session.open_bytes_in_library(name, bytes, None);
+        if r.is_ok() {
+            self.opened(&json!({}));
+            self.state.library = false;
+            self.library.dirty = true;
+            self.score_cache = None;
+        }
+        r
+    }
+
     /// Exports the open score with its visible layers' ink (EXP-2).
     fn export(&mut self, mode: &str) {
-        let name = self
-            .settings
-            .last_score
-            .as_deref()
-            .and_then(|p| std::path::Path::new(p).file_stem())
-            .map(|s| format!("{} (marked).pdf", s.to_string_lossy()))
-            .unwrap_or_else(|| "Score (marked).pdf".to_owned());
+        // Named after the score's title (or its file), "(marked)" added.
+        let title = self.session.library_score_id().and_then(|id| {
+            self.session
+                .dispatch("library.score.get", &json!({ "score": id }))
+                .ok()
+                .and_then(|v| {
+                    let t = v.pointer("/metadata/title").and_then(Value::as_str)?;
+                    (!t.trim().is_empty()).then(|| t.to_owned())
+                })
+        });
+        let stem = title.or_else(|| {
+            self.settings
+                .last_score
+                .as_deref()
+                .and_then(|p| std::path::Path::new(p).file_stem())
+                .map(|s| s.to_string_lossy().into_owned())
+        });
+        let clean: String = stem
+            .unwrap_or_else(|| "Score".to_owned())
+            .chars()
+            .map(|c| if "/\\:*?\"<>|".contains(c) { '-' } else { c })
+            .collect();
+        let name = format!("{clean} (marked).pdf");
         if let Some(path) = self.platform.pick_export_path(&name) {
             let r = self.command("score.export.pdf", &json!({ "path": path, "mode": mode }));
             self.report(r);
+        } else if cfg!(target_arch = "wasm32") {
+            // No save dialog: build the file in memory and let the browser download it.
+            match self.session.export_pdf_bytes(&json!({ "mode": mode })) {
+                Ok(pdf) => {
+                    if !self.platform.save_bytes(&name, &pdf) {
+                        self.state.message = Some("This browser couldn't save the file.".into());
+                    }
+                }
+                Err(e) => self.state.message = Some(e.to_string()),
+            }
         }
     }
 

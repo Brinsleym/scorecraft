@@ -9,6 +9,42 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+scorecraft-ui-egui = { workspace = true }
+scorecraft-engine = { workspace = true }
+scorecraft-format = { workspace = true }
+serde_json = { workspace = true }
+
+# The browser build: eframe on WebGL (glow), the page's canvas, file picking and local storage.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+eframe = { workspace = true, features = ["glow", "default_fonts"] }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+web-sys = { version = "0.3", features = [
+    "Window",
+    "Document",
+    "Element",
+    "HtmlElement",
+    "HtmlCanvasElement",
+    "HtmlInputElement",
+    "FileList",
+    "File",
+    "Blob",
+    "Storage",
+    "Event",
+    "console",
+    "BlobPropertyBag",
+    "Url",
+    "HtmlAnchorElement",
+    "Navigator",
+    "IdbFactory",
+    "IdbDatabase",
+    "IdbOpenDbRequest",
+    "IdbRequest",
+    "IdbObjectStore",
+    "IdbTransaction",
+    "IdbTransactionMode",
+] }
 
 [lints]
 workspace = true

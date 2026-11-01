@@ -363,35 +363,55 @@ fn open_file(session: &mut Session, params: &Value) -> Result<Value, EngineError
     let p = params_object(ID, params)?;
     reject_unknown_keys(ID, p, &["path", "password"])?;
     let path = req_str(ID, p, "path")?;
-    let password = opt_str(ID, p, "password")?;
+    let password = opt_str(ID, p, "password")?.map(str::to_owned);
     let bytes = crate::score_cmds::read_score(path)?;
-    let now = session.now_ms();
-    let l = session.lib_mut(ID)?;
-    let blob = l.store.put_blob(&bytes)?;
-    let existing = l
-        .lib
-        .scores
-        .values()
-        .find(|s| s.source.blob == blob && !l.lib.is_trashed(s.id))
-        .map(|s| s.id);
-    let (id, imported) = match existing {
-        Some(id) => (id, false),
-        None => {
-            let score = import_one(l, path, None, now)?;
-            let id = score.id;
-            l.commit(
-                "Import Score",
-                Transaction::single(Op::InsertScore {
-                    score: Box::new(score),
-                }),
-            )?;
-            (id, true)
-        }
-    };
-    let mut v = session.open_library_score(id, password)?;
-    crate::commands::set(&mut v, "score", json!(id.to_string()));
-    crate::commands::set(&mut v, "imported", json!(imported));
-    Ok(v)
+    let name = std::path::Path::new(path)
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    session.open_bytes_in_library(&name, bytes, password.as_deref())
+}
+
+impl Session {
+    /// Opens a score file's bytes through the library (`library.openFile` without a path): the
+    /// score already holding the same bytes, or a new import named `name`. What the browser build
+    /// does with a file the player picks or drops.
+    pub fn open_bytes_in_library(
+        &mut self,
+        name: &str,
+        bytes: Vec<u8>,
+        password: Option<&str>,
+    ) -> Result<Value, EngineError> {
+        const ID: &str = "library.openFile";
+        let session = self;
+        let now = session.now_ms();
+        let l = session.lib_mut(ID)?;
+        let blob = l.store.put_blob(&bytes)?;
+        let existing = l
+            .lib
+            .scores
+            .values()
+            .find(|s| s.source.blob == blob && !l.lib.is_trashed(s.id))
+            .map(|s| s.id);
+        let (id, imported) = match existing {
+            Some(id) => (id, false),
+            None => {
+                let score = import_bytes(l, bytes, name, None, now)?;
+                let id = score.id;
+                l.commit(
+                    "Import Score",
+                    Transaction::single(Op::InsertScore {
+                        score: Box::new(score),
+                    }),
+                )?;
+                (id, true)
+            }
+        };
+        let mut v = session.open_library_score(id, password)?;
+        crate::commands::set(&mut v, "score", json!(id.to_string()));
+        crate::commands::set(&mut v, "imported", json!(imported));
+        Ok(v)
+    }
 }
 
 pub(crate) fn import_one(
@@ -401,16 +421,28 @@ pub(crate) fn import_one(
     now: u64,
 ) -> Result<Score, EngineError> {
     let bytes = crate::score_cmds::read_score(path)?;
+    let file_name = std::path::Path::new(path)
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    import_bytes(l, bytes, &file_name, folder, now)
+}
+
+/// A new library score from a file's bytes, named `file_name` (not yet committed).
+pub(crate) fn import_bytes(
+    l: &mut crate::library::LibrarySession,
+    bytes: Vec<u8>,
+    file_name: &str,
+    folder: Option<FolderId>,
+    now: u64,
+) -> Result<Score, EngineError> {
+    let file_name = crate::commands::truncate(file_name, 255);
     let bytes = Arc::new(bytes);
     // Opening it checks it is a PDF we can read before anything is stored.
     let doc = scorecraft_pdf::Document::open(bytes.clone())?;
     let page_count = u32::try_from(doc.page_count())
         .map_err(|_| EngineError::Unsupported("more than 4 billion pages".into()))?;
     let m = doc.metadata();
-    let file_name = std::path::Path::new(path)
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_default();
     let stem = std::path::Path::new(&file_name)
         .file_stem()
         .map(|n| n.to_string_lossy().into_owned())

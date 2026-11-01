@@ -1,6 +1,6 @@
 # Feature map
 
-> **Last reviewed:** 2026-10-28 · **Last updated:** 2026-10-31 · **Change:** patch (LIB-6 partial; earlier: M6 part 3: NAV-1, PAGE-7 partial; earlier: M6 part 2: PRAC-1 partial; earlier: M6 part 1: LIST-4, LIST-6, IMP-6 partial; earlier: M5 part 3: LIB-13 partial, measured; earlier: M5 part 2: LIB-14 partial; earlier: M5 part 1: LIB-2, -5, -9, -15 partial; earlier: M4 part 5: EXP-2 partial; earlier: M4 part 3: ANNO-11, ANNO-12 and ANNO-16 partial; earlier: M4 part 2c: ANNO-9 partial; earlier: M4 part 2b: ANNO-8 partial; earlier: M4 part 2a: ANNO-4 and ANNO-10 partial; earlier: owner's answers: ANNO-9 is ScoreCraft's own, ANNO-18 ruler angle added, 124 rows; earlier: M4 part 1: 8 ANNO rows partial, ANNO-17 Ruler added from the owner's observation, 123 rows; earlier: M3: READ-4, READ-9 and PLAT-4 partial: the reader window's full screen, keep-awake and theme; earlier: M3: TURN-1..4 partial: keys, pedal map, taps and swipes go through the engine; earlier: M3: 8 reader rows partial (layouts, half-page and alternating turns, zoom, go to page, contents), live in the engine, the reader window comes later in M3; summary counts recounted; earlier: M1: 16 library, page, list and undo rows partial, live in the engine with no UI yet; earlier: READ-1 partial: `score.open` and `view.render` are live; earlier: owner's sync design and platform priorities in SYNC-1, -5, -7 and PLAT-1; earlier: reconciled with the Microsoft Store description S8, 4 rows added, 1 corrected; 13 rows marked ♻ PDFCraft reuse; first version 118 rows) · **Target:** enScore 3.7 (2026)
+> **Last reviewed:** 2026-10-28 · **Last updated:** 2026-10-31 · **Change:** patch (PLAT-1 partial: Windows desktop and the browser; earlier: LIB-6 partial; earlier: M6 part 3: NAV-1, PAGE-7 partial; earlier: M6 part 2: PRAC-1 partial; earlier: M6 part 1: LIST-4, LIST-6, IMP-6 partial; earlier: M5 part 3: LIB-13 partial, measured; earlier: M5 part 2: LIB-14 partial; earlier: M5 part 1: LIB-2, -5, -9, -15 partial; earlier: M4 part 5: EXP-2 partial; earlier: M4 part 3: ANNO-11, ANNO-12 and ANNO-16 partial; earlier: M4 part 2c: ANNO-9 partial; earlier: M4 part 2b: ANNO-8 partial; earlier: M4 part 2a: ANNO-4 and ANNO-10 partial; earlier: owner's answers: ANNO-9 is ScoreCraft's own, ANNO-18 ruler angle added, 124 rows; earlier: M4 part 1: 8 ANNO rows partial, ANNO-17 Ruler added from the owner's observation, 123 rows; earlier: M3: READ-4, READ-9 and PLAT-4 partial: the reader window's full screen, keep-awake and theme; earlier: M3: TURN-1..4 partial: keys, pedal map, taps and swipes go through the engine; earlier: M3: 8 reader rows partial (layouts, half-page and alternating turns, zoom, go to page, contents), live in the engine, the reader window comes later in M3; summary counts recounted; earlier: M1: 16 library, page, list and undo rows partial, live in the engine with no UI yet; earlier: READ-1 partial: `score.open` and `view.render` are live; earlier: owner's sync design and platform priorities in SYNC-1, -5, -7 and PLAT-1; earlier: reconciled with the Microsoft Store description S8, 4 rows added, 1 corrected; 13 rows marked ♻ PDFCraft reuse; first version 118 rows) · **Target:** enScore 3.7 (2026)
 
 Every user-visible enScore capability we know of, one row each, with the ScoreCraft command that
 will implement it. This is ScoreCraft's equivalent of PhotoCraft's Photoshop menu catalog: it is
@@ -51,8 +51,8 @@ feature-map ids each one informs. `obs.` in the Source column means an observati
 | Import and scanning | IMP | 8 | 1 | 0 | 1 | 7 |
 | Export and print | EXP | 4 | 1 | 0 | 1 | 3 |
 | Sync and backup | SYNC | 8 | 0 | 0 | 0 | 8 |
-| Platforms, UI and languages | PLAT | 5 | 2 | 0 | 1 | 4 |
-| **Total** | | **124** | **39** | **0** | **62** | **62** |
+| Platforms, UI and languages | PLAT | 5 | 2 | 0 | 2 | 3 |
+| **Total** | | **124** | **39** | **0** | **63** | **61** |
 
 Sum of the estimates: **~925–1,870 agent-hours** for every row, after PDFCraft reuse, the S8 rows and the ruler (P0 250–530, P1 350–680, P2 233–456, P3 92–194) (P0 alone: see [`roadmap.md`](roadmap.md#alpha-gate)).
 
@@ -244,7 +244,7 @@ Sum of the estimates: **~925–1,870 agent-hours** for every row, after PDFCraft
 
 | Id | Feature | Tier | Source | Command | Crate | P | Est | Status |
 |---|---|---|---|---|---|---|---:|---|
-| PLAT-1 | Same app on desktop (macOS, Windows, Linux), tablet and phone (iPadOS, iOS, Android), Chromebook, web | Free | S1–S3 | n/a | apps | P0 (Windows tablet, then desktop), P1 (Android, web), P2 (iPad, with a Swift pen host) | 80–200 | missing |
+| PLAT-1 | Same app on desktop (macOS, Windows, Linux), tablet and phone (iPadOS, iOS, Android), Chromebook, web | Free | S1–S3 | n/a | apps | P0 (Windows tablet, then desktop), P1 (Android, web), P2 (iPad, with a Swift pen host) | 80–200 | partial |
 | PLAT-2 | E-ink / e-reader mode (no animation, high contrast, partial refresh friendly) | Free | S3, S6, S8 | `ui.display.eInk` | ui-egui | P2 | 8–16 | missing |
 | PLAT-3 | Fifteen interface languages (see [`localization-parity.md`](localization-parity.md)) | Free | S1, S8 | n/a | ui-egui | P1 | 40–80 | missing |
 | PLAT-4 | Light and dark app themes, independent of the page filter | Free | S4 | `ui.theme.set` | ui-egui | P0 | 4–8 | partial |
@@ -272,7 +272,7 @@ work on top of PDFCraft rather than new code. Estimates are agent-hours, before 
 | EXP-2 | pdfcraft-annot builds ISO 32000 annotations with appearance streams; pdfcraft-cos saves incrementally or flattens | 10–18 | 4–8 |
 | EXP-3 | pdfcraft-organize concatenates and reorders pages | 3–6 | 1–2 |
 | IMP-1 | pdfcraft-create assembles the scanned pages; capture and straightening stay ours | 24–40 | 18–32 |
-| **Total** | | **124** | **39** | **0** | **62** | **62** |
+| **Total** | | **124** | **39** | **0** | **63** | **61** |
 
 Outside the rows, the PDF engine milestone (M2, [gap G1](gaps.md#g1-pdf-engine-parse-render-write))
 shrinks from 80–160 h of new code to 20–40 h of integration: the `scorecraft-pdf` adapter, page-tile
@@ -311,6 +311,7 @@ framework rather than from enScore. They are counted in the scorecard, not in pa
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-31 | patch | PLAT-1 partial: the Windows desktop app (M3) and now the browser build |
 | 2026-10-31 | patch | LIB-6 full-text search (PDF text and practice notes) partial |
 | 2026-10-31 | patch | M6 part 3: NAV-1 Score Shortcuts and PAGE-7 Score Snips partial |
 | 2026-10-31 | patch | M6 part 2: PRAC-1 metronome with tap tempo partial (visual pulse; the click waits on audio output) |

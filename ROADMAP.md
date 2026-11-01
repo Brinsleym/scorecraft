@@ -68,6 +68,7 @@ Detail: [docs/roadmap.md](docs/roadmap.md).
 
 | Date | Entry |
 |---|---|
+| 2026-10-31 | ScoreCraft in the browser: the same shell on WebGL, scores from the file picker or a drop, checked in headless Chromium |
 | 2026-10-31 | LIB-6: search inside scores (the words in their PDFs and notes), indexed lazily into the library's cache; parity 58 of 124 |
 | 2026-10-31 | M3 follow-up: the half-page split snaps to the gap between systems |
 | 2026-10-31 | The metronome's click: sample-accurate synthesis (`scorecraft-audio`) through the default audio output on Windows and macOS (`scorecraft-devices`, cpal); every alpha workflow is now code complete |

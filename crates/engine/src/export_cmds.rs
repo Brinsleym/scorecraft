@@ -153,12 +153,36 @@ fn export(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
     let p = params_object(ID, params)?;
     reject_unknown_keys(ID, p, &["path", "mode", "layers", "password"])?;
     let out_path = req_str(ID, p, "path")?;
-    let mode = match opt_str(ID, p, "mode")?.unwrap_or("flatten") {
+    let (pdf, mut out) = build(session, ID, p)?;
+    write_atomic(out_path, &pdf)?;
+    crate::commands::set(&mut out, "path", json!(truncate(out_path, 256)));
+    Ok(out)
+}
+
+impl Session {
+    /// The open library score exported as PDF bytes, as `score.export.pdf` would write them
+    /// (`params` as that command's, without `path`): for the browser build, which offers the
+    /// file as a download.
+    pub fn export_pdf_bytes(&mut self, params: &Value) -> Result<Vec<u8>, EngineError> {
+        const ID: &str = "score.export.pdf";
+        let p = params_object(ID, params)?;
+        reject_unknown_keys(ID, p, &["mode", "layers", "password"])?;
+        build(self, ID, p).map(|(pdf, _)| pdf)
+    }
+}
+
+/// The export's bytes and its summary, from the command's params.
+fn build(
+    session: &mut Session,
+    cmd: &'static str,
+    p: Option<&serde_json::Map<String, Value>>,
+) -> Result<(Vec<u8>, Value), EngineError> {
+    let mode = match opt_str(cmd, p, "mode")?.unwrap_or("flatten") {
         "flatten" => ExportMode::Flatten,
         "annotations" => ExportMode::Annotations,
         other => {
             return Err(bad(
-                ID,
+                cmd,
                 format!(
                     "`mode` must be flatten or annotations, got {}",
                     truncate(other, 32)
@@ -166,12 +190,12 @@ fn export(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
             ));
         }
     };
-    let password = opt_str(ID, p, "password")?;
+    let password = opt_str(cmd, p, "password")?;
     let score_id = session
         .score
         .as_ref()
         .and_then(|o| o.library_score)
-        .ok_or_else(|| EngineError::Disabled(ID.to_owned()))?;
+        .ok_or_else(|| EngineError::Disabled(cmd.to_owned()))?;
     let score = library_score(session, score_id)?.clone();
     let layers: Vec<LayerId> = match p.and_then(|m| m.get("layers")) {
         None | Some(Value::Null) => score
@@ -182,35 +206,33 @@ fn export(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
             .collect(),
         Some(Value::Array(a)) => {
             if a.len() > MAX_LAYERS {
-                return Err(bad(ID, format!("at most {MAX_LAYERS} layers")));
+                return Err(bad(cmd, format!("at most {MAX_LAYERS} layers")));
             }
             a.iter()
                 .map(|v| {
                     let id: LayerId = v
                         .as_str()
-                        .ok_or_else(|| bad(ID, "`layers` holds layer ids".into()))?
+                        .ok_or_else(|| bad(cmd, "`layers` holds layer ids".into()))?
                         .parse()
-                        .map_err(|e: String| bad(ID, format!("`layers`: {e}")))?;
+                        .map_err(|e: String| bad(cmd, format!("`layers`: {e}")))?;
                     score
                         .layer(id)
                         .map(|_| id)
-                        .ok_or_else(|| bad(ID, format!("the score has no layer {id}")))
+                        .ok_or_else(|| bad(cmd, format!("the score has no layer {id}")))
                 })
                 .collect::<Result<_, _>>()?
         }
-        Some(_) => return Err(bad(ID, "`layers` must be a list of layer ids".into())),
+        Some(_) => return Err(bad(cmd, "`layers` must be a list of layer ids".into())),
     };
     let curve = session.markup.curve;
     let list = pages(&score, &layers, &curve);
     let marks: usize = list.iter().map(|p| p.marks.len()).sum();
     let bytes = {
-        let l = session.lib_mut(ID)?;
+        let l = session.lib_mut(cmd)?;
         Arc::new(l.store.blob(score.source.blob)?)
     };
     let pdf = export_pdf(bytes, password, &list, mode)?;
-    write_atomic(out_path, &pdf)?;
-    Ok(json!({
-        "path": truncate(out_path, 256),
+    let summary = json!({
         "pages": list.len(),
         "markings": marks,
         "mode": match mode {
@@ -218,7 +240,8 @@ fn export(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
             ExportMode::Annotations => "annotations",
         },
         "bytes": pdf.len(),
-    }))
+    });
+    Ok((pdf, summary))
 }
 
 /// Writes beside `path`, then renames: an interrupted export never leaves half a file.
