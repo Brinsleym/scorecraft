@@ -14,6 +14,8 @@ pub enum Paper {
     Grand,
     /// Six-line guitar tablature.
     Tab,
+    /// No lines: the template a list placeholder's page is made from.
+    Blank,
 }
 
 impl Paper {
@@ -22,6 +24,7 @@ impl Paper {
             "single" => Some(Paper::Single),
             "grand" => Some(Paper::Grand),
             "tab" => Some(Paper::Tab),
+            "blank" => Some(Paper::Blank),
             _ => None,
         }
     }
@@ -54,6 +57,7 @@ fn page_content(paper: Paper, width: f64, height: f64) -> String {
     let mut top = height - MARGIN;
     loop {
         match paper {
+            Paper::Blank => break,
             Paper::Single => {
                 let bottom = top - 4.0 * SPACE;
                 if bottom < MARGIN {
@@ -174,6 +178,17 @@ mod tests {
         let lines = |p| page_content(p, 612.0, 792.0).matches(" l S").count();
         assert_eq!(lines(Paper::Single) % 5, 0);
         assert_eq!(lines(Paper::Tab) % 6, 0);
+        assert_eq!(
+            page_content(Paper::Blank, 612.0, 792.0)
+                .matches(" l S")
+                .count(),
+            0
+        );
+        let blank = manuscript(Paper::Blank, 595.28, 841.89, 1, "Interval").unwrap();
+        let mut doc = Document::open(Arc::new(blank)).unwrap();
+        assert_eq!(doc.page_count(), 1);
+        let bm = doc.render(0, 1.0).unwrap();
+        assert!(bm.pixel(bm.width / 2, bm.height / 2).unwrap()[0] > 240);
         assert!(manuscript(Paper::Single, 612.0, 792.0, 0, "x").is_err());
         assert!(manuscript(Paper::Single, 5.0, 792.0, 1, "x").is_err());
     }

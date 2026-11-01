@@ -33,8 +33,15 @@ pub enum EntryItem {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         tempo: Option<f32>,
     },
-    /// A break in the programme: an interval, a spoken item (LIST-7).
-    Placeholder { label: String },
+    /// A break in the programme: an interval, a spoken item (LIST-7). Newer placeholders carry
+    /// a page of their own (`page`, a hidden library score made from the blank A4 template with
+    /// the label on it) that playing stops on and that takes ink and text like any score; older
+    /// ones have none and are passed over.
+    Placeholder {
+        label: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        page: Option<ScoreId>,
+    },
 }
 
 /// One entry of a setlist.
@@ -107,6 +114,19 @@ impl Library {
 
     pub fn is_trashed(&self, id: ScoreId) -> bool {
         self.trash.contains_key(&id)
+    }
+
+    /// The pages of list placeholders: library scores that belong to a list entry and are kept
+    /// out of the library's own listings, search and recent list.
+    pub fn placeholder_pages(&self) -> std::collections::BTreeSet<ScoreId> {
+        self.lists
+            .values()
+            .flat_map(|l| &l.entries)
+            .filter_map(|e| match e.item {
+                EntryItem::Placeholder { page, .. } => page,
+                EntryItem::Score { .. } => None,
+            })
+            .collect()
     }
 
     /// The folder's ancestors, nearest first, stopping at a cycle (a corrupt file must not loop).
@@ -184,6 +204,7 @@ mod tests {
             id: EntryId(Uuid::from_u128(1)),
             item: EntryItem::Placeholder {
                 label: "Interval".into(),
+                page: None,
             },
             note: String::new(),
         };

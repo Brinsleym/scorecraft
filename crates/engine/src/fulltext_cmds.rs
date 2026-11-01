@@ -153,10 +153,11 @@ fn search(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
     let limit = opt_int(ID, p, "limit", 1, MAX_RESULTS)?.unwrap_or(50);
     let scores: Vec<Score> = {
         let l = session.lib_mut(ID)?;
+        let hidden = l.lib.placeholder_pages();
         l.lib
             .scores
             .values()
-            .filter(|s| !l.lib.is_trashed(s.id))
+            .filter(|s| !l.lib.is_trashed(s.id) && !hidden.contains(&s.id))
             .cloned()
             .collect()
     };

@@ -87,8 +87,16 @@ fn perf_1_turning_past_the_end_opens_the_next_entry_and_back() {
     run(&mut s, "view.turn.next", json!({}));
     assert_eq!(page(&mut s), (2, 2));
     run(&mut s, "view.layout.twoPage", json!({}));
-    // A pedal press on the last page goes on to the next score, past the interval.
-    let r = run(&mut s, "input.key", json!({ "key": "PageDown" }));
+    // A pedal press on the last page goes on to the interval's own page and stops there.
+    run(&mut s, "input.key", json!({ "key": "PageDown" }));
+    let st = run(&mut s, "list.state", json!({}));
+    assert_eq!(
+        (st["entry"].as_u64(), st["title"].as_str()),
+        (Some(2), Some("Interval"))
+    );
+    assert_eq!(page(&mut s), (1, 1));
+    // The next turn goes on to the next score.
+    let r = run(&mut s, "view.turn.next", json!({}));
     let st = run(&mut s, "list.state", json!({}));
     assert_eq!(
         (st["entry"].as_u64(), st["title"].as_str()),
@@ -103,9 +111,11 @@ fn perf_1_turning_past_the_end_opens_the_next_entry_and_back() {
         "the next score keeps the window and layout"
     );
     run(&mut s, "view.layout.single", json!({}));
-    // Back from its first page: the previous score at its last page.
+    // Back from its first page: the interval, then the previous score at its last page.
+    run(&mut s, "view.turn.previous", json!({}));
+    assert_eq!(run(&mut s, "list.state", json!({}))["title"], "Interval");
     let r = run(&mut s, "view.turn.previous", json!({}));
-    assert_eq!(r["breaks"], json!(["Interval"]));
+    assert_eq!(r["breaks"], json!([]));
     assert_eq!(run(&mut s, "list.state", json!({}))["title"], "A");
     assert_eq!(page(&mut s), (2, 2));
     // Past the very end, nothing more turns.
@@ -219,4 +229,119 @@ fn perf_4_bad_plays_are_refused_and_opening_by_hand_stops() {
     );
     run(&mut s, "score.open", json!({ "score": ids[0] }));
     assert_eq!(run(&mut s, "list.state", json!({}))["playing"], false);
+}
+
+#[test]
+fn perf_14_a_placeholder_is_an_a4_page_with_its_name_that_takes_ink() {
+    let (mut s, ids) = library("placeholder", &[2]);
+    let list = run(&mut s, "list.new", json!({ "name": "Gala" }))["list"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    // Control characters, bidi overrides and runs of spaces are cleaned out of the name.
+    let r = run(
+        &mut s,
+        "list.entry.addPlaceholder",
+        json!({ "list": list, "label": "  Inter\u{202e}val\n\t talk  " }),
+    );
+    let page_id: scorecraft_doc::ScoreId = r["page"].as_str().unwrap().parse().unwrap();
+    let lib = s.library().unwrap();
+    let page = &lib.scores[&page_id];
+    assert_eq!(page.metadata.title, "Interval talk");
+    assert_eq!(page.pages.len(), 1);
+    let note = match &page.annotations_on(scorecraft_doc::PageKey(0))[0].kind {
+        scorecraft_doc::AnnotationKind::Text(t) => t.clone(),
+        other => panic!("{other:?}"),
+    };
+    assert_eq!(note.text, "Interval talk");
+    assert!(note.style.size >= 36.0);
+    let c = note.rect.center();
+    assert!(
+        (c.x - 595.28 / 2.0).abs() < 0.5 && (c.y - 841.89 / 2.0).abs() < 0.5,
+        "{c:?}"
+    );
+    // The page is the list's, not the library's: it is not listed, searched or recent.
+    let listed = run(&mut s, "library.scores", json!({}));
+    assert_eq!(listed["scores"].as_array().unwrap().len(), 1, "{listed}");
+    let found = run(&mut s, "library.search", json!({ "query": "interval" }));
+    assert_eq!(found["count"], 0, "{found}");
+    // Playing stops on it, and it takes ink and text like any score.
+    run(&mut s, "list.play", json!({ "list": list }));
+    assert_eq!(
+        run(&mut s, "list.state", json!({}))["title"],
+        "Interval talk"
+    );
+    run(
+        &mut s,
+        "annotate.stroke",
+        json!({ "points": [[100, 100], [200, 120]], "space": "page", "page": 1 }),
+    );
+    assert_eq!(
+        s.library().unwrap().scores[&page_id]
+            .annotations_on(scorecraft_doc::PageKey(0))
+            .len(),
+        2
+    );
+    // Removing the entry sends the page to Recently Deleted with its ink; undo brings both back.
+    let entry = run(&mut s, "list.get", json!({ "list": list }))["entries"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    run(
+        &mut s,
+        "list.entry.remove",
+        json!({ "list": list, "entry": entry }),
+    );
+    assert!(s.library().unwrap().is_trashed(page_id));
+    run(&mut s, "edit.undo", json!({}));
+    assert!(!s.library().unwrap().is_trashed(page_id));
+    // A name with nothing visible is refused.
+    let e = s
+        .dispatch(
+            "list.entry.addPlaceholder",
+            &json!({ "list": list, "label": "\u{200b}\u{202e}" }),
+        )
+        .unwrap_err();
+    assert_eq!(e.code(), "bad_params");
+    let _ = ids;
+}
+
+#[test]
+fn perf_15_a_library_page_range_comes_with_the_score_once() {
+    let (mut s, ids) = library("libraryrange", &[5]);
+    run(
+        &mut s,
+        "score.pageRange.set",
+        json!({ "score": ids[0], "first": 2, "last": 4 }),
+    );
+    let list = run(&mut s, "list.new", json!({ "name": "Audition" }))["list"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let r = run(
+        &mut s,
+        "list.entry.add",
+        json!({ "list": list, "score": ids[0] }),
+    );
+    assert_eq!(
+        r["pageRange"],
+        json!({ "first": 2, "last": 4, "fromLibrary": true })
+    );
+    let entry = r["entry"].as_str().unwrap().to_owned();
+    // Changing either range leaves the other alone.
+    run(
+        &mut s,
+        "list.entry.pageRange.set",
+        json!({ "list": list, "entry": entry, "first": 3, "last": 3 }),
+    );
+    run(
+        &mut s,
+        "score.pageRange.set",
+        json!({ "score": ids[0], "first": 1, "last": 5 }),
+    );
+    let got = run(&mut s, "list.get", json!({ "list": list }));
+    assert_eq!(
+        got["entries"][0]["pageRange"],
+        json!({ "first": 2, "last": 2 })
+    );
 }

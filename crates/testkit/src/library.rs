@@ -264,6 +264,7 @@ pub fn sample_library(seed: u64, scores: usize) -> Library {
             id: g.id(now),
             item: EntryItem::Placeholder {
                 label: "Interval".into(),
+                page: None,
             },
             note: "15 minutes".into(),
         },

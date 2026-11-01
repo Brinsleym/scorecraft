@@ -24,9 +24,10 @@ for milestone M6, which closes the [alpha gate](../roadmap.md#alpha-gate). Setli
   first page of its page range. Turning past the last page opens the next entry at its first
   page; turning back from the first page opens the previous entry at its last page. Pedals,
   keys, taps and swipes all turn this way.
-- Breaks (placeholders, LIST-7) are passed over by turns; the turn that passes one reports its
-  label so the reader can show it briefly. Entries whose score is in the trash or gone are passed
-  over too.
+- A placeholder (LIST-7) has a page of its own (see below) and turns stop on it like on any
+  score. Placeholders made before they had pages are passed over; the turn that passes one
+  reports its label so the reader can show it briefly. Entries whose score is in the trash or
+  gone are passed over too.
 - While a list plays, each entry shows only its page range (LIST-2); stopping shows the whole
   score again. Opening another score by hand stops the list.
 - The screen stays awake from the first entry to the end (READ-9 applies throughout, as a score
@@ -38,6 +39,28 @@ for milestone M6, which closes the [alpha gate](../roadmap.md#alpha-gate). Setli
 - The library window has a Lists panel: the lists, a new-list box, and for the list picked its
   entries with play-from-here, up, down and remove, *Add break*, *Delete list* and *Play*. A
   score's cover menu adds it to the picked list.
+
+### LIST-7 Placeholders are pages (ScoreCraft's own)
+
+- Adding a placeholder ("Interval", "Speech") makes a one-page score from the blank A4 template
+  (595 × 842 pt) with the name as a 36 pt text note centred on the page. The name is cleaned
+  first: control characters and invisible format characters (bidi overrides, zero-width
+  characters) are dropped, runs of white space become one space, and it is cut to 80
+  characters; a name with nothing visible left is refused. It is also the page's title and,
+  with characters no file system allows replaced, its file name.
+- The page belongs to the list: it is left out of the library's listings, search, full-text
+  search and recent list. The pen, highlighter, text and every other markup tool work on it,
+  and the name is an ordinary note that can be moved, edited or deleted.
+- Removing the entry, or deleting the list, sends its page to Recently Deleted with its ink; undo
+  brings both back. Adding a placeholder is one undo step.
+
+### LIST-2 A library page range comes with the score
+
+- When a score whose library entry has a page range (PAGE-8) is added to a list, the new entry
+  copies that range. The answer says so (`pageRange` with `fromLibrary`), and the Lists panel
+  shows a quiet one-line notice under the list's buttons with the range to change (*Apply*),
+  *All pages* to clear it, or *OK*. From then on the entry's range and the library's are
+  independent: changing one leaves the other alone.
 
 ### LIST-6 One score, many lists
 
@@ -91,7 +114,9 @@ for milestone M6, which closes the [alpha gate](../roadmap.md#alpha-gate). Setli
 
 | Id | Given | When | Then |
 |---|---|---|---|
-| PERF-1 | A list: score A (2 pages), a break "Interval", score B (3 pages) | it is played and the pedal pressed on A's last page, then the player turns back | B opens at page 1 past the interval; back opens A at page 2 and reports "Interval"; past B's end nothing turns |
+| PERF-1 | A list: score A (2 pages), a placeholder "Interval", score B (3 pages) | it is played and the pedal pressed on A's last page, turned again, then turned back twice | the interval's page; B at page 1; back to the interval, then A at page 2; past B's end nothing turns |
+| PERF-14 | A list | a placeholder named "  Inter<U+202E>val\n\t talk  " is added, played and written on; the entry is removed and the removal undone; a name of only invisible characters is added | a one-page A4 score titled "Interval talk" with that note centred, 36 pt, not listed or found in the library; playing stops on it and the stroke lands on it; removing trashes it, undo restores it; the last is refused |
+| PERF-15 | A 5-page score with library range 2–4 | it is added to a list; the entry's range is set to 3–3 and the library's to 1–5 | the answer reports range 2–4 from the library; the entry keeps 3–3 |
 | PERF-2 | An entry with pages 2–3 of a 5-page score | the list is played, then stopped | the reader shows 2 pages, then all 5 |
 | PERF-3 | One score twice in each of two lists | the score is renamed and a list deleted | both lists show the new title; the library still has one score |
 | PERF-4 | An empty list; a list with one entry | the first is played; the second from entry 5; then a score opened by hand | refused; refused; the list stops |
@@ -108,29 +133,30 @@ for milestone M6, which closes the [alpha gate](../roadmap.md#alpha-gate). Setli
 PERF-1 to PERF-4 are engine tests (`crates/engine/src/play_cmds/tests.rs`); PERF-5 is a shell
 test (`crates/ui-egui/src/app.rs`); PERF-6 and PERF-7 are `scorecraft-practice` tests, PERF-8 an
 engine test (`crates/engine/src/metronome_cmds.rs`); PERF-9 to PERF-11 are engine tests
-(`crates/engine/src/nav_cmds/tests.rs`); PERF-12 is a shell test (`crates/ui-egui/src/app.rs`).
+(`crates/engine/src/nav_cmds/tests.rs`); PERF-12 is a shell test (`crates/ui-egui/src/app.rs`);
+PERF-14 and PERF-15 are engine tests (`crates/engine/src/play_cmds/tests.rs`).
 PERF-1 also checks that the window and layout carry over to the next score.
 
 ## Open questions
 
-None left. Answered by the owner on 2026-11-01. Marked *(to build)* where the code does not do it yet.
+None left. Answered by the owner on 2026-11-01; both are built (LIST-7, LIST-2 above).
 
 - **Placeholders are ScoreCraft's own** (enScore has none). A placeholder in a list (for example
   "Interval") is a real, editable page: a blank A4 page made from a template, with the
   placeholder's name in large centred text. The name is sanitised before it is drawn (plain text,
   length-capped, no control characters). The pen and text tools work on it like any page, and
-  playing the list stops on it like any score *(to build: today a placeholder is passed and
-  reported)*.
+  playing the list stops on it like any score. Built (PERF-14).
 - **Page ranges.** An entry's range limits what plays: turning past its last page goes to the next
   entry (as built). When a score that has a page range in the library is added to a list, the
   entry copies that range and an unobtrusive notice says so, with a way to change it there. From
-  then on the list entry's range and the library score's range are independent *(to build: the
-  copy and the notice)*.
+  then on the list entry's range and the library score's range are independent. Built
+  (PERF-15).
 
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-01 | minor | Built: placeholders are A4 pages that playing stops on (LIST-7, PERF-14); a library page range comes with the score once, with a notice (PERF-15) |
 | 2026-11-01 | minor | Owner's answers: placeholders become editable A4 template pages; a library page range is copied to a new list entry with a notice, then independent |
 | 2026-10-31 | patch | The metronome's click: synthesis and audio output on Windows and macOS; PERF-13 |
 | 2026-10-31 | patch | M6 part 4: shortcut outlines, snips in export, snip resizing |

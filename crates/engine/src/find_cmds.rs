@@ -197,10 +197,11 @@ fn search(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
     {
         return Err(scorecraft_ops::OpError::NoFolder(f).into());
     }
+    let hidden = lib.placeholder_pages();
     let pool: Vec<&Score> = lib
         .scores
         .values()
-        .filter(|s| trashed || !lib.is_trashed(s.id))
+        .filter(|s| (trashed || !lib.is_trashed(s.id)) && !hidden.contains(&s.id))
         .filter(|s| folder.is_none_or(|f| within(lib, s, f)))
         .collect();
     let ordered = sorted(sort, pool);
@@ -281,6 +282,7 @@ fn recent(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
         .scores
         .values()
         .filter(|s| s.opened_ms.is_some() && !lib.is_trashed(s.id))
+        .filter(|s| !lib.placeholder_pages().contains(&s.id))
         .collect();
     let list: Vec<Value> = sorted(
         LibrarySort {

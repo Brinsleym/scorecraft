@@ -157,11 +157,21 @@ fn delete(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
     let p = params_object(ID, params)?;
     reject_unknown_keys(ID, p, &["list"])?;
     let id: ListId = req_id(ID, p, "list")?;
+    let now = session.now_ms();
     let l = session.lib_mut(ID)?;
-    l.commit(
-        "Delete List",
-        Transaction::single(Op::RemoveList { list: id }),
-    )?;
+    let pages: Vec<ScoreId> = list(l, id)?
+        .entries
+        .iter()
+        .filter_map(|e| match e.item {
+            EntryItem::Placeholder { page, .. } => page,
+            EntryItem::Score { .. } => None,
+        })
+        .collect();
+    let mut ops = vec![Op::RemoveList { list: id }];
+    for page in pages {
+        ops.extend(trash_page(l, page, now));
+    }
+    l.commit("Delete List", Transaction::new(ops))?;
     Ok(edited(l, json!({})))
 }
 
@@ -186,6 +196,14 @@ fn get(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
     Ok(json!({ "id": x.id.to_string(), "name": x.name, "entries": entries }))
 }
 
+/// Sends a placeholder's page to Recently Deleted, unless it is gone or there already.
+fn trash_page(l: &crate::library::LibrarySession, page: ScoreId, now: u64) -> Option<Op> {
+    (l.lib.scores.contains_key(&page) && !l.lib.is_trashed(page)).then_some(Op::Trash {
+        score: page,
+        at_ms: now,
+    })
+}
+
 /// A 1-based insert position (`at`), default the end.
 fn insert_at(id: &str, p: Option<&Map<String, Value>>, len: usize) -> Result<usize, EngineError> {
     if len >= MAX_ENTRIES {
@@ -200,6 +218,88 @@ fn insert_at(id: &str, p: Option<&Map<String, Value>>, len: usize) -> Result<usi
     })
 }
 
+/// The A4 template a placeholder's page is made from, in points.
+const A4: (f64, f64) = (595.28, 841.89);
+/// The longest placeholder label put on its page.
+pub const MAX_PLACEHOLDER_LABEL: usize = 80;
+
+/// A placeholder label made safe to print and to use in a file name: control and format
+/// characters dropped, runs of white space made one space, at most
+/// [`MAX_PLACEHOLDER_LABEL`] characters.
+pub(crate) fn clean_label(raw: &str) -> String {
+    let kept: String = raw
+        .chars()
+        .map(|c| if c.is_whitespace() { ' ' } else { c })
+        .filter(|c| !c.is_control() && !is_format_char(*c))
+        .collect();
+    let words: Vec<&str> = kept.split(' ').filter(|w| !w.is_empty()).collect();
+    words
+        .join(" ")
+        .chars()
+        .take(MAX_PLACEHOLDER_LABEL)
+        .collect()
+}
+
+/// Invisible characters that change how text reads (bidi overrides, zero-width joiners).
+fn is_format_char(c: char) -> bool {
+    matches!(c, '\u{200b}'..='\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2060}'..='\u{2069}' | '\u{feff}')
+}
+
+/// The label as a file name: characters no file system allows become `_`.
+fn file_name_for(label: &str) -> String {
+    let stem: String = label
+        .chars()
+        .map(|c| match c {
+            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
+            c => c,
+        })
+        .collect();
+    format!("{}.pdf", stem.trim_matches(['.', ' ']))
+}
+
+/// A placeholder's page: a hidden library score from the blank A4 template with `label` as a
+/// large text note centred on it, which the player can move, edit or write around.
+fn placeholder_page(
+    id: &str,
+    l: &mut crate::library::LibrarySession,
+    label: &str,
+    now: u64,
+) -> Result<scorecraft_doc::Score, EngineError> {
+    use scorecraft_doc::{Annotation, AnnotationKind, PageKey, TextNote, TextStyle};
+    use scorecraft_geom::{Point, Rect};
+    let pdf = scorecraft_pdf::manuscript(scorecraft_pdf::Paper::Blank, A4.0, A4.1, 1, label)?;
+    let mut score = crate::library_cmds::import_bytes(l, pdf, &file_name_for(label), None, now)?;
+    score.metadata.title = label.to_owned();
+    let page = Rect::new(0.0, 0.0, A4.0, A4.1);
+    let style = TextStyle {
+        size: crate::markup::TEXT_SIZES.max,
+        ..TextStyle::default()
+    };
+    let laid = crate::text_cmds::place(label, &style, Point::new(0.0, A4.1), page)?;
+    let (x0, y1) = ((A4.0 - laid.width()) / 2.0, (A4.1 + laid.height()) / 2.0);
+    let rect = Rect::new(x0, y1 - laid.height(), x0 + laid.width(), y1);
+    let layer = score
+        .layers
+        .first()
+        .map(|x| x.id)
+        .ok_or_else(|| bad(id, "the new page has no layer".into()))?;
+    l.hlc = l.hlc.tick(now);
+    score.annotations.insert(
+        PageKey(0),
+        vec![Annotation {
+            id: l.ids.id(now),
+            layer,
+            stamp: l.hlc,
+            kind: AnnotationKind::Text(TextNote {
+                rect,
+                text: label.to_owned(),
+                style,
+            }),
+        }],
+    );
+    Ok(score)
+}
+
 fn add(
     session: &mut Session,
     id: &str,
@@ -212,38 +312,78 @@ fn add(
     let list_id: ListId = req_id(id, p, "list")?;
     let note = opt_str(id, p, "note")?.unwrap_or("").to_owned();
     check_len(id, "note", &note, MAX_NAME)?;
-    let item = if placeholder {
-        EntryItem::Placeholder {
-            label: name_param(id, p, "label")?,
+    let label = if placeholder {
+        let label = clean_label(&name_param(id, p, "label")?);
+        if label.is_empty() {
+            return Err(bad(id, "`label` must have some visible text".into()));
         }
+        Some(label)
     } else {
-        EntryItem::Score {
-            score: req_id::<ScoreId>(id, p, "score")?,
-            page_range: None,
-            tempo: None,
-        }
+        None
+    };
+    let score_id = if placeholder {
+        None
+    } else {
+        Some(req_id::<ScoreId>(id, p, "score")?)
     };
     let now = session.now_ms();
     let l = session.lib_mut(id)?;
     let index = insert_at(id, p, list(l, list_id)?.entries.len())?;
+    let mut ops = Vec::new();
+    let mut out = json!({});
+    let item = match (label, score_id) {
+        (Some(label), _) => {
+            let page = placeholder_page(id, l, &label, now)?;
+            crate::commands::set(&mut out, "page", json!(page.id.to_string()));
+            let page_id = page.id;
+            ops.push(Op::InsertScore {
+                score: Box::new(page),
+            });
+            EntryItem::Placeholder {
+                label,
+                page: Some(page_id),
+            }
+        }
+        (None, Some(score)) => {
+            // The library's page range comes with the score, once: after that the entry's range
+            // and the library's are independent (owner, 2026-11-01). The answer says so, for the
+            // shell's notice.
+            let page_range = l.lib.scores.get(&score).and_then(|s| s.page_range);
+            if let Some(r) = page_range {
+                crate::commands::set(
+                    &mut out,
+                    "pageRange",
+                    json!({ "first": r.first + 1, "last": r.last + 1, "fromLibrary": true }),
+                );
+            }
+            EntryItem::Score {
+                score,
+                page_range,
+                tempo: None,
+            }
+        }
+        (None, None) => return Err(bad(id, "`score` is required".into())),
+    };
     let eid: EntryId = l.ids.id(now);
+    ops.push(Op::InsertEntry {
+        list: list_id,
+        index,
+        entry: ListEntry {
+            id: eid,
+            item,
+            note,
+        },
+    });
     l.commit(
         if placeholder {
             "Add Placeholder"
         } else {
             "Add to List"
         },
-        Transaction::single(Op::InsertEntry {
-            list: list_id,
-            index,
-            entry: ListEntry {
-                id: eid,
-                item,
-                note,
-            },
-        }),
+        Transaction::new(ops),
     )?;
-    Ok(edited(l, json!({ "entry": eid.to_string() })))
+    crate::commands::set(&mut out, "entry", json!(eid.to_string()));
+    Ok(edited(l, out))
 }
 
 fn entry_add(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
@@ -276,11 +416,17 @@ fn entry_remove(session: &mut Session, params: &Value) -> Result<Value, EngineEr
     reject_unknown_keys(ID, p, &["list", "entry"])?;
     let id: ListId = req_id(ID, p, "list")?;
     let e: EntryId = req_id(ID, p, "entry")?;
+    let now = session.now_ms();
     let l = session.lib_mut(ID)?;
-    l.commit(
-        "Remove from List",
-        Transaction::single(Op::RemoveEntry { list: id, entry: e }),
-    )?;
+    let mut ops = vec![Op::RemoveEntry { list: id, entry: e }];
+    // A placeholder's page goes to Recently Deleted with it, so its ink can still be restored.
+    if let EntryItem::Placeholder {
+        page: Some(page), ..
+    } = entry(list(l, id)?, e)?.item
+    {
+        ops.extend(trash_page(l, page, now));
+    }
+    l.commit("Remove from List", Transaction::new(ops))?;
     Ok(edited(l, json!({})))
 }
 
