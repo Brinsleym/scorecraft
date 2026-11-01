@@ -5,7 +5,8 @@
 //! page bitmap:
 //!
 //! - **pen**: normal "over" blending in the stroke's colour;
-//! - **highlighter**: multiply, so notation under it stays black and the paper takes the colour
+//! - **highlighter**: every highlighter stroke of the page in one layer (overlaps never darken
+//!   or mix), multiplied, so notation under it stays black and the paper takes the colour
 //!   (on a dark page, where multiply would hide it, it blends "over" instead);
 //! - **whiteout**: the page's paper colour, opaque.
 //!
@@ -166,8 +167,28 @@ pub fn compose(
         return None;
     }
     let mut out = base.clone();
-    for mark in marks {
+    // Every highlighter stroke on the page goes into one layer, laid on at the first one's place
+    // in the drawing order: overlaps never darken or mix (owner, 2026-11-01).
+    let first_highlight = marks.iter().position(|m| is_highlighter(m));
+    let mut layer = first_highlight.map(|_| HighlightLayer::new(out.width, out.height));
+    if let Some(l) = layer.as_mut() {
+        for mark in marks {
+            if let AnnotationKind::Stroke(s) = mark
+                && s.tool == Tool::Highlighter
+                && let Some(f) = stroke_fill(s, filter, curve)
+            {
+                l.add(to_bitmap, &f);
+            }
+        }
+    }
+    for (i, mark) in marks.iter().enumerate() {
+        if Some(i) == first_highlight
+            && let Some(l) = layer.take()
+        {
+            l.apply(&mut out, filter != Filter::Dark);
+        }
         match mark {
+            AnnotationKind::Stroke(s) if s.tool == Tool::Highlighter => {}
             AnnotationKind::Stroke(s) => draw_stroke(&mut out, to_bitmap, s, filter, curve),
             AnnotationKind::Text(t) => draw_text(&mut out, to_bitmap, t, filter),
             AnnotationKind::Stamp(st) => draw_stamp(&mut out, to_bitmap, st, filter),
@@ -176,6 +197,84 @@ pub fn compose(
         }
     }
     Some(out)
+}
+
+fn is_highlighter(mark: &AnnotationKind) -> bool {
+    matches!(mark, AnnotationKind::Stroke(s) if s.tool == Tool::Highlighter)
+}
+
+/// The page's highlighter ink as one layer: per pixel, a premultiplied colour and a strength.
+/// A later stroke replaces an earlier one where it covers it (by its coverage), so two strokes,
+/// of one colour or two, are never darker or mixed where they overlap.
+struct HighlightLayer {
+    width: u32,
+    height: u32,
+    /// Per pixel: premultiplied r, g, b (0..=1) and strength (0..=1).
+    px: Vec<[f32; 4]>,
+}
+
+impl HighlightLayer {
+    fn new(width: u32, height: u32) -> HighlightLayer {
+        let n = u64::from(width) * u64::from(height);
+        let n = usize::try_from(n.min(MAX_MASK_PIXELS)).unwrap_or(0);
+        HighlightLayer {
+            width,
+            height,
+            px: vec![[0.0; 4]; n],
+        }
+    }
+
+    fn add(&mut self, m: Affine, f: &Fill) {
+        let Some(mask) = Mask::fill(&f.polygons, m, self.width, self.height) else {
+            return;
+        };
+        let c = [f.color.r, f.color.g, f.color.b].map(|v| f32::from(v) / 255.0);
+        for row in 0..mask.h {
+            for col in 0..mask.w {
+                let cov = mask.at(col, row);
+                if cov <= 0.0 {
+                    continue;
+                }
+                let i = u64::from(mask.y0 + row) * u64::from(self.width) + u64::from(mask.x0 + col);
+                let Some(p) = usize::try_from(i).ok().and_then(|i| self.px.get_mut(i)) else {
+                    continue;
+                };
+                let k = f.alpha * cov;
+                let keep = 1.0 - cov;
+                *p = [
+                    c[0] * k + p[0] * keep,
+                    c[1] * k + p[1] * keep,
+                    c[2] * k + p[2] * keep,
+                    k + p[3] * keep,
+                ];
+            }
+        }
+    }
+
+    /// Lays the layer onto `bm`: multiplied, or "over" (on a dark page).
+    fn apply(&self, bm: &mut Bitmap, multiply: bool) {
+        for (word, p) in bm.words.iter_mut().zip(&self.px) {
+            let k = p[3];
+            if k <= 0.0 {
+                continue;
+            }
+            let [dr, dg, db, da] = word.to_ne_bytes().map(f32::from);
+            let px = if multiply {
+                // d · (1 − k(1 − s)) = d · (1 − k + k·s), with k·s premultiplied.
+                let mul = |d: f32, ks: f32| to_byte(d * (1.0 - k + ks));
+                [mul(dr, p[0]), mul(dg, p[1]), mul(db, p[2]), to_byte(da)]
+            } else {
+                let over = |d: f32, ks: f32| to_byte(ks * 255.0 + d * (1.0 - k));
+                [
+                    over(dr, p[0]),
+                    over(dg, p[1]),
+                    over(db, p[2]),
+                    to_byte(255.0 * k + da * (1.0 - k)),
+                ]
+            };
+            *word = u32::from_ne_bytes(px);
+        }
+    }
 }
 
 /// One filled shape of a marking, in source-page PDF space: what every renderer draws, the CPU
@@ -749,15 +848,48 @@ mod tests {
         let crossed = px(&bm, 50, 50);
         assert_eq!(once, crossed);
         assert_ne!(once, WHITE);
-        // A second stroke over it darkens it again, like a second pass.
-        draw_stroke(
-            &mut bm,
-            flip(),
-            &s,
-            Filter::Normal,
-            &PressureCurve::default(),
-        );
-        assert!(px(&bm, 20, 50)[2] < once[2]);
+    }
+
+    #[test]
+    fn ink_50_highlighters_are_one_layer_that_never_darkens_or_mixes() {
+        let curve = PressureCurve::default();
+        let base = page(100, 100, WHITE);
+        let across = |c| stroke(Tool::Highlighter, c, 10.0, &[(10.0, 50.0), (90.0, 50.0)]);
+        let down = |c| stroke(Tool::Highlighter, c, 10.0, &[(50.0, 10.0), (50.0, 90.0)]);
+        let yellow = Color::HIGHLIGHT;
+        let green = Color::rgba(60, 220, 60, 102);
+        let draw = |marks: &[AnnotationKind]| {
+            let refs: Vec<&AnnotationKind> = marks.iter().collect();
+            compose(&base, flip(), &refs, Filter::Normal, &curve).unwrap()
+        };
+        // Two strokes of one colour: no darker where they cross.
+        let both = draw(&[
+            AnnotationKind::Stroke(across(yellow)),
+            AnnotationKind::Stroke(down(yellow)),
+        ]);
+        assert_eq!(px(&both, 20, 50), px(&both, 50, 50));
+        assert_eq!(px(&both, 50, 20), px(&both, 50, 50));
+        // The same stroke twice: as once.
+        let twice = draw(&[
+            AnnotationKind::Stroke(across(yellow)),
+            AnnotationKind::Stroke(across(yellow)),
+        ]);
+        let once = draw(&[AnnotationKind::Stroke(across(yellow))]);
+        assert_eq!(px(&twice, 20, 50), px(&once, 20, 50));
+        // Two colours: the later one shows where they cross, unmixed.
+        let mixed = draw(&[
+            AnnotationKind::Stroke(across(yellow)),
+            AnnotationKind::Stroke(down(green)),
+        ]);
+        assert_eq!(px(&mixed, 50, 50), px(&mixed, 50, 20));
+        assert_ne!(px(&mixed, 50, 50), px(&mixed, 20, 50));
+        // A pen stroke over the highlighter still draws on top of it.
+        let pen = stroke(Tool::Pen, Color::BLACK, 4.0, &[(10.0, 50.0), (90.0, 50.0)]);
+        let inked = draw(&[
+            AnnotationKind::Stroke(across(yellow)),
+            AnnotationKind::Stroke(pen),
+        ]);
+        assert_eq!(px(&inked, 20, 50), [0, 0, 0, 255]);
     }
 
     #[test]

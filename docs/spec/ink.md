@@ -107,7 +107,12 @@ layers, selection, shapes, and exporting the result. Written for milestone M4.
   notation under it stays black and white paper takes the swatch's colour. It never covers
   notation.
 - No build-up within a stroke: where one stroke crosses itself, the colour is the same as where it
-  doesn't. Two separate strokes over the same place do darken it again, as two passes would.
+  doesn't.
+- **One highlighter layer** (owner, 2026-11-01): every highlighter stroke on a page is gathered
+  into one layer before it is multiplied onto the page, at the first highlighter's place in the
+  drawing order. Where two strokes overlap, of one colour or two, the later one replaces the
+  earlier, so the page is never darker there and colours never mix. Pen, text and stamps drawn
+  later still go on top.
 - Default: the highlighter's first swatch (yellow), 12 pt nib.
 
 ### ANNO-4 Colours, widths and presets
@@ -352,8 +357,11 @@ ScoreCraft's own additions, beyond what was observed:
   document in the score's order (`pdfcraft-organize`), turned and cropped as the score shows them.
   Ink is the CPU renderer's own geometry (`scorecraft-render`'s fills: stroke outlines, glyph
   outlines of notes and dynamics, hairpin lines) written as filled paths, so the export looks
-  like the reader on white paper; the highlighter's paths use an `ExtGState` with
-  `/BM /Multiply`. Flattened ink follows the page's content, which is wrapped in `q`/`Q`. Text
+  like the reader on white paper. Flattened, the page's highlighter paths go into one isolated
+  knockout transparency group (`/Group << /S /Transparency /I true /K true >>`), drawn with
+  `/BM /Multiply`, so overlaps don't darken in any reader either. As annotations, each
+  highlighter stroke is its own `/Ink` with a `Multiply` appearance, and readers composite
+  those one by one, so overlapping highlighter annotations can still darken there. Flattened ink follows the page's content, which is wrapped in `q`/`Q`. Text
   is drawn as outlines, so no font is embedded; `/FreeText` keeps the words in `/Contents`.
   The file is written beside the target and renamed into place. Snips are drawn into the page
   as their source page's vector content (PAGE-7); shortcuts are not exported.
@@ -383,6 +391,7 @@ ScoreCraft's own additions, beyond what was observed:
 | INK-3 | Page 1 rotated 90° | a stroke is drawn from the screen's top left to bottom right | the stroke's samples, mapped through the page's rotation, land where they were drawn; rotating back to 0° keeps them on the same notes |
 | INK-4 | A stroke with pressures 0.1 then 1.0 | its outline is built | it is narrower at the start than the end, and never narrower than 25% of the width |
 | INK-5 | A highlighter stroke that crosses itself over white paper | the page is composed | the crossing pixel has the same colour as a pixel the stroke covers once |
+| INK-50 | Two highlighter strokes crossing, of one colour and then of two; a pen stroke after them; and a flattened export of two overlapping highlighters | the page is composed; the export is rendered | the crossing is no darker than one stroke; with two colours it shows the later one unmixed; the pen is on top; the exported overlap matches a single stroke |
 | INK-6 | A highlighter over black notation | the page is composed | the notation pixel stays black |
 | INK-7 | Whiteout over notation, then a pen stroke over it | the page is composed | the notation is covered by paper colour and the pen shows on top |
 | INK-8 | Three strokes, the eraser crosses two | one stroke-eraser gesture | two strokes are removed in one undo step |
@@ -459,8 +468,8 @@ None left from the spec. Answered by the owner on 2026-11-01. Marked *(to build)
 
 - **Highlighters never build up or mix.** All highlighter ink on a page sits in one layer: where
   two strokes overlap, of the same colour or different ones, the result is no darker than one
-  stroke, and colours do not blend; the later stroke shows *(to build: today a second stroke
-  multiplies again)*.
+  stroke, and colours do not blend; the later stroke shows. Built in the reader and in flattened
+  export (INK-50); see the requirement under the highlighter.
 - **The chisel stays upright on the page** when the page is rotated (as built).
 - **Text notes** have a preset maximum width per tool preset, and nothing (notes, stamps,
   selections, snips) can be moved past the page's edges: a drag stops at the edge *(to build:
@@ -479,6 +488,7 @@ swatches and palette (screenshot 28); the stylus shortcut (pen and eraser).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-01 | minor | Built: one highlighter layer in the reader and in flattened export (knockout group); INK-50 |
 | 2026-11-01 | minor | Owner's answers: one highlighter layer with no build-up or mixing; chisel upright on the page; preset note widths; nothing moves past the page edge; ruler moves and strokes snap to its edges until lift |
 | 2026-10-31 | minor | M4 part 5: export with ink, how it is written; INK-47..49 |
 | 2026-10-31 | minor | M4 part 4: the pen in the desktop app (pen told from a finger by pressure, library-backed scores, saved markup state); INK-43..46 |
