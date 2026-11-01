@@ -131,6 +131,10 @@ pub struct InkCanvas {
     pub selection: Option<Rect>,
     /// The next selection drag copies instead of moving.
     pub copy_next: bool,
+    /// The next tap places a snip of the selection rectangle there (PAGE-7).
+    pub snip_armed: bool,
+    /// The page a shortcut from the selection rectangle jumps to (NAV-1), 1-based.
+    pub shortcut_target: u32,
 }
 
 impl InkCanvas {
@@ -440,13 +444,31 @@ impl InkCanvas {
                         }
                         note(error, session.dispatch("annotate.stamp.place", &p));
                     }
+                    "select" if self.snip_armed && live.travel() < TAP_TRAVEL => {
+                        if let Some(sel) = self.selection {
+                            let r = session.dispatch(
+                                "page.snip.create",
+                                &json!({
+                                    "x0": sel.min.x, "y0": sel.min.y,
+                                    "x1": sel.max.x, "y1": sel.max.y,
+                                    "toX": a.x, "toY": a.y,
+                                }),
+                            );
+                            note(error, r);
+                        }
+                        self.snip_armed = false;
+                        self.selection = None;
+                        let _ = session.dispatch("annotate.select.clear", &json!({}));
+                    }
                     "select" => {
                         let r = session.dispatch(
                             "annotate.select.rect",
                             &json!({ "x0": a.x, "y0": a.y, "x1": b.x, "y1": b.y }),
                         );
+                        // An empty rectangle stays selected too: it can become a snip or a
+                        // shortcut (ANNO-12).
                         self.selection = note(error, r)
-                            .filter(|v| v.get("count").and_then(Value::as_u64).unwrap_or(0) > 0)
+                            .filter(|_| live.travel() >= TAP_TRAVEL)
                             .map(|_| Rect::from_two_pos(a, b));
                         if self.selection.is_none() {
                             let _ = session.dispatch("annotate.select.clear", &json!({}));
@@ -503,6 +525,25 @@ impl InkCanvas {
             return;
         }
         let off = rect.min.to_vec2();
+        // Score Shortcuts show as faint outlines in markup mode only (NAV-1).
+        let blue = Color32::from_rgb(0x30, 0x70, 0xe0);
+        for ([x0, y0, x1, y1], target) in session.shortcut_rects() {
+            let r = Rect::from_min_max(pos2(x0 as f32, y0 as f32), pos2(x1 as f32, y1 as f32))
+                .translate(off);
+            painter.rect_stroke(
+                r,
+                2.0,
+                Stroke::new(1.0, blue.gamma_multiply(0.7)),
+                egui::StrokeKind::Middle,
+            );
+            painter.text(
+                r.left_top() + vec2(2.0, 1.0),
+                egui::Align2::LEFT_TOP,
+                target.map_or_else(|| "→ hidden".to_owned(), |t| format!("→ p. {t}")),
+                egui::FontId::proportional(11.0),
+                blue,
+            );
+        }
         for p in &self.pending {
             painter.add(Shape::line(
                 p.shape.iter().map(|q| *q + off).collect(),

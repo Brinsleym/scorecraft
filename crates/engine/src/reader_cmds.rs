@@ -79,7 +79,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Half-Page Turns",
             "View>Turn",
             None,
-            r#"{"on":bool=true,"split":number?}"#,
+            r#"{"on":bool=true,"split":number?,"snap":bool=false}"#,
             false,
             half_page as _,
         ),
@@ -178,23 +178,36 @@ fn after_turn(r: &mut ReaderState) {
 }
 
 fn turn_next(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
-    with_reader(s, "view.turn.next", params, &[], |r, _| {
+    let v = with_reader(s, "view.turn.next", params, &[], |r, _| {
         let turned = r.reader.turn_next();
         if turned {
             after_turn(r);
         }
         Ok(json!({ "turned": turned }))
-    })
+    })?;
+    // Past the last page of a setlist entry: the next entry (LIST-4).
+    if v.get("turned") == Some(&json!(false))
+        && let Some(next) = crate::play_cmds::continue_turn(s, crate::play_cmds::Way::Forward)?
+    {
+        return Ok(next);
+    }
+    Ok(v)
 }
 
 fn turn_previous(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
-    with_reader(s, "view.turn.previous", params, &[], |r, _| {
+    let v = with_reader(s, "view.turn.previous", params, &[], |r, _| {
         let turned = r.reader.turn_previous();
         if turned {
             after_turn(r);
         }
         Ok(json!({ "turned": turned }))
-    })
+    })?;
+    if v.get("turned") == Some(&json!(false))
+        && let Some(prev) = crate::play_cmds::continue_turn(s, crate::play_cmds::Way::Back)?
+    {
+        return Ok(prev);
+    }
+    Ok(v)
 }
 
 fn page_goto(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
@@ -245,9 +258,22 @@ fn set_mode(r: &mut ReaderState, mode: TurnMode, on: bool) {
 
 fn half_page(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
     const ID: &str = "view.turn.halfPage";
-    with_reader(s, ID, params, &["on", "split"], |r, p| {
+    // With `snap`, the split moves to the gap between systems on the page on screen (G2).
+    let po = params_object(ID, params)?;
+    let snapped = if opt_bool(ID, po, "snap")?.unwrap_or(false) {
+        let wanted = match opt_f64(ID, po, "split")? {
+            Some(x) => Some(x),
+            None => s
+                .reader_state()
+                .and_then(|st| st.get("split").and_then(Value::as_f64)),
+        };
+        wanted.map(|w| snap_on_screen(s, w))
+    } else {
+        None
+    };
+    with_reader(s, ID, params, &["on", "split", "snap"], |r, p| {
         let on = opt_bool(ID, p, "on")?.unwrap_or(true);
-        if let Some(split) = opt_f64(ID, p, "split")? {
+        if let Some(split) = snapped.or(opt_f64(ID, p, "split")?) {
             let (lo, hi) = scorecraft_layout::SPLIT_RANGE;
             if !(lo..=hi).contains(&split) {
                 return Err(bad(ID, format!("`split` must be from {lo} to {hi}")));
@@ -257,6 +283,42 @@ fn half_page(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
         set_mode(r, TurnMode::HalfPage, on);
         Ok(json!({}))
     })
+}
+
+/// `split` snapped to the gap between systems on the page on screen, from a small render of it;
+/// unchanged when the page is turned sideways by the score or can't be rendered.
+fn snap_on_screen(s: &mut Session, split: f64) -> f64 {
+    let Some(open) = s.score.as_mut() else {
+        return split;
+    };
+    let page = open.reader.reader.page();
+    let Some(shown) = open.reader.shown.get(page).copied() else {
+        return split;
+    };
+    if shown.rotation != scorecraft_geom::Rotation::R0 {
+        return split;
+    }
+    let Ok(bm) = open.view.page(shown.file_page, 0.5) else {
+        return split;
+    };
+    let (w, h) = (bm.width as usize, bm.height as usize);
+    if w == 0 {
+        return split;
+    }
+    let rows: Vec<f32> = (0..h)
+        .map(|y| {
+            let row = bm.words.get(y * w..(y + 1) * w).unwrap_or(&[]);
+            let dark = row
+                .iter()
+                .filter(|px| {
+                    let [r, g, b, _] = px.to_ne_bytes();
+                    u32::from(r) + u32::from(g) + u32::from(b) < 3 * 140
+                })
+                .count();
+            dark as f32 / w as f32
+        })
+        .collect();
+    scorecraft_layout::snap_split(split, &rows)
 }
 
 fn alternating(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
@@ -414,6 +476,31 @@ mod tests {
     fn run(s: &mut Session, id: &str, p: Value) -> Value {
         s.dispatch(id, &p)
             .unwrap_or_else(|e| panic!("{id} {p}: {e}"))
+    }
+
+    #[test]
+    fn perf_15_the_half_page_split_snaps_between_systems() {
+        let mut s = Session::new();
+        let bytes = PdfBuilder::new()
+            .pages(2, PageSpec::default().with_staves(4))
+            .build();
+        s.open_score_bytes(Arc::new(bytes), None, "four.pdf")
+            .unwrap();
+        let plain = run(&mut s, "view.turn.halfPage", json!({ "split": 0.42 }));
+        assert_eq!(plain["split"], 0.42, "without snap, as asked");
+        let snapped = run(
+            &mut s,
+            "view.turn.halfPage",
+            json!({ "split": 0.42, "snap": true }),
+        );
+        let x = snapped["split"].as_f64().unwrap();
+        assert!(
+            x != 0.42 && (x - 0.42).abs() <= scorecraft_layout::MAX_SNAP,
+            "{x}"
+        );
+        // Asking again from the snapped place keeps it.
+        let again = run(&mut s, "view.turn.halfPage", json!({ "snap": true }));
+        assert!((again["split"].as_f64().unwrap() - x).abs() < 1e-9);
     }
 
     #[test]

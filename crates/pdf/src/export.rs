@@ -46,6 +46,13 @@ pub enum MarkKind {
     Text { text: String, size: f64 },
     /// A stamp: `/Stamp`.
     Stamp { text: String },
+    /// A Score Snip (PAGE-7): `from` (a rectangle of source page `page`) drawn at `to`, as the
+    /// source page's own vector content, clipped and scaled. Always drawn into the page.
+    Snip {
+        page: usize,
+        from: [f64; 4],
+        to: [f64; 4],
+    },
 }
 
 /// One marking to export.
@@ -213,15 +220,138 @@ fn resources_with(doc: &Cos, page: &Dict, states: &States) -> Dict {
 
 /// Draws `marks` into the page content.
 fn flatten(doc: &mut Cos, page_ref: ObjRef, marks: &[ExportMark]) -> Result<(), PdfError> {
-    let mut page = doc
-        .dict(&Object::Ref(page_ref))
-        .ok_or_else(|| PdfError::Render("a page is missing".into()))?;
     let mut states = States::default();
     let mut budget = MAX_EXPORT_POINTS;
-    let mut ops = String::from("Q\n");
+    let mut ops = String::new();
     for m in marks {
         ops.push_str(&fill_ops(&m.fills, &mut states, &mut budget));
     }
+    append_content(doc, page_ref, &ops, &states, &[])
+}
+
+/// `[a b c d e f]` matrices: `first` then `then`.
+fn mul(first: [f64; 6], then: [f64; 6]) -> [f64; 6] {
+    let [a, b, c, d, e, f] = first;
+    let [p, q, r, s, t, u] = then;
+    [
+        a * p + b * r,
+        a * q + b * s,
+        c * p + d * r,
+        c * q + d * s,
+        e * p + f * r + t,
+        e * q + f * s + u,
+    ]
+}
+
+fn invert(m: [f64; 6]) -> Option<[f64; 6]> {
+    let [a, b, c, d, e, f] = m;
+    let det = a * d - b * c;
+    if det.abs() < 1e-12 || !det.is_finite() {
+        return None;
+    }
+    let (ia, ib, ic, id) = (d / det, -b / det, -c / det, a / det);
+    Some([ia, ib, ic, id, -(e * ia + f * ic), -(e * ib + f * id)])
+}
+
+/// Draws the snips among `marks` into the page, each as its source page's content (a form
+/// XObject) clipped to its rectangle over white paper, so it covers what is beneath as the
+/// reader's copy does, with a thin grey frame.
+fn draw_snips(
+    doc: &mut Cos,
+    src: &Cos,
+    page_ref: ObjRef,
+    marks: &[ExportMark],
+    forms: &mut std::collections::HashMap<usize, ObjRef>,
+) -> Result<(), PdfError> {
+    let boxes = pdfcraft_organize::page_boxes(src).map_err(|e| fail("reading the pages", e))?;
+    let mut ops = String::new();
+    let mut xobjects = Vec::new();
+    for m in marks {
+        let MarkKind::Snip { page, from, to } = &m.kind else {
+            continue;
+        };
+        let (fw, fh) = (from[2] - from[0], from[3] - from[1]);
+        let (tw, th) = (to[2] - to[0], to[3] - to[1]);
+        if !(fw > 0.0 && fh > 0.0 && tw > 0.0 && th > 0.0) {
+            continue;
+        }
+        let Some(crop) = boxes.get(*page).map(|b| b[1]) else {
+            continue;
+        };
+        let rotate = pdfcraft_organize::page_rotation(src, *page)
+            .unwrap_or(0)
+            .rem_euclid(360);
+        // The form's own /Matrix (see `page_as_form`): undo it, so its content lands in the
+        // source page's user space, then map `from` onto `to`.
+        let form_m = match rotate {
+            90 => [0.0, -1.0, 1.0, 0.0, -crop[1], crop[2]],
+            180 => [-1.0, 0.0, 0.0, -1.0, crop[2], crop[3]],
+            270 => [0.0, 1.0, -1.0, 0.0, crop[3], -crop[0]],
+            _ => [1.0, 0.0, 0.0, 1.0, -crop[0], -crop[1]],
+        };
+        let Some(undo) = invert(form_m) else {
+            continue;
+        };
+        let (sx, sy) = (tw / fw, th / fh);
+        let place = [sx, 0.0, 0.0, sy, to[0] - from[0] * sx, to[1] - from[1] * sy];
+        let cm = mul(undo, place);
+        let form = match forms.get(page) {
+            Some(f) => *f,
+            None => {
+                let (f, _) = pdfcraft_organize::page_as_form(doc, src, *page)
+                    .map_err(|e| fail("copying a snip's page", e))?;
+                forms.insert(*page, f);
+                f
+            }
+        };
+        let name = format!("SCsnip{}", xobjects.len());
+        let _ = writeln!(
+            ops,
+            "q {} {} {} {} re W n 1 g {} {} {} {} re f {} {} {} {} {} {} cm /{name} Do Q",
+            num(to[0]),
+            num(to[1]),
+            num(tw),
+            num(th),
+            num(to[0]),
+            num(to[1]),
+            num(tw),
+            num(th),
+            num(cm[0]),
+            num(cm[1]),
+            num(cm[2]),
+            num(cm[3]),
+            num(cm[4]),
+            num(cm[5]),
+        );
+        let _ = writeln!(
+            ops,
+            "q 0.627 G 0.5 w {} {} {} {} re S Q",
+            num(to[0]),
+            num(to[1]),
+            num(tw),
+            num(th)
+        );
+        xobjects.push((name, form));
+    }
+    if ops.is_empty() {
+        return Ok(());
+    }
+    append_content(doc, page_ref, &ops, &States::default(), &xobjects)
+}
+
+/// Appends `ops` after the page's content (which is wrapped in `q`/`Q` so its graphics state
+/// can't leak), adding `states` and `xobjects` to its resources.
+fn append_content(
+    doc: &mut Cos,
+    page_ref: ObjRef,
+    ops: &str,
+    states: &States,
+    xobjects: &[(String, ObjRef)],
+) -> Result<(), PdfError> {
+    let mut page = doc
+        .dict(&Object::Ref(page_ref))
+        .ok_or_else(|| PdfError::Render("a page is missing".into()))?;
+    let ops = format!("Q\n{ops}");
     let before = doc.add(Object::Stream(Stream::from_raw(
         Dict::new(),
         b"q\n".to_vec(),
@@ -240,7 +370,17 @@ fn flatten(doc: &mut Cos, page_ref: ObjRef, marks: &[ExportMark]) -> Result<(), 
         }
     }
     contents.push(Object::Ref(after));
-    let res = resources_with(doc, &page, &states);
+    let mut res = resources_with(doc, &page, states);
+    if !xobjects.is_empty() {
+        let mut xo = res
+            .get(b"XObject")
+            .and_then(|o| doc.dict(o))
+            .unwrap_or_default();
+        for (n, r) in xobjects {
+            xo.set(n.as_bytes().to_vec(), Object::Ref(*r));
+        }
+        res.set(b"XObject".to_vec(), Object::Dict(xo));
+    }
     page.set(b"Contents".to_vec(), Object::Array(contents));
     page.set(b"Resources".to_vec(), Object::Dict(res));
     doc.set(page_ref, Object::Dict(page));
@@ -337,6 +477,8 @@ fn annotate(
                 a.set(b"Name".to_vec(), Object::name("ScoreCraftDynamic"));
                 a.set(b"Contents".to_vec(), PdfString::text(text));
             }
+            // Drawn into the page by `draw_snips`, never an annotation.
+            MarkKind::Snip { .. } => continue,
         }
         annots.push(Object::Ref(doc.add(Object::Dict(a))));
     }
@@ -373,6 +515,7 @@ pub fn export_pdf(
     let refs = pdfcraft_organize::import_pages(&mut dst, &src, &order, 0)
         .map_err(|e| fail("copying the pages", e))?;
     let mut serial = 0;
+    let mut forms = std::collections::HashMap::new();
     for (i, (page, r)) in pages.iter().zip(&refs).enumerate() {
         if page.rotate.rem_euclid(360) != 0 {
             let turn = page.rotate.rem_euclid(360) / 90 * 90;
@@ -390,9 +533,20 @@ pub fn export_pdf(
         if page.marks.is_empty() {
             continue;
         }
+        // Snips are page content in both modes; the rest go as the mode says.
+        draw_snips(&mut dst, &src, *r, &page.marks, &mut forms)?;
+        let rest: Vec<ExportMark> = page
+            .marks
+            .iter()
+            .filter(|m| !matches!(m.kind, MarkKind::Snip { .. }))
+            .cloned()
+            .collect();
+        if rest.is_empty() {
+            continue;
+        }
         match mode {
-            ExportMode::Flatten => flatten(&mut dst, *r, &page.marks)?,
-            ExportMode::Annotations => annotate(&mut dst, *r, &page.marks, &mut serial)?,
+            ExportMode::Flatten => flatten(&mut dst, *r, &rest)?,
+            ExportMode::Annotations => annotate(&mut dst, *r, &rest, &mut serial)?,
         }
     }
     pdfcraft_cos::write_full(&dst, &SaveOptions::default()).map_err(|e| fail("writing the PDF", e))
@@ -497,6 +651,48 @@ mod tests {
         let doc = Document::open(Arc::new(out)).unwrap();
         let g = doc.page(0).unwrap();
         assert_eq!(g.crop, [50.0, 50.0, 500.0, 700.0]);
+    }
+
+    #[test]
+    fn snips_copy_the_source_pages_content() {
+        // Page 1 gets a red square; page 2's snip of that square lands at the same place.
+        let pages = vec![
+            ExportPage {
+                file_page: 0,
+                rotate: 0,
+                crop: None,
+                marks: vec![mark(square(100.0, 100.0, 50.0, [200, 0, 0], false))],
+            },
+            ExportPage {
+                file_page: 1,
+                rotate: 0,
+                crop: None,
+                marks: vec![ExportMark {
+                    rgb: [0, 0, 0],
+                    kind: MarkKind::Snip {
+                        page: 0,
+                        from: [0.0, 0.0, 612.0, 792.0],
+                        to: [0.0, 0.0, 612.0, 792.0],
+                    },
+                    fills: Vec::new(),
+                }],
+            },
+        ];
+        let out = export_pdf(source(2), None, &pages, ExportMode::Annotations).unwrap();
+        let mut doc = Document::open(Arc::new(out)).unwrap();
+        // The snip copies the source page's own content (not its ink, which is drawn on top
+        // of page 1 alone): page 2 at the square's place looks like page 1 without ink.
+        let mut original = Document::open(source(2)).unwrap();
+        for (x, y) in [(125.0, 125.0), (300.0, 300.0), (72.0, 700.0)] {
+            assert_eq!(
+                pixel(&mut doc, 1, x, y),
+                pixel(&mut original, 0, x, y),
+                "at {x}, {y}"
+            );
+        }
+        // The frame is drawn.
+        let frame = pixel(&mut doc, 1, 0.2, 400.0);
+        assert!(frame.iter().all(|c| *c < 240), "{frame:?}");
     }
 
     #[test]

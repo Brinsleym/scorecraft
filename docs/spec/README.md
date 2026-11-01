@@ -53,3 +53,4 @@ and public standards. Implementers work from these specs.
 | [page-turning.md](page-turning.md) | READ-2, READ-3, READ-5, READ-6, READ-12, READ-15, TURN-1..4, TURN-8, NAV-5 | first version 2026-10-31 |
 | [ink.md](ink.md) | ANNO-1..17, EXP-2 | first version 2026-10-31 |
 | [library.md](library.md) | LIB-2, LIB-5, LIB-9, LIB-13, LIB-14, LIB-15 | first version 2026-10-31 |
+| [performance.md](performance.md) | LIST-4, LIST-6, IMP-6, PRAC-1, NAV-1, PAGE-7 | first version 2026-10-31 |

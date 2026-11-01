@@ -355,8 +355,8 @@ ScoreCraft's own additions, beyond what was observed:
   like the reader on white paper; the highlighter's paths use an `ExtGState` with
   `/BM /Multiply`. Flattened ink follows the page's content, which is wrapped in `q`/`Q`. Text
   is drawn as outlines, so no font is embedded; `/FreeText` keeps the words in `/Contents`.
-  The file is written beside the target and renamed into place. Snips and shortcuts are not
-  exported (M6).
+  The file is written beside the target and renamed into place. Snips are drawn into the page
+  as their source page's vector content (PAGE-7); shortcuts are not exported.
 
 ### Drawing and colours under filters
 

@@ -459,9 +459,43 @@ fn draw_ink(
     ink: &PageInk,
 ) -> Arc<Bitmap> {
     let marks: Vec<&scorecraft_doc::AnnotationKind> = ink.marks.iter().collect();
-    doc.page(page)
-        .ok()
-        .and_then(|g| page_to_bitmap(g, base))
-        .and_then(|m| compose(base, m, &marks, filter, &ink.curve))
-        .map_or_else(|| base.clone(), Arc::new)
+    let Some(m) = doc.page(page).ok().and_then(|g| page_to_bitmap(g, base)) else {
+        return base.clone();
+    };
+    let Some(mut out) = compose(base, m, &marks, filter, &ink.curve) else {
+        return base.clone();
+    };
+    // Snips copy another page's bars: render that page at this page's scale (PAGE-7).
+    let snips: Vec<&scorecraft_doc::Snip> = marks
+        .iter()
+        .filter_map(|k| match k {
+            scorecraft_doc::AnnotationKind::Snip(s) => Some(s),
+            _ => None,
+        })
+        .collect();
+    if !snips.is_empty() {
+        let scale = m
+            .coeffs()
+            .iter()
+            .take(4)
+            .map(|c| c.abs())
+            .fold(0.0, f64::max) as f32;
+        let mut src_doc = doc.fork(doc.colors());
+        for s in snips {
+            let Ok(src_page) = usize::try_from(s.from.page.0) else {
+                continue;
+            };
+            let Ok(src) = src_doc.render(src_page, scale) else {
+                continue;
+            };
+            if let Some(src_m) = src_doc
+                .page(src_page)
+                .ok()
+                .and_then(|g| page_to_bitmap(g, &src))
+            {
+                crate::ink::draw_snip(&mut out, m, &src, src_m, s);
+            }
+        }
+    }
+    Arc::new(out)
 }

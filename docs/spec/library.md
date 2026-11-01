@@ -64,6 +64,17 @@ to file scores, metadata, the trash and Verify & Repair are M1's
 - The whole import is one undo step. A file that can't be read is listed with the reason and the
   rest still import.
 
+### LIB-6 Search inside scores
+
+- *Inside scores* searches the words printed in every score's PDF and its notes (practice notes
+  and the notes field), with the same matching as LIB-5. A result names the page of the file
+  where the first query word appears and shows the words around it.
+- Each file's text is read once and kept in the library's cache (`cache/text/`, never part of
+  the model, safe to lose). A search reads files it hasn't seen yet within a time budget (1.5 s
+  for agents, 0.1 s per frame in the app, which asks again while files are waiting) and says
+  how many are still waiting. Text is kept up to 100,000 characters a page and 2 million a score.
+- Scanned pages have no text until OCR (LIB-7) comes.
+
 ### LIB-14 The library window
 
 - A grid of covers (each score's first shown page, with its title and composer under it) or a
@@ -92,12 +103,13 @@ to file scores, metadata, the trash and Verify & Repair are M1's
 | LIBS-6 | Two scores opened, one then trashed | the recent list is asked for | only the other |
 | LIBS-7 | A folder with two PDFs, a text file and a subfolder with one PDF, one already imported | it is imported with subfolders and *keep folders* | two new scores, one skipped, the text file ignored; the subfolder's score is in a library folder of its name; one undo removes them all |
 | LIBS-8 | A score filed in folder *Bach* | "bach" is searched | it is found |
+| LIBS-11 | Two scores whose pages print their numbers (3 pages and 2) | "3" is searched inside scores; then "2"; then again after the session forgets its index | the 3-page score, page 3, snippet "3"; both; the first again, from the library's cache |
+| LIBS-12 | A score whose notes say "Take the coda with rubato" | "RUBATO" is searched inside scores | that score, with the words around it |
 | LIBS-9 | A portrait score | its cover is asked for at 200 px, then after its first page is turned | 200 px tall, narrower than that; then turned, width and height swapped |
 | LIBS-10 | The app with a library score | the library window is shown | the score's cover arrives without blocking a frame; list view works; opening a score closes the window |
 
 ## Not in scope
 
-- Full-text search inside PDFs and practice notes (LIB-6, P1): after the text index exists.
 - Title and composer detection (LIB-7, -8): with `pdfcraft-ocr`, later.
 
 ## Open questions
@@ -111,6 +123,7 @@ to file scores, metadata, the trash and Verify & Repair are M1's
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-31 | patch | LIB-6 search inside scores: PDF text and notes, a lazy on-disk text cache; LIBS-11, -12 |
 | 2026-10-31 | patch | M5 part 3: LIB-13 names perf scenarios P6 and P7 (10,000 scores), first measurement |
 | 2026-10-31 | patch | M5 part 2: LIBS-9, -10 for covers and the library window |
 | 2026-10-31 | major | First version for M5: search, sort, recently opened, folder import, the library window, speed |

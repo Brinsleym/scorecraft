@@ -1,6 +1,6 @@
 # Page turning
 
-> **Last reviewed:** 2026-10-31 · **Last updated:** 2026-10-31 · **Change:** major (first version) · **Target:** enScore 3.7 (2026)
+> **Last reviewed:** 2026-10-31 · **Last updated:** 2026-10-31 · **Change:** minor (the half-page cut snaps between systems; earlier: first version) · **Target:** enScore 3.7 (2026)
 
 How the reader lays pages out and turns them, and how taps, swipes, keys and foot pedals turn
 them. Written for milestone M3.
@@ -43,7 +43,12 @@ them. Written for milestone M3.
 - From a full view, the first turn replaces the **top** part of the screen with the top part of the
   next spread; the bottom part, which the player is reading, stays where it is. The next turn
   completes the turn.
-- The cut is at 50% of the page height by default, adjustable from 20% to 80%.
+- The cut is at 50% of the page height by default, adjustable from 20% to 80%. Turning half-page
+  turns on in the app snaps the cut to the gap between systems on the page on screen: a small
+  render of the page shows its blank bands (rows with almost no ink, at least 1.2% of the page
+  tall, not touching the edges), and the cut moves to the middle of the nearest one within 15%
+  of the page height. A score page turned sideways, or with no gap near, keeps the cut as set
+  (`view.turn.halfPage` with `snap`).
 - Turning back during a half-page turn undoes it. Turning back from a full view goes to the half
   view before it.
 - Works in both layouts.
@@ -135,4 +140,5 @@ PT-1 to PT-9 are engine tests (`crates/layout`, `crates/engine/src/reader_cmds.r
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-31 | minor | The half-page cut snaps to the gap between systems (gap G2); PERF-15 in `crates/engine/src/reader_cmds.rs`, `scorecraft-layout` test in `snap.rs` |
 | 2026-10-31 | major | First version for M3: layouts, half-page and alternating turns, zoom, go to page, contents, tap, swipe, keys and pedals |

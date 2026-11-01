@@ -517,6 +517,79 @@ impl crate::Session {
     }
 }
 
+impl crate::Session {
+    /// The Score Shortcuts on the pages on screen (NAV-1), as viewport rectangles
+    /// `[x0, y0, x1, y1]` with the score page each jumps to (1-based; `None` if that page isn't
+    /// shown): what the reader outlines in markup mode.
+    pub fn shortcut_rects(&self) -> Vec<([f64; 4], Option<usize>)> {
+        let mut out = Vec::new();
+        let Some(open) = self.score.as_ref() else {
+            return out;
+        };
+        let Some(score) = library_score(self.library(), open.library_score) else {
+            return out;
+        };
+        let doc = open.view.document();
+        let frame = open.reader.frame();
+        for slot in &frame.slots {
+            let Some(shown) = open.reader.shown.get(slot.page) else {
+                continue;
+            };
+            let Some(page_box) = doc.page(shown.file_page).ok().map(page_box) else {
+                continue;
+            };
+            let hit = PageHit {
+                page: slot.page,
+                file_page: shown.file_page,
+                rotation: shown.rotation,
+                src: slot.src,
+                dst: slot.dst,
+                page_box,
+            };
+            // The view-to-page map is affine: build it from three points and invert it.
+            let (x, y) = (slot.dst.x0, slot.dst.y0);
+            let (Some(o), Some(px), Some(py)) = (
+                hit.to_page(x, y),
+                hit.to_page(x + 1.0, y),
+                hit.to_page(x, y + 1.0),
+            ) else {
+                continue;
+            };
+            let to_page = scorecraft_geom::Affine::new([
+                px.x - o.x,
+                px.y - o.y,
+                py.x - o.x,
+                py.y - o.y,
+                o.x - (px.x - o.x) * x - (py.x - o.x) * y,
+                o.y - (px.y - o.y) * x - (py.y - o.y) * y,
+            ]);
+            let Some(to_view) = to_page.inverse() else {
+                continue;
+            };
+            let Ok(key) = u32::try_from(shown.file_page) else {
+                continue;
+            };
+            for a in score.annotations_on(PageKey(key)) {
+                let AnnotationKind::Shortcut(sc) = &a.kind else {
+                    continue;
+                };
+                if !score.layer(a.layer).is_some_and(|l| l.visible) {
+                    continue;
+                }
+                let r = to_view.apply_rect(sc.at.rect);
+                let target = open
+                    .reader
+                    .shown
+                    .iter()
+                    .position(|s| u32::try_from(s.file_page).is_ok_and(|f| PageKey(f) == sc.target))
+                    .map(|i| i + 1);
+                out.push(([r.x0, r.y0, r.x1, r.y1], target));
+            }
+        }
+        out
+    }
+}
+
 /// The page under viewport point (`x`, `y`), if any.
 pub(crate) fn hit(reader: &ReaderState, doc: &Document, x: f64, y: f64) -> Option<PageHit> {
     let frame = reader.frame();

@@ -12,8 +12,13 @@ publish = false
 default = ["power"]
 # Keep the screen awake (READ-9): SetThreadExecutionState on Windows.
 power = ["dep:windows-sys"]
+# The metronome's click (PRAC-1) through the default audio output. Off by default: the desktop
+# app turns it on for Windows and macOS (Linux needs ALSA headers to build it).
+audio = ["dep:cpal"]
 
 [dependencies]
+scorecraft-audio = { workspace = true }
+cpal = { version = "0.15", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_System_Power"], optional = true }

@@ -95,7 +95,19 @@ fn export_mark(kind: &AnnotationKind, curve: &PressureCurve) -> Option<ExportMar
             },
             st.color,
         ),
-        AnnotationKind::Snip(_) | AnnotationKind::Shortcut(_) => return None,
+        AnnotationKind::Snip(sn) => {
+            let r = |x: scorecraft_geom::Rect| [x.x0, x.y0, x.x1, x.y1];
+            return Some(ExportMark {
+                kind: MarkKind::Snip {
+                    page: usize::try_from(sn.from.page.0).ok()?,
+                    from: r(sn.from.rect),
+                    to: r(sn.to.rect),
+                },
+                fills: Vec::new(),
+                rgb: [0, 0, 0],
+            });
+        }
+        AnnotationKind::Shortcut(_) => return None,
     };
     if filled.is_empty() {
         return None;

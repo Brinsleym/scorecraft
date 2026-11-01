@@ -1,8 +1,8 @@
 # ScoreCraft roadmap
 
-**Stage: pre-alpha** · next: alpha, the [alpha gate](docs/roadmap.md#alpha-gate) (~116–309 h away)
+**Stage: pre-alpha** · next: alpha, the [alpha gate](docs/roadmap.md#alpha-gate) (~105–287 h away)
 
-> **Last reviewed:** 2026-10-28 · **Last updated:** 2026-10-31 · **Change:** patch (M5 part 2: the library window, breadth 50%; earlier: M5 part 1: library search and sort, breadth 49%; earlier: M4 part 5: export with ink, breadth 47%; earlier: M4 part 4: the pen in the desktop app; earlier: merged with M3 done on main: M3 reader app done; earlier: M4 part 3: rectangle select, shapes and the pen button, breadth 46%; earlier: M4 part 2c: stamps, breadth 43%; earlier: M4 part 2b: text notes, breadth 42%; earlier: M4 part 2a: layers and presets, breadth 41%; earlier: owner's answers on markup, 124 rows, breadth 38%; earlier: M4 part 1: the ink engine and markup commands, breadth 39%; earlier: M1 foundation and M2 PDF reading done; earlier: owner's priorities after the M0 review; earlier: M0 skeleton done; earlier: 4 features added from the Microsoft Store description; PDF backend reuses PDFCraft) · **Target:** enScore 3.7 (2026)
+> **Last reviewed:** 2026-10-28 · **Last updated:** 2026-10-31 · **Change:** patch (M6 part 3: shortcuts and snips, breadth 53%; earlier: M6 part 2: the metronome, breadth 52%; earlier: M6 part 1: playing a list, breadth 51%; earlier: M5 part 2: the library window, breadth 50%; earlier: M5 part 1: library search and sort, breadth 49%; earlier: M4 part 5: export with ink, breadth 47%; earlier: M4 part 4: the pen in the desktop app; earlier: merged with M3 done on main: M3 reader app done; earlier: M4 part 3: rectangle select, shapes and the pen button, breadth 46%; earlier: M4 part 2c: stamps, breadth 43%; earlier: M4 part 2b: text notes, breadth 42%; earlier: M4 part 2a: layers and presets, breadth 41%; earlier: owner's answers on markup, 124 rows, breadth 38%; earlier: M4 part 1: the ink engine and markup commands, breadth 39%; earlier: M1 foundation and M2 PDF reading done; earlier: owner's priorities after the M0 review; earlier: M0 skeleton done; earlier: 4 features added from the Microsoft Store description; PDF backend reuses PDFCraft) · **Target:** enScore 3.7 (2026)
 
 ScoreCraft's one-page summary of how close it is to enScore 3.7 (measured from public listings on
 2026-10-28). Detail: [target-app parity](docs/target-app-parity.md) (methodology, weights,
@@ -18,13 +18,13 @@ repository has merged-PR history. About 75% of the work parallelizes.
 
 | | Value | Kind |
 |---|---|---|
-| **Feature breadth** | **50%** | measured: 53 of 124 feature-map rows live (M3's reader app and M4's markup) |
+| **Feature breadth** | **54%** | measured: 58 of 124 feature-map rows live (M3's reader app and M4's markup) |
 | **Ready for real work** | **5%** | estimated: you can read a PDF and turn pages with a pedal on Windows; the pen marks up in the desktop app, unchecked on a tablet |
 | Practising musician | 0% | estimated ([method](docs/target-app-parity.md#practising-musician)) |
 | Essentials user | 0% | estimated ([method](docs/target-app-parity.md#essentials-user)) |
-| Remaining to **alpha** | **~116–309 h** | estimated |
-| Remaining to **beta** | **~551–1,162 h** | estimated |
-| Remaining to **full parity** | **~778–1,608 h** | estimated |
+| Remaining to **alpha** | **~105–287 h** | estimated |
+| Remaining to **beta** | **~520–1,105 h** | estimated |
+| Remaining to **full parity** | **~747–1,551 h** | estimated |
 
 **Why pre-alpha.** The project has its process, clean-room rules, architecture and feature map, and
 the M0 skeleton, PDF reading over PDFCraft (M2) and the foundation (M1): the document model,
@@ -68,6 +68,15 @@ Detail: [docs/roadmap.md](docs/roadmap.md).
 
 | Date | Entry |
 |---|---|
+| 2026-10-31 | LIB-6: search inside scores (the words in their PDFs and notes), indexed lazily into the library's cache; parity 58 of 124 |
+| 2026-10-31 | M3 follow-up: the half-page split snaps to the gap between systems |
+| 2026-10-31 | The metronome's click: sample-accurate synthesis (`scorecraft-audio`) through the default audio output on Windows and macOS (`scorecraft-devices`, cpal); every alpha workflow is now code complete |
+| 2026-10-31 | The Score panel in the app: details (title, composer, tags…), the page editor (turn, hide, reorder, delete) and bookmarks; the alpha gate re-graded: code complete but for the metronome click, fuzzing and the tablet checks |
+| 2026-10-31 | M6 part 4: shortcut outlines in markup mode; snips exported as vector copies of their source page; snip resizing |
+| 2026-10-31 | M6 part 4: lists in the app: the Lists panel (make, fill, reorder, play) and a now-playing strip; each next score keeps the window and layout |
+| 2026-10-31 | M6 part 3: Score Shortcuts (tap to jump) and Score Snips (another page's bars drawn into this one), from the rectangle tool; parity 57 of 124 |
+| 2026-10-31 | M6 part 2: the metronome: 20–300 BPM in 2, 3, 4 or 6, tap tempo, entry tempos, a pulse along the reader's top edge (the click waits on audio output); parity 55 of 124 |
+| 2026-10-31 | M6 part 1: [performance spec](docs/spec/performance.md); playing a list (pieces flow into one another, entry page ranges, breaks reported), one score in many lists, the import report; parity 54 of 124 |
 | 2026-10-31 | M5 part 3: library speed measured: 10,000 scores open and list in 172 ms, search in 22 ms (development container) |
 | 2026-10-31 | M5 part 2: the library window: covers rendered off the frame, or a list; search box, sort, folders, folder import; `library.cover`; parity 53 of 124 |
 | 2026-10-31 | M5 part 1: [library spec](docs/spec/library.md); search (word starts, no case or accents, ranked), sort (natural, articles ignored), recently opened, folder import in the engine; parity 52 of 124 |
@@ -93,6 +102,9 @@ Detail: [docs/roadmap.md](docs/roadmap.md).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-31 | patch | M6 part 3: breadth 52% → 53% (57 of 124); beta ~525–1,115 h, full ~752–1,561 h |
+| 2026-10-31 | patch | M6 part 2: breadth 51% → 52% (55 of 124); alpha ~105–287 h, beta ~540–1,140 h, full ~767–1,586 h |
+| 2026-10-31 | patch | M6 part 1: breadth 50% → 51% (54 of 124); alpha ~110–297 h, beta ~545–1,150 h, full ~772–1,596 h |
 | 2026-10-31 | patch | M5 part 2: breadth 49% → 50% (53 of 124); beta ~551–1,162 h, full ~778–1,608 h |
 | 2026-10-31 | patch | M5 part 1: breadth 47% → 49% (52 of 124); alpha ~116–309 h, beta ~556–1,172 h, full ~783–1,618 h |
 | 2026-10-31 | patch | M4 part 5, export with ink: breadth 46% → 47% (48 of 124); alpha ~121–319 h, beta ~565–1,189 h, full ~792–1,635 h |

@@ -121,6 +121,13 @@ pub struct LibraryView {
     covers: HashMap<String, Cover>,
     pending: usize,
     worker: Worker,
+    /// The setlist shown in the Lists panel (LIST-1), and what `list.get` said of it.
+    pub open_list: Option<String>,
+    list_detail: Value,
+    lists: Value,
+    new_list: String,
+    /// Search inside the scores' PDFs and notes (LIB-6) rather than their details.
+    pub full_text: bool,
 }
 
 impl Default for LibraryView {
@@ -136,6 +143,11 @@ impl Default for LibraryView {
             covers: HashMap::new(),
             pending: 0,
             worker: Worker::new(),
+            open_list: None,
+            list_detail: Value::Null,
+            lists: Value::Null,
+            new_list: String::new(),
+            full_text: false,
         }
     }
 }
@@ -164,24 +176,54 @@ impl LibraryView {
             .ok()
             .and_then(|v| v.get("sort").cloned())
             .unwrap_or(Value::Null);
-        let ask = (self.query.clone(), self.folder.clone(), sort);
+        let ask = (
+            format!(
+                "{}{}",
+                if self.full_text { "\u{1}" } else { "" },
+                self.query
+            ),
+            self.folder.clone(),
+            sort,
+        );
         if !self.dirty && self.asked.as_ref() == Some(&ask) {
             return;
         }
-        let mut p = json!({ "query": self.query, "limit": 500 });
-        if let (Some(f), Some(o)) = (&self.folder, p.as_object_mut()) {
-            o.insert("folder".into(), json!(f));
-        }
-        self.results = session
-            .dispatch("library.search", &p)
-            .unwrap_or_else(|e| json!({ "error": e.to_string() }));
-        self.folders = session
+        let mut more = false;
+        self.results = if self.full_text && !self.query.trim().is_empty() {
+            // A little indexing per frame; while files are waiting, ask again next frame.
+            let r = session
+                .dispatch(
+                    "library.search.fullText",
+                    &json!({ "query": self.query, "limit": 200, "budgetMs": 100 }),
+                )
+                .unwrap_or_else(|e| json!({ "error": e.to_string() }));
+            more = r.get("pending").and_then(Value::as_u64).unwrap_or(0) > 0;
+            r
+        } else {
+            let mut p = json!({ "query": self.query, "limit": 500 });
+            if let (Some(f), Some(o)) = (&self.folder, p.as_object_mut()) {
+                o.insert("folder".into(), json!(f));
+            }
+            session
+                .dispatch("library.search", &p)
+                .unwrap_or_else(|e| json!({ "error": e.to_string() }))
+        };
+        let info = session
             .dispatch("library.info", &json!({}))
-            .ok()
-            .and_then(|v| v.get("folders").cloned())
             .unwrap_or(Value::Null);
+        self.folders = info.get("folders").cloned().unwrap_or(Value::Null);
+        self.lists = info.get("lists").cloned().unwrap_or(Value::Null);
+        self.list_detail = match &self.open_list {
+            Some(id) => session
+                .dispatch("list.get", &json!({ "list": id }))
+                .unwrap_or(Value::Null),
+            None => Value::Null,
+        };
+        if self.list_detail.is_null() {
+            self.open_list = None;
+        }
         self.asked = Some(ask);
-        self.dirty = false;
+        self.dirty = more;
     }
 
     fn take_covers(&mut self, ctx: &Context) {
@@ -248,6 +290,13 @@ impl LibraryView {
                     .hint_text("Search title, composer, tags, key…")
                     .desired_width(320.0),
             );
+            if ui
+                .selectable_label(self.full_text, "Inside scores")
+                .on_hover_text("Search the words in the PDFs and practice notes")
+                .clicked()
+            {
+                self.full_text = !self.full_text;
+            }
             let sort = self
                 .asked
                 .as_ref()
@@ -309,6 +358,13 @@ impl LibraryView {
             }
         });
         ui.add_space(6.0);
+        let area = ui.available_rect_before_wrap();
+        let panel = egui::Rect::from_min_size(area.min, vec2(260.0, area.height()));
+        let mut panel_ui = ui.new_child(egui::UiBuilder::new().max_rect(panel));
+        self.lists_panel(&mut panel_ui, tokens, &mut out);
+        let rest = egui::Rect::from_min_max(egui::pos2(panel.right() + 12.0, area.top()), area.max);
+        let mut rest_ui = ui.new_child(egui::UiBuilder::new().max_rect(rest));
+        let ui = &mut rest_ui;
         // Folders inside the one shown, then a way back up.
         let folders: Vec<(String, String, Option<String>)> = self
             .folders
@@ -360,13 +416,22 @@ impl LibraryView {
             .get("count")
             .and_then(Value::as_u64)
             .unwrap_or(0);
+        let pending = self
+            .results
+            .get("pending")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
         ui.label(
-            RichText::new(match count {
-                1 => "1 score".to_owned(),
-                n => format!("{n} scores"),
+            RichText::new(match (count, pending) {
+                (1, 0) => "1 score".to_owned(),
+                (n, 0) => format!("{n} scores"),
+                (n, p) => format!("{n} so far; reading {p} more…"),
             })
             .color(tokens.text),
         );
+        if pending > 0 {
+            ui.ctx().request_repaint();
+        }
         egui::ScrollArea::vertical()
             .auto_shrink(false)
             .show(ui, |ui| {
@@ -407,11 +472,139 @@ impl LibraryView {
                                     .and_then(Value::as_u64)
                                     .unwrap_or(0)));
                                 ui.end_row();
+                                if let Some(sn) = s
+                                    .get("snippet")
+                                    .or_else(|| s.get("notes"))
+                                    .and_then(Value::as_str)
+                                {
+                                    let page = s
+                                        .get("filePage")
+                                        .and_then(Value::as_u64)
+                                        .map(|p| format!("p. {p}: "))
+                                        .unwrap_or_default();
+                                    ui.label(RichText::new(format!("{page}{sn}")).weak().italics());
+                                    ui.end_row();
+                                }
                             }
                         });
                 }
             });
         out
+    }
+
+    /// The setlists (LIST-1, LIST-4): pick one to see its entries, reorder or remove them, add a
+    /// break, and play from any entry. Scores are added from their covers' menus.
+    fn lists_panel(&mut self, ui: &mut Ui, tokens: &Tokens, out: &mut Vec<LibraryAction>) {
+        ui.label(RichText::new("Lists").strong().color(tokens.text));
+        let lists: Vec<(String, String, u64)> = self
+            .lists
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|l| {
+                Some((
+                    l.get("id")?.as_str()?.to_owned(),
+                    l.get("name")?.as_str()?.to_owned(),
+                    l.get("entries").and_then(Value::as_u64).unwrap_or(0),
+                ))
+            })
+            .collect();
+        for (id, name, n) in &lists {
+            let open = self.open_list.as_deref() == Some(id.as_str());
+            if ui.selectable_label(open, format!("{name} ({n})")).clicked() {
+                self.open_list = if open { None } else { Some(id.clone()) };
+                self.dirty = true;
+            }
+        }
+        ui.horizontal(|ui| {
+            ui.add(
+                egui::TextEdit::singleline(&mut self.new_list)
+                    .hint_text("New list")
+                    .desired_width(150.0),
+            );
+            if ui.button("Add").clicked() && !self.new_list.trim().is_empty() {
+                out.push(LibraryAction::Command(
+                    "list.new",
+                    json!({ "name": self.new_list.trim() }),
+                ));
+                self.new_list.clear();
+            }
+        });
+        let Some(list) = self.open_list.clone() else {
+            return;
+        };
+        ui.separator();
+        let entries: Vec<Value> = self
+            .list_detail
+            .get("entries")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        ui.horizontal(|ui| {
+            if ui
+                .add_enabled(!entries.is_empty(), egui::Button::new("▶ Play"))
+                .clicked()
+            {
+                out.push(LibraryAction::Command("list.play", json!({ "list": list })));
+            }
+            if ui.button("Add break").clicked() {
+                out.push(LibraryAction::Command(
+                    "list.entry.addPlaceholder",
+                    json!({ "list": list, "label": "Break" }),
+                ));
+            }
+            if ui.button("Delete list").clicked() {
+                out.push(LibraryAction::Command(
+                    "list.delete",
+                    json!({ "list": list }),
+                ));
+                self.open_list = None;
+            }
+        });
+        egui::ScrollArea::vertical()
+            .id_salt("list-entries")
+            .show(ui, |ui| {
+                let n = entries.len();
+                for (i, e) in entries.iter().enumerate() {
+                    let entry = e.get("id").and_then(Value::as_str).unwrap_or("").to_owned();
+                    let label = e
+                        .get("title")
+                        .or_else(|| e.get("label"))
+                        .and_then(Value::as_str)
+                        .unwrap_or("?");
+                    ui.horizontal(|ui| {
+                        ui.label(format!("{}. {label}", i + 1));
+                        if ui
+                            .small_button("▶")
+                            .on_hover_text("Play from here")
+                            .clicked()
+                        {
+                            out.push(LibraryAction::Command(
+                                "list.play",
+                                json!({ "list": list, "entry": i + 1 }),
+                            ));
+                        }
+                        if i > 0 && ui.small_button("↑").clicked() {
+                            out.push(LibraryAction::Command(
+                                "list.entry.move",
+                                json!({ "list": list, "from": i + 1, "to": i }),
+                            ));
+                        }
+                        if i + 1 < n && ui.small_button("↓").clicked() {
+                            out.push(LibraryAction::Command(
+                                "list.entry.move",
+                                json!({ "list": list, "from": i + 1, "to": i + 2 }),
+                            ));
+                        }
+                        if ui.small_button("✕").clicked() {
+                            out.push(LibraryAction::Command(
+                                "list.entry.remove",
+                                json!({ "list": list, "entry": entry }),
+                            ));
+                        }
+                    });
+                }
+            });
     }
 
     fn card(
@@ -484,7 +677,19 @@ impl LibraryView {
             );
         }
         let r = r.on_hover_text(format!("{title}\n{composer}"));
-        r.clicked().then_some(LibraryAction::Open(id))
+        let mut add = None;
+        if let Some(list) = self.open_list.clone() {
+            r.context_menu(|ui| {
+                if ui.button("Add to the open list").clicked() {
+                    add = Some(LibraryAction::Command(
+                        "list.entry.add",
+                        json!({ "list": list, "score": id }),
+                    ));
+                    ui.close();
+                }
+            });
+        }
+        add.or_else(|| r.clicked().then_some(LibraryAction::Open(id)))
     }
 }
 

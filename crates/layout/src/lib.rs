@@ -15,10 +15,12 @@
 
 mod place;
 mod reader;
+mod snap;
 
 pub use place::{Fit, Frame, PageSize, Slot, Viewport, ZOOM_RANGE, Zoom, place};
 pub use reader::{Layout, Reader, SPLIT_RANGE, TurnMode, View, views};
 pub use scorecraft_geom::{Rect, Size};
+pub use snap::{MAX_SNAP, snap_split, system_gaps};
 
 /// The crate's package name, used by `cargo xtask layers` smoke tests and diagnostics.
 pub const CRATE_NAME: &str = env!("CARGO_PKG_NAME");

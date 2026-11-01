@@ -156,3 +156,25 @@ fn ink_49_hidden_layers_stay_out_unless_chosen() {
         assert!(s.dispatch("score.export.pdf", &bad).is_err(), "{bad}");
     }
 }
+
+#[test]
+fn snips_go_into_the_export() {
+    let (mut s, _, dir) = setup("snip");
+    run(
+        &mut s,
+        "page.snip.create",
+        json!({ "x0": 50, "y0": 650, "x1": 560, "y1": 750, "space": "page", "page": 2,
+                "toX": 50, "toY": 130, "toPage": 1 }),
+    );
+    let out = dir.join("snip.pdf");
+    let r = run(
+        &mut s,
+        "score.export.pdf",
+        json!({ "path": out.to_string_lossy() }),
+    );
+    assert_eq!(r["markings"], 1);
+    let pdf = std::fs::read(&out).unwrap();
+    // The snip's frame is drawn where it was placed.
+    let frame = pixel(&pdf, 0, 300.0, 30.5);
+    assert!(frame.iter().all(|c| *c < 240), "{frame:?}");
+}

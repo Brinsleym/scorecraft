@@ -401,6 +401,21 @@ impl<S: Storage> Store<S> {
         Ok(b)
     }
 
+    /// Derived data kept beside the library under `cache/` (the full-text index): never part of
+    /// the model, never read by open or Verify & Repair, and safe to lose.
+    pub fn cache(&self, name: &str) -> Result<Option<Vec<u8>>, StoreError> {
+        let path = format!("cache/{name}");
+        crate::storage::check_path(&path)?;
+        self.storage.read(&path)
+    }
+
+    /// Stores derived data under `cache/` (see [`Store::cache`]).
+    pub fn set_cache(&mut self, name: &str, data: &[u8]) -> Result<(), StoreError> {
+        let path = format!("cache/{name}");
+        crate::storage::check_path(&path)?;
+        self.storage.write_atomic(&path, data)
+    }
+
     /// A stored file's bytes.
     pub fn blob(&self, b: BlobRef) -> Result<Vec<u8>, StoreError> {
         self.storage

@@ -250,6 +250,40 @@ pub fn bar(
                 ink.selection = None;
             }
         }
+        if tool == "select"
+            && let Some(sel) = ink.selection
+        {
+            ui.separator();
+            if ink.shortcut_target == 0 {
+                ink.shortcut_target = 1;
+            }
+            ui.add(
+                egui::DragValue::new(&mut ink.shortcut_target)
+                    .range(1..=9999)
+                    .prefix("to page "),
+            );
+            if ui
+                .button("Shortcut")
+                .on_hover_text("Tapping this rectangle jumps to that page")
+                .clicked()
+            {
+                run.push((
+                    "nav.shortcut.add",
+                    json!({
+                        "x0": sel.min.x, "y0": sel.min.y, "x1": sel.max.x, "y1": sel.max.y,
+                        "target": ink.shortcut_target,
+                    }),
+                ));
+                ink.selection = None;
+            }
+            if ui
+                .selectable_label(ink.snip_armed, "Snip")
+                .on_hover_text("Tap where the copied bars go")
+                .clicked()
+            {
+                ink.snip_armed = !ink.snip_armed;
+            }
+        }
         ui.separator();
         if let Some(id) = score {
             if ui.button("Undo").clicked() {

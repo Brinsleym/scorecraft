@@ -34,8 +34,9 @@ pub struct PageInk {
     pub curve: PressureCurve,
 }
 
-/// Whether a renderer draws this kind of marking on the page (snips and shortcuts are drawn by
-/// the reader, not into the page).
+/// Whether a renderer draws this kind of marking into the page. Snips are (PAGE-7: the copied
+/// bars are part of the page's picture); shortcuts are not (the reader outlines them in markup
+/// mode only).
 pub fn is_drawn(kind: &AnnotationKind) -> bool {
     matches!(
         kind,
@@ -43,7 +44,68 @@ pub fn is_drawn(kind: &AnnotationKind) -> bool {
             | AnnotationKind::Text(_)
             | AnnotationKind::Stamp(_)
             | AnnotationKind::Hairpin(_)
+            | AnnotationKind::Snip(_)
     )
+}
+
+/// Draws a Score Snip (PAGE-7) onto `bm`: every pixel of the snip's place takes the matching
+/// pixel of `src` (its source page rendered at the same scale), and a thin grey frame marks it.
+/// `m` maps the destination page to `bm`, `src_m` the source page to `src`.
+pub fn draw_snip(
+    bm: &mut Bitmap,
+    m: Affine,
+    src: &Bitmap,
+    src_m: Affine,
+    snip: &scorecraft_doc::Snip,
+) {
+    let (from, to) = (snip.from.rect, snip.to.rect);
+    if !(from.is_finite() && to.is_finite() && to.width() > 0.0 && to.height() > 0.0) {
+        return;
+    }
+    let Some(inv) = m.inverse() else {
+        return;
+    };
+    let px = m.apply_rect(to);
+    let clamp = |v: f64, hi: u32| v.floor().clamp(0.0, f64::from(hi)) as u32;
+    let (x0, x1) = (clamp(px.x0, bm.width), clamp(px.x1.ceil(), bm.width));
+    let (y0, y1) = (clamp(px.y0, bm.height), clamp(px.y1.ceil(), bm.height));
+    let frame = [160u8, 160, 160, 255];
+    for y in y0..y1 {
+        for x in x0..x1 {
+            let p = inv.apply(Point::new(f64::from(x) + 0.5, f64::from(y) + 0.5));
+            let (u, v) = ((p.x - to.x0) / to.width(), (p.y - to.y0) / to.height());
+            if !(0.0..=1.0).contains(&u) || !(0.0..=1.0).contains(&v) {
+                continue;
+            }
+            let edge = x == x0 || y == y0 || x + 1 == x1 || y + 1 == y1;
+            let word = if edge {
+                u32::from_ne_bytes(frame)
+            } else {
+                let q = src_m.apply(Point::new(
+                    from.x0 + u * from.width(),
+                    from.y0 + v * from.height(),
+                ));
+                let (sx, sy) = (q.x.floor(), q.y.floor());
+                if sx < 0.0 || sy < 0.0 || sx >= f64::from(src.width) || sy >= f64::from(src.height)
+                {
+                    continue;
+                }
+                match src
+                    .words
+                    .get((sy as usize) * (src.width as usize) + sx as usize)
+                {
+                    Some(w) => *w,
+                    None => continue,
+                }
+            };
+            if let Some(dst) = bm
+                .words
+                .get_mut((y as usize) * (bm.width as usize) + x as usize)
+            {
+                *dst = word;
+            }
+        }
+    }
 }
 
 /// The markings to draw on a page, in drawing order: layers bottom first in list order, each

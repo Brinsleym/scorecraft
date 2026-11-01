@@ -19,6 +19,8 @@ serde_json = { workspace = true }
 # Native file dialogs; Linux uses drag and drop and the command line until a portal picker lands.
 [target.'cfg(any(windows, target_os = "macos"))'.dependencies]
 rfd = { version = "0.17", default-features = false }
+# The metronome's click: audio output on Windows and macOS (Linux needs ALSA headers).
+scorecraft-devices = { workspace = true, features = ["audio"] }
 
 [dev-dependencies]
 base64 = { workspace = true }

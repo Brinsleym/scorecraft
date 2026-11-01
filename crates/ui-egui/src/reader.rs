@@ -267,10 +267,18 @@ impl ReaderCanvas {
             }
         }
         if response.clicked() {
-            let x = response
+            let at = response
                 .interact_pointer_pos()
-                .map_or(0.0, |p| p.x - rect.min.x);
-            if let Some(r) = note(out, session.dispatch("input.tap", &json!({ "x": x }))) {
+                .map_or(Vec2::ZERO, |p| p - rect.min);
+            // A tap on a Score Shortcut jumps (NAV-1); anywhere else it turns or shows the controls.
+            let followed = session
+                .dispatch("nav.shortcut.follow", &json!({ "x": at.x, "y": at.y }))
+                .ok()
+                .and_then(|r| r.get("followed").and_then(Value::as_bool))
+                .unwrap_or(false);
+            if !followed
+                && let Some(r) = note(out, session.dispatch("input.tap", &json!({ "x": at.x })))
+            {
                 out.toggle_chrome = r.get("zone").and_then(Value::as_str) == Some("controls");
             }
             self.press = None;

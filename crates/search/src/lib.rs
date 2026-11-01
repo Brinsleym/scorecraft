@@ -129,6 +129,20 @@ impl Query {
         self.words.is_empty()
     }
 
+    /// The query's folded words.
+    pub fn words(&self) -> &[String] {
+        &self.words
+    }
+
+    /// Whether every query word starts some word of `sorted`, a sorted list of folded words
+    /// (a full-text index, LIB-6): a binary search per query word.
+    pub fn matches_sorted(&self, sorted: &[String]) -> bool {
+        self.words.iter().all(|q| {
+            let i = sorted.partition_point(|w| w.as_str() < q.as_str());
+            sorted.get(i).is_some_and(|w| w.starts_with(q.as_str()))
+        })
+    }
+
     /// How well `fields` match: `None` when some query word starts no word in them; otherwise
     /// higher is better. Each query word counts its best match: the field's weight, doubled for
     /// a whole word.
@@ -283,6 +297,18 @@ mod tests {
             title > composer && title > start,
             "{title:?} {composer:?} {start:?}"
         );
+    }
+
+    #[test]
+    fn sorted_word_lists_match_by_prefix() {
+        let mut idx = words("Allegro con brio; Adagio molto e cantabile");
+        idx.sort();
+        idx.dedup();
+        let q = |s: &str| Query::parse(s).unwrap();
+        assert!(q("cant alleg").matches_sorted(&idx));
+        assert!(!q("presto").matches_sorted(&idx));
+        assert!(q("").matches_sorted(&idx));
+        assert!(!q("zz").matches_sorted(&[]));
     }
 
     #[test]

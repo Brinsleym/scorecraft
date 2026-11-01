@@ -20,6 +20,12 @@ pub struct Session {
     pub(crate) markup: crate::markup::Markup,
     /// How the library lists scores (LIB-9).
     pub(crate) library_sort: crate::find_cmds::LibrarySort,
+    /// The setlist being played, if any (LIST-4).
+    pub(crate) playback: Option<crate::play_cmds::Playback>,
+    /// The metronome (PRAC-1).
+    pub(crate) metronome: scorecraft_practice::Metronome,
+    /// Full-text indexes of the library's files, loaded or built by search (LIB-6).
+    pub(crate) text_index: crate::fulltext_cmds::TextIndexes,
 }
 
 impl Default for Session {
@@ -39,6 +45,9 @@ impl Session {
             key_gate: scorecraft_input::KeyGate::new(scorecraft_input::DEFAULT_DEBOUNCE_MS),
             markup: crate::markup::Markup::default(),
             library_sort: crate::find_cmds::LibrarySort::default(),
+            playback: None,
+            metronome: scorecraft_practice::Metronome::new(),
+            text_index: crate::fulltext_cmds::TextIndexes::new(),
         }
     }
 

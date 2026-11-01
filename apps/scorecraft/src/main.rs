@@ -71,6 +71,8 @@ fn load_settings() -> Settings {
 
 struct Desktop {
     keep_awake: KeepAwake,
+    /// The metronome's click, opened the first time it is wanted.
+    click: Option<scorecraft_devices::ClickOut>,
 }
 
 impl Platform for Desktop {
@@ -106,6 +108,19 @@ impl Platform for Desktop {
             let _ = name;
             None
         }
+    }
+
+    fn set_click(&mut self, click: Option<(f64, u8)>) -> Result<(), String> {
+        if self.click.is_none() {
+            if click.is_none() {
+                return Ok(());
+            }
+            self.click = Some(scorecraft_devices::ClickOut::new().map_err(|e| e.to_string())?);
+        }
+        if let Some(out) = &self.click {
+            out.set(click);
+        }
+        Ok(())
     }
 
     fn pick_folder(&mut self) -> Option<String> {
@@ -223,6 +238,7 @@ fn main() -> std::process::ExitCode {
     let mut app = App::new(
         Box::new(Desktop {
             keep_awake: KeepAwake::new(),
+            click: None,
         }),
         settings,
     );

@@ -46,6 +46,8 @@ fn open(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
     reject_unknown_keys(ID, p, &["path", "score", "password"])?;
     let password = opt_str(ID, p, "password")?;
     let score: Option<scorecraft_doc::ScoreId> = crate::commands::opt_id(ID, p, "score")?;
+    // Opening a score by hand stops a setlist that was playing.
+    session.playback = None;
     match (opt_str(ID, p, "path")?, score) {
         (Some(path), None) => {
             let bytes = read_score(path)?;
@@ -159,6 +161,14 @@ impl Session {
     }
 
     /// Whether a score is open.
+    /// The open score's id in the library, if it was opened from there.
+    pub fn library_score_id(&self) -> Option<String> {
+        self.score
+            .as_ref()
+            .and_then(|o| o.library_score)
+            .map(|id| id.to_string())
+    }
+
     pub fn has_score(&self) -> bool {
         self.score.is_some()
     }
