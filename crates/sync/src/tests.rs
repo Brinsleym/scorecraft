@@ -691,6 +691,7 @@ fn edit(
                     id,
                     name: format!("F{name}"),
                     parent: None,
+                    deleted_ms: None,
                 },
             );
             touched.push(Record::Library);

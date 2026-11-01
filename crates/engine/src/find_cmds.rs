@@ -404,7 +404,12 @@ fn import_folder(session: &mut Session, params: &Value) -> Result<Value, EngineE
                         let id: FolderId = l.ids.id(now);
                         let name = key.last().cloned().unwrap_or_default();
                         ops.push(Op::InsertFolder {
-                            folder: Folder { id, name, parent },
+                            folder: Folder {
+                                id,
+                                name,
+                                parent,
+                                deleted_ms: None,
+                            },
                         });
                         folders.insert(key, id);
                         id

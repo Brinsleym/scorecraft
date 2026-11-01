@@ -29,11 +29,13 @@ pub fn sample_library(seed: u64, scores: usize) -> Library {
         id: g.id(now),
         name: "Horn".into(),
         parent: None,
+        deleted_ms: None,
     };
     let etudes = Folder {
         id: g.id(now),
         name: "Études".into(),
         parent: Some(horn.id),
+        deleted_ms: None,
     };
     let folders = [horn.id, etudes.id];
     lib.folders.insert(horn.id, horn);

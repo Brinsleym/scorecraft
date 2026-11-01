@@ -171,7 +171,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "library.trash.restore",
             "Restore",
             "Library>Recently Deleted",
-            r#"{"score":id}"#,
+            r#"{"score":id?,"folder":id?}"#,
             false,
             library_open,
             trash_restore as _,
@@ -184,6 +184,15 @@ pub fn specs() -> Vec<CommandSpec> {
             false,
             library_open,
             trash_empty as _,
+        ),
+        spec(
+            "library.trash.purge",
+            "Remove Old Deleted Items",
+            "",
+            "{}",
+            true,
+            library_open,
+            trash_purge as _,
         ),
         spec(
             "library.verify",
@@ -212,7 +221,9 @@ fn open(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
     reject_unknown_keys(ID, p, &["path"])?;
     let path = req_str(ID, p, "path")?;
     let skipped = session.open_library_dir(path)?;
+    let purged = session.purge_expired()?;
     let mut v = info(session, &Value::Null)?;
+    crate::commands::set(&mut v, "purged", json!(purged));
     crate::commands::set(
         &mut v,
         "unreadable",
@@ -240,12 +251,19 @@ fn info(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
         "location": l.location,
         "scores": l.lib.live_scores().count(),
         "trashed": l.lib.trash.len(),
-        "folders": l.lib.folders.values().map(|f| json!({
+        "folders": l.lib.live_folders().map(|f| json!({
             "id": f.id.to_string(),
             "name": f.name,
             "parent": f.parent.map(|p| p.to_string()),
             "path": l.lib.folder_path(f.id),
         })).collect::<Vec<_>>(),
+        "deletedFolders": l.lib.folders.values().filter(|f| f.deleted_ms.is_some()).map(|f| json!({
+            "id": f.id.to_string(),
+            "name": f.name,
+            "path": l.lib.folder_path(f.id),
+            "deletedMs": f.deleted_ms,
+        })).collect::<Vec<_>>(),
+        "inDeletedFolders": in_deleted_folders(&l.lib),
         "lists": l.lib.lists.values().map(|x| json!({
             "id": x.id.to_string(),
             "name": x.name,
@@ -574,7 +592,12 @@ fn folder_new(session: &mut Session, params: &Value) -> Result<Value, EngineErro
     l.commit(
         "New Folder",
         Transaction::single(Op::InsertFolder {
-            folder: Folder { id, name, parent },
+            folder: Folder {
+                id,
+                name,
+                parent,
+                deleted_ms: None,
+            },
         }),
     )?;
     Ok(edited(l, json!({ "folder": id.to_string() })))
@@ -610,10 +633,16 @@ fn folder_delete(session: &mut Session, params: &Value) -> Result<Value, EngineE
     let p = params_object(ID, params)?;
     reject_unknown_keys(ID, p, &["folder"])?;
     let id: FolderId = req_id(ID, p, "folder")?;
+    let now = session.now_ms();
     let l = session.lib_mut(ID)?;
-    let tx = edit::delete_folder(&l.lib, id)?;
+    let tx = edit::trash_folder(&l.lib, id, now)?;
+    let scores = tx
+        .ops
+        .iter()
+        .filter(|o| matches!(o, Op::Trash { .. }))
+        .count();
     l.commit("Delete Folder", tx)?;
-    Ok(edited(l, json!({})))
+    Ok(edited(l, json!({ "trashedScores": scores })))
 }
 
 fn score_move(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
@@ -650,10 +679,36 @@ fn score_delete(session: &mut Session, params: &Value) -> Result<Value, EngineEr
 fn trash_restore(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
     const ID: &str = "library.trash.restore";
     let p = params_object(ID, params)?;
-    reject_unknown_keys(ID, p, &["score"])?;
-    let score: ScoreId = req_id(ID, p, "score")?;
+    reject_unknown_keys(ID, p, &["score", "folder"])?;
+    let score: Option<ScoreId> = opt_id(ID, p, "score")?;
+    let folder: Option<FolderId> = opt_id(ID, p, "folder")?;
     let l = session.lib_mut(ID)?;
-    l.commit("Restore Score", Transaction::single(Op::Untrash { score }))?;
+    match (score, folder) {
+        (Some(score), None) => {
+            let mut ops = vec![Op::Untrash { score }];
+            // A score filed in a deleted folder brings the folder back (only the folder) so it
+            // has somewhere to be.
+            if let Some(f) = l.lib.scores.get(&score).and_then(|s| s.folder)
+                && l.lib.folder_deleted(f)
+            {
+                for id in std::iter::once(f).chain(l.lib.ancestors(f)) {
+                    if let Some(x) = l.lib.folders.get(&id).filter(|x| x.deleted_ms.is_some()) {
+                        let mut back = x.clone();
+                        back.deleted_ms = None;
+                        ops.push(Op::SetFolder { folder: back });
+                    }
+                }
+            }
+            l.commit("Restore Score", Transaction::new(ops))?;
+        }
+        (None, Some(folder)) => {
+            let tx = edit::restore_folder(&l.lib, folder)?;
+            l.commit("Restore Folder", tx)?;
+        }
+        _ => {
+            return Err(bad(ID, "give `score` or `folder`, not both".into()));
+        }
+    }
     Ok(edited(l, json!({})))
 }
 
@@ -661,10 +716,70 @@ fn trash_empty(session: &mut Session, params: &Value) -> Result<Value, EngineErr
     const ID: &str = "library.trash.empty";
     reject_unknown_keys(ID, params_object(ID, params)?, &[])?;
     let l = session.lib_mut(ID)?;
-    let count = l.lib.trash.len();
+    let count = l.lib.trash.len()
+        + l.lib
+            .folders
+            .values()
+            .filter(|f| f.deleted_ms.is_some())
+            .count();
     let tx = edit::empty_trash(&l.lib)?;
-    l.commit("Empty Recently Deleted", tx)?;
+    l.commit_unchecked("Empty Recently Deleted", tx)?;
     Ok(edited(l, json!({ "removed": count })))
+}
+
+/// Scores still in use but filed in a folder in Recently Deleted (a folder deleted on one
+/// device while another filed a score in it): verify reports them and the shell offers to
+/// restore the folder.
+fn in_deleted_folders(lib: &Library) -> Vec<Value> {
+    lib.scores
+        .values()
+        .filter(|s| !lib.is_trashed(s.id))
+        .filter_map(|s| {
+            let f = s.folder?;
+            // The deleted folder furthest up: restoring it brings the score's folder back.
+            let restore = std::iter::once(f)
+                .chain(lib.ancestors(f))
+                .rfind(|x| lib.folders.get(x).is_some_and(|x| x.deleted_ms.is_some()))?;
+            Some(json!({
+                "score": s.id.to_string(),
+                "title": s.display_title(),
+                "folder": f.to_string(),
+                "path": lib.folder_path(f),
+                "restore": restore.to_string(),
+                "restorePath": lib.folder_path(restore),
+            }))
+        })
+        .collect()
+}
+
+/// Removes for good what has been in Recently Deleted for 30 days. Runs when a library opens;
+/// agents can run it too.
+fn trash_purge(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
+    const ID: &str = "library.trash.purge";
+    reject_unknown_keys(ID, params_object(ID, params)?, &[])?;
+    let removed = session.purge_expired()?;
+    Ok(json!({ "removed": removed }))
+}
+
+impl Session {
+    /// Removes what has been in Recently Deleted for 30 days (LIB-10); returns how many scores
+    /// and folders went. Not an undo step: they are gone for good.
+    pub(crate) fn purge_expired(&mut self) -> Result<usize, EngineError> {
+        const ID: &str = "library.trash.purge";
+        let now = self.now_ms();
+        let l = self.lib_mut(ID)?;
+        let tx = edit::purge_expired(&l.lib, now)?;
+        let removed = tx
+            .ops
+            .iter()
+            .filter(|o| matches!(o, Op::RemoveScore { .. } | Op::RemoveFolder { .. }))
+            .count();
+        if removed > 0 {
+            l.commit_unchecked("Remove Old Deleted Items", tx)?;
+            l.history.clear();
+        }
+        Ok(removed)
+    }
 }
 
 fn verify(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
@@ -683,6 +798,11 @@ fn verify(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
         "unusedFiles": hex(&report.unused_blobs),
         "unreadable": report.unreadable,
     });
+    let in_deleted = in_deleted_folders(&l.lib);
+    if !in_deleted.is_empty() {
+        crate::commands::set(&mut out, "clean", json!(false));
+    }
+    crate::commands::set(&mut out, "inDeletedFolders", json!(in_deleted));
     if repair {
         let unreadable = std::mem::take(&mut l.unreadable);
         let r = l.store.repair(&mut l.lib, &unreadable)?;

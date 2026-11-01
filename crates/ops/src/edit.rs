@@ -1,5 +1,5 @@
 //! Edits that need several ops to keep the library sound: emptying Recently Deleted, deleting a
-//! folder, deleting pages under a page range, removing a layer with markings on it. Each reads the
+//! folder, sending a folder to Recently Deleted and back, removing what has been there 30 days, deleting pages under a page range, removing a layer with markings on it. Each reads the
 //! library and returns a [`Transaction`] to commit; none changes anything itself.
 
 use scorecraft_doc::{EntryItem, FolderId, LayerId, Library, PageRange, ScoreId};
@@ -29,13 +29,9 @@ pub fn remove_score(lib: &Library, score: ScoreId) -> Result<Transaction, OpErro
     Ok(Transaction::new(ops))
 }
 
-/// Empties Recently Deleted (LIB-10).
+/// Empties Recently Deleted (LIB-10): its scores and folders are removed for good.
 pub fn empty_trash(lib: &Library) -> Result<Transaction, OpError> {
-    let mut ops = Vec::new();
-    for id in lib.trash.keys() {
-        ops.extend(remove_score(lib, *id)?.ops);
-    }
-    Ok(Transaction::new(ops))
+    purge_expired(lib, u64::MAX)
 }
 
 /// Deletes a folder, moving its scores and subfolders up to its parent (nothing is lost).
@@ -55,6 +51,173 @@ pub fn delete_folder(lib: &Library, folder: FolderId) -> Result<Transaction, OpE
     }
     ops.push(Op::RemoveFolder { folder });
     Ok(Transaction::new(ops))
+}
+
+/// How long Recently Deleted keeps a score or folder before it is removed for good (owner,
+/// 2026-11-01).
+pub const KEEP_DELETED_MS: u64 = 30 * 24 * 60 * 60 * 1000;
+
+/// `folder` and every folder inside it, `folder` first. A corrupt tree with a cycle is walked
+/// once.
+pub fn folder_tree(lib: &Library, folder: FolderId) -> Vec<FolderId> {
+    let mut out = vec![folder];
+    let mut i = 0;
+    while let Some(&f) = out.get(i) {
+        for c in lib.folders.values().filter(|c| c.parent == Some(f)) {
+            if !out.contains(&c.id) {
+                out.push(c.id);
+            }
+        }
+        i += 1;
+    }
+    out
+}
+
+/// Sends a folder to Recently Deleted (LIB-10): it, the folders inside it and every score in
+/// them are marked deleted at `now`, keeping their places, so a restore puts everything back.
+pub fn trash_folder(lib: &Library, folder: FolderId, now: u64) -> Result<Transaction, OpError> {
+    let f = lib.folders.get(&folder).ok_or(OpError::NoFolder(folder))?;
+    if f.deleted_ms.is_some() {
+        return Err(OpError::Invalid(format!(
+            "folder {} is already in Recently Deleted",
+            f.name
+        )));
+    }
+    let tree = folder_tree(lib, folder);
+    let mut ops = Vec::new();
+    for id in &tree {
+        if let Some(f) = lib.folders.get(id).filter(|f| f.deleted_ms.is_none()) {
+            let mut marked = f.clone();
+            marked.deleted_ms = Some(now);
+            ops.push(Op::SetFolder { folder: marked });
+        }
+    }
+    for s in lib.scores.values() {
+        if s.folder.is_some_and(|f| tree.contains(&f)) && !lib.is_trashed(s.id) {
+            ops.push(Op::Trash {
+                score: s.id,
+                at_ms: now,
+            });
+        }
+    }
+    Ok(Transaction::new(ops))
+}
+
+/// Takes a folder out of Recently Deleted with what went with it: the folders and scores inside
+/// it deleted at the same moment. Folders above it that are deleted come back too (only the
+/// folders, so it can be seen); what else was in them stays deleted.
+pub fn restore_folder(lib: &Library, folder: FolderId) -> Result<Transaction, OpError> {
+    let f = lib.folders.get(&folder).ok_or(OpError::NoFolder(folder))?;
+    let Some(at) = f.deleted_ms else {
+        return Err(OpError::Invalid(format!(
+            "folder {} is not in Recently Deleted",
+            f.name
+        )));
+    };
+    let tree = folder_tree(lib, folder);
+    let mut ops = Vec::new();
+    let restore = |f: &scorecraft_doc::Folder, ops: &mut Vec<Op>| {
+        let mut back = f.clone();
+        back.deleted_ms = None;
+        ops.push(Op::SetFolder { folder: back });
+    };
+    for id in &tree {
+        if let Some(f) = lib.folders.get(id).filter(|f| f.deleted_ms == Some(at)) {
+            restore(f, &mut ops);
+        }
+    }
+    for id in lib.ancestors(folder) {
+        if let Some(f) = lib.folders.get(&id).filter(|f| f.deleted_ms.is_some()) {
+            restore(f, &mut ops);
+        }
+    }
+    for s in lib.scores.values() {
+        if s.folder.is_some_and(|f| tree.contains(&f)) && lib.trash.get(&s.id) == Some(&at) {
+            ops.push(Op::Untrash { score: s.id });
+        }
+    }
+    Ok(Transaction::new(ops))
+}
+
+/// Removes for good what has been in Recently Deleted for [`KEEP_DELETED_MS`] or longer at
+/// `now`: scores, then folders (anything still in a removed folder moves up to its parent, so
+/// nothing is lost by accident).
+pub fn purge_expired(lib: &Library, now: u64) -> Result<Transaction, OpError> {
+    let expired = |at: u64| now.saturating_sub(at) >= KEEP_DELETED_MS;
+    let mut scratch = lib.clone();
+    let mut ops = Vec::new();
+    let mut take = |tx: Transaction, scratch: &mut Library| -> Result<(), OpError> {
+        for op in tx.ops {
+            op.clone().apply(scratch)?;
+            ops.push(op);
+        }
+        Ok(())
+    };
+    let scores: Vec<ScoreId> = lib
+        .trash
+        .iter()
+        .filter(|(_, at)| expired(**at))
+        .map(|(id, _)| *id)
+        .collect();
+    for id in scores {
+        let tx = remove_score(&scratch, id)?;
+        take(tx, &mut scratch)?;
+    }
+    let folders: Vec<FolderId> = lib
+        .folders
+        .values()
+        .filter(|f| f.deleted_ms.is_some_and(expired))
+        .map(|f| f.id)
+        .collect();
+    for id in folders {
+        let tx = delete_folder(&scratch, id)?;
+        take(tx, &mut scratch)?;
+    }
+    Ok(Transaction::new(ops))
+}
+
+/// Refuses a transaction that would change something in Recently Deleted, which is read-only
+/// until restored (owner, 2026-11-01): any edit to a deleted score but removing it, and filing
+/// into, renaming or moving a deleted folder. Sending things there and back is allowed.
+pub fn check_not_deleted(lib: &Library, tx: &Transaction) -> Result<(), OpError> {
+    let deleted_folder = |f: Option<FolderId>| f.is_some_and(|f| lib.folder_deleted(f));
+    for op in &tx.ops {
+        let refused = match op {
+            Op::RemoveScore { .. } | Op::Trash { .. } | Op::Untrash { .. } => None,
+            Op::SetScoreFolder { score, folder } => (lib.is_trashed(*score)
+                || deleted_folder(*folder))
+            .then(|| format!("score {score}")),
+            Op::InsertFolder { folder } => {
+                deleted_folder(folder.parent).then(|| format!("folder {}", folder.name))
+            }
+            Op::SetFolder { folder } => {
+                let old = lib.folders.get(&folder.id);
+                let editing_deleted = old.is_some_and(|o| {
+                    o.deleted_ms.is_some()
+                        && folder.deleted_ms.is_some()
+                        && (o.name != folder.name || o.parent != folder.parent)
+                });
+                let into_deleted = folder.deleted_ms.is_none()
+                    && parent_changed(old, folder)
+                    && deleted_folder(folder.parent);
+                (editing_deleted || into_deleted).then(|| format!("folder {}", folder.name))
+            }
+            _ => match op.touches() {
+                crate::Touched::Score(id) if lib.is_trashed(id) => Some(format!("score {id}")),
+                _ => None,
+            },
+        };
+        if let Some(what) = refused {
+            return Err(OpError::Invalid(format!(
+                "{what} is in Recently Deleted: restore it to change it"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn parent_changed(old: Option<&scorecraft_doc::Folder>, new: &scorecraft_doc::Folder) -> bool {
+    old.is_none_or(|o| o.parent != new.parent)
 }
 
 /// Deletes the pages at `positions` (into `Score::pages`) from the score (PAGE-4). The source
