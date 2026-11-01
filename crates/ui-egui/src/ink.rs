@@ -11,7 +11,10 @@
 
 use std::collections::HashMap;
 
-use egui::{Color32, Context, Event, Painter, Pos2, Rect, Shape, Stroke, TouchPhase, pos2, vec2};
+use egui::{
+    Color32, ColorImage, Context, Event, Painter, Pos2, Rect, Shape, Stroke, TextureHandle,
+    TextureOptions, TouchPhase, Vec2, pos2, vec2,
+};
 use scorecraft_engine::Session;
 use scorecraft_input::{PalmFilter, Phase, PointerKind};
 use serde_json::{Value, json};
@@ -59,6 +62,8 @@ enum Purpose {
     Ruler,
     /// Dragging the selection to move (or copy) it.
     MoveSelection,
+    /// Dragging the selected text note to move it; a tap on it edits it.
+    MoveNote,
 }
 
 #[derive(Debug, Clone)]
@@ -95,17 +100,150 @@ struct Pending {
     texture: Option<usize>,
     shape: Vec<Pos2>,
     stroke: Stroke,
+    /// A highlighter stroke is kept as its one-layer picture instead.
+    image: Option<(TextureHandle, Rect)>,
     born: f64,
 }
 
-/// A text note being typed (ANNO-8).
+/// The highlighter stroke in progress, drawn as one flat layer like the page will draw it: a
+/// coverage mask where overlapping parts of the stroke take the larger coverage, never the sum,
+/// so the preview never darkens where the stroke crosses itself or at its joints.
+struct HighlightPreview {
+    /// Reader-local pixels of the mask's top-left corner, and its size.
+    origin: Pos2,
+    w: usize,
+    h: usize,
+    cov: Vec<u8>,
+    /// Points already stamped into the mask.
+    done: usize,
+    radius: f32,
+    color: Color32,
+    /// The part of the mask the stroke has touched: min x, min y, max x, max y.
+    used: Option<[usize; 4]>,
+    tex: Option<TextureHandle>,
+}
+
+/// The highlighter's opacity in the preview, over the page.
+const HIGHLIGHT_ALPHA: f32 = 0.45;
+/// Largest preview mask side, in pixels.
+const MAX_PREVIEW: usize = 4096;
+
+impl HighlightPreview {
+    fn new(area: Rect, radius: f32, color: Color32) -> HighlightPreview {
+        let w = (area.width().max(1.0) as usize).min(MAX_PREVIEW);
+        let h = (area.height().max(1.0) as usize).min(MAX_PREVIEW);
+        HighlightPreview {
+            origin: Pos2::ZERO,
+            w,
+            h,
+            cov: vec![0; w * h],
+            done: 0,
+            radius: radius.max(0.5),
+            color,
+            used: None,
+            tex: None,
+        }
+    }
+
+    /// Stamps the stroke's new segments (reader-local points) into the mask.
+    fn add(&mut self, points: &[Pos2]) -> bool {
+        if points.len() <= self.done {
+            return false;
+        }
+        let from = self.done.saturating_sub(1);
+        let r = self.radius;
+        for i in from..points.len() {
+            let (Some(&a), Some(&b)) = (points.get(i), points.get(i + 1).or(points.get(i))) else {
+                continue;
+            };
+            let a = a - self.origin.to_vec2();
+            let b = b - self.origin.to_vec2();
+            let x0 = (a.x.min(b.x) - r - 1.0).floor().max(0.0) as usize;
+            let y0 = (a.y.min(b.y) - r - 1.0).floor().max(0.0) as usize;
+            let x1 = ((a.x.max(b.x) + r + 1.0).ceil().max(0.0) as usize).min(self.w);
+            let y1 = ((a.y.max(b.y) + r + 1.0).ceil().max(0.0) as usize).min(self.h);
+            if x0 >= x1 || y0 >= y1 {
+                continue;
+            }
+            let ab = b - a;
+            let len2 = ab.length_sq();
+            for y in y0..y1 {
+                for x in x0..x1 {
+                    let q = pos2(x as f32 + 0.5, y as f32 + 0.5);
+                    let t = if len2 > 0.0 {
+                        ((q - a).dot(ab) / len2).clamp(0.0, 1.0)
+                    } else {
+                        0.0
+                    };
+                    let d = (q - (a + ab * t)).length();
+                    let c = ((r + 0.5 - d).clamp(0.0, 1.0) * 255.0) as u8;
+                    if let Some(px) = self.cov.get_mut(y * self.w + x)
+                        && c > *px
+                    {
+                        *px = c;
+                    }
+                }
+            }
+            self.used = Some(match self.used {
+                None => [x0, y0, x1, y1],
+                Some([a0, b0, a1, b1]) => [a0.min(x0), b0.min(y0), a1.max(x1), b1.max(y1)],
+            });
+        }
+        self.done = points.len();
+        true
+    }
+
+    /// Uploads the touched part of the mask; returns where to draw it (reader-local).
+    fn upload(&mut self, ctx: &Context) -> Option<Rect> {
+        let [x0, y0, x1, y1] = self.used?;
+        let (w, h) = (x1 - x0, y1 - y0);
+        let [r, g, b, _] = self.color.to_srgba_unmultiplied();
+        let mut px = Vec::with_capacity(w * h);
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let c = self.cov.get(y * self.w + x).copied().unwrap_or(0);
+                let a = (f32::from(c) * HIGHLIGHT_ALPHA) as u8;
+                px.push(Color32::from_rgba_unmultiplied(r, g, b, a));
+            }
+        }
+        let image = ColorImage::new([w, h], px);
+        match &mut self.tex {
+            Some(t) => t.set(image, TextureOptions::LINEAR),
+            None => {
+                self.tex =
+                    Some(ctx.load_texture("highlighter-preview", image, TextureOptions::LINEAR));
+            }
+        }
+        Some(Rect::from_min_size(
+            self.origin + vec2(x0 as f32, y0 as f32),
+            vec2(w as f32, h as f32),
+        ))
+    }
+}
+
+/// A text note being typed into its red box on the page (ANNO-8).
 #[derive(Debug, Clone, PartialEq)]
 pub struct TextEntry {
     /// Reader-local pixels of its top-left corner.
     pub at: Pos2,
     pub text: String,
     pub device: PointerKind,
+    /// The note being changed; `None` for a new one.
+    pub note: Option<String>,
+    /// Size in points, and its colour.
+    pub size: f32,
+    pub color: Color32,
+    /// The box's size as the shell last laid its text out; `None` until it has.
+    pub measured: Option<Vec2>,
+    /// A new note's score page (1-based) and page-space corner, so it lands where it was put
+    /// even if the page turns or scrolls before it is kept.
+    pub anchor: Option<(usize, f64, f64)>,
 }
+
+/// What the reader looked like last frame: a change (a turn, scroll, zoom or pan) makes
+/// everything the shell drew in screen pixels stale.
+#[derive(Debug, Clone, PartialEq)]
+struct ViewKey(Value);
 
 /// What the reader should do with its own pointer handling this frame.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -127,6 +265,15 @@ pub struct InkCanvas {
     release: bool,
     /// The note being typed, if any.
     pub text: Option<TextEntry>,
+    /// The text note selected (its red box shows it can be moved), by id.
+    pub note: Option<String>,
+    /// The highlighter stroke in progress.
+    preview: Option<HighlightPreview>,
+    /// Where the preview is drawn this frame.
+    preview_rect: Option<Rect>,
+    view: Option<ViewKey>,
+    /// The pointer whose press ended typing: the rest of its gesture does nothing.
+    swallow: Option<u64>,
     /// The last selection rectangle, reader-local pixels.
     pub selection: Option<Rect>,
     /// The next selection drag copies instead of moving.
@@ -172,6 +319,7 @@ impl InkCanvas {
             }
             return InkFrame::default();
         }
+        self.follow_view(session);
         let pen_only = state.get("penOnly").and_then(Value::as_bool) != Some(false);
         let touch_lock = state.get("touchLock").and_then(Value::as_bool) == Some(true);
         let (events, now) = ctx.input(|i| (i.events.clone(), i.time));
@@ -301,12 +449,170 @@ impl InkCanvas {
         if self.block && self.live.is_none() && !anything_down {
             self.release = true;
         }
+        self.update_preview(ctx, rect, session, state);
         if self.live.is_some() {
             ctx.request_repaint();
         }
         InkFrame {
             block_reader: self.block,
         }
+    }
+
+    /// Forgets what was drawn in screen pixels when the view moved under it (a turn, the wheel,
+    /// a zoom or a pan): kept strokes, the selection rectangle and the highlighter preview would
+    /// otherwise stay where they were while the page moved (the owner's "scroll breaks all
+    /// markup").
+    fn follow_view(&mut self, session: &mut Session) {
+        let key = session.reader_state().map(|st| {
+            ViewKey(json!([
+                st.get("onScreen"),
+                st.get("half"),
+                st.get("zoom"),
+                st.get("viewport"),
+                st.get("layout"),
+            ]))
+        });
+        if key == self.view {
+            return;
+        }
+        let moved = self.view.is_some();
+        self.view = key;
+        if !moved {
+            return;
+        }
+        self.pending.clear();
+        self.preview = None;
+        self.preview_rect = None;
+        if self.selection.take().is_some() {
+            let _ = session.dispatch("annotate.select.clear", &json!({}));
+        }
+        self.snip_armed = false;
+        // A note being typed is kept where it was put (the page moved, not the note).
+        if self.text.is_some() {
+            let mut ignored = None;
+            self.commit_text(session, &mut ignored);
+        }
+        // A stroke cut by a turn is dropped rather than drawn across two pages.
+        if self
+            .live
+            .as_ref()
+            .is_some_and(|l| l.purpose != Purpose::Ruler)
+        {
+            self.live = None;
+        }
+    }
+
+    /// Stamps the live highlighter stroke into its preview and uploads it.
+    fn update_preview(&mut self, ctx: &Context, rect: Rect, session: &Session, state: &Value) {
+        let Some(live) = self
+            .live
+            .as_ref()
+            .filter(|l| l.purpose == Purpose::Tool)
+            .filter(|_| state.get("tool").and_then(Value::as_str) == Some("highlighter"))
+        else {
+            self.preview = None;
+            self.preview_rect = None;
+            return;
+        };
+        if self.preview.is_none() {
+            let Some((_, stroke)) = live_shape(live, session, state) else {
+                return;
+            };
+            self.preview = Some(HighlightPreview::new(
+                rect,
+                stroke.width / 2.0,
+                stroke.color,
+            ));
+        }
+        let points: Vec<Pos2> = live
+            .points
+            .iter()
+            .map(|p| pos2(p[0] as f32, p[1] as f32))
+            .collect();
+        if let Some(pv) = self.preview.as_mut()
+            && pv.add(&points)
+        {
+            self.preview_rect = pv.upload(ctx);
+        }
+    }
+
+    /// The text notes on screen, reader-local.
+    fn notes(session: &Session) -> Vec<(String, Rect, scorecraft_engine::NoteOnScreen)> {
+        session
+            .notes_on_screen()
+            .into_iter()
+            .map(|n| {
+                let [x0, y0, x1, y1] = n.rect;
+                let r = Rect::from_min_max(pos2(x0 as f32, y0 as f32), pos2(x1 as f32, y1 as f32));
+                (n.id.clone(), r, n)
+            })
+            .collect()
+    }
+
+    /// The selected note's rectangle on screen, reader-local.
+    pub fn note_rect(&self, session: &Session) -> Option<Rect> {
+        self.note_rect_of(session, self.note.as_deref())
+    }
+
+    /// A note's rectangle on screen, reader-local, by id.
+    pub fn note_rect_of(&self, session: &Session, id: Option<&str>) -> Option<Rect> {
+        let id = id?;
+        Self::notes(session)
+            .into_iter()
+            .find(|n| n.0 == id)
+            .map(|n| n.1)
+    }
+
+    /// Ends typing: adds the new note or changes the one being edited. A new note stays
+    /// selected; blank text adds nothing (and deletes an edited note).
+    pub fn commit_text(&mut self, session: &mut Session, error: &mut Option<String>) {
+        let Some(entry) = self.text.take() else {
+            return;
+        };
+        match &entry.note {
+            None if entry.text.trim().is_empty() => {}
+            None => {
+                let p = match entry.anchor {
+                    Some((page, x, y)) => json!({
+                        "text": entry.text, "x": x, "y": y, "space": "page", "page": page,
+                        "device": entry.device.id(),
+                    }),
+                    None => json!({
+                        "text": entry.text, "x": entry.at.x, "y": entry.at.y,
+                        "device": entry.device.id(),
+                    }),
+                };
+                let r = session.dispatch("annotate.text.add", &p);
+                self.note = note(error, r).and_then(|v| {
+                    v.get("annotation")
+                        .and_then(Value::as_str)
+                        .map(str::to_owned)
+                });
+            }
+            Some(id) => {
+                let r = session.dispatch(
+                    "annotate.text.edit",
+                    &json!({ "annotation": id, "text": entry.text }),
+                );
+                let deleted = note(error, r)
+                    .is_some_and(|v| v.get("deleted").and_then(Value::as_bool) == Some(true));
+                self.note = (!deleted).then(|| id.clone());
+            }
+        }
+    }
+
+    /// Where a new note's box goes for a tap at `at`: there, or moved down below any note it
+    /// would cover (a new note never starts on top of another; it can be moved over one after).
+    fn free_spot(at: Pos2, size: Vec2, notes: &[Rect]) -> Pos2 {
+        let mut at = at;
+        for _ in 0..=notes.len() {
+            let r = Rect::from_min_size(at, size);
+            match notes.iter().find(|n| n.intersects(r)) {
+                Some(n) => at.y = n.bottom() + 2.0,
+                None => break,
+            }
+        }
+        at
     }
 
     /// Whether `pos` (screen) is on the ruler's body, where a drag moves it.
@@ -332,11 +638,39 @@ impl InkCanvas {
         let pressure = f64::from(force.unwrap_or(1.0).clamp(0.0, 1.0));
         match phase {
             Phase::Down => {
-                if self.live.is_some() || self.text.is_some() {
+                if self.live.is_some() {
                     return;
                 }
                 let tool = state.get("tool").and_then(Value::as_str).unwrap_or("pen");
-                let purpose = if ruler(state)
+                if let Some(entry) = &self.text {
+                    // A tap in the box being typed into belongs to the text field; anywhere else
+                    // ends typing (and is not a new note).
+                    if entry_rect(entry, session).expand(12.0).contains(at) {
+                        return;
+                    }
+                    self.commit_text(session, error);
+                    self.note = None;
+                    self.swallow = Some(id);
+                    return;
+                }
+                // With the text tool a press on a note (or the selected one's handle) selects
+                // it: a drag moves it, a tap opens it for typing.
+                if tool == "text"
+                    && !self
+                        .note_rect(session)
+                        .is_some_and(|r| r.expand2(vec2(14.0, 4.0)).contains(at))
+                    && let Some((hit, _, _)) =
+                        Self::notes(session).into_iter().find(|n| n.1.contains(at))
+                {
+                    self.note = Some(hit);
+                }
+                let on_note = tool == "text"
+                    && self
+                        .note_rect(session)
+                        .is_some_and(|r| r.expand2(vec2(14.0, 4.0)).contains(at));
+                let purpose = if on_note {
+                    Purpose::MoveNote
+                } else if ruler(state)
                     .is_some_and(|(y, half, reach)| (at.y - y).abs() < (half - reach).max(4.0))
                 {
                     Purpose::Ruler
@@ -354,6 +688,12 @@ impl InkCanvas {
                 });
             }
             Phase::Move | Phase::Up => {
+                if self.swallow == Some(id) {
+                    if phase == Phase::Up {
+                        self.swallow = None;
+                    }
+                    return;
+                }
                 let Some(live) = self.live.as_mut().filter(|l| l.id == id) else {
                     return;
                 };
@@ -407,6 +747,21 @@ impl InkCanvas {
         let (a, b) = (live.first(), live.last());
         match live.purpose {
             Purpose::Ruler => {}
+            Purpose::MoveNote => {
+                let (Some(id), Some(r)) = (self.note.clone(), self.note_rect(session)) else {
+                    return;
+                };
+                if live.travel() >= TAP_TRAVEL {
+                    let to = r.min + (b - a);
+                    let res = session.dispatch(
+                        "annotate.text.edit",
+                        &json!({ "annotation": id, "x": to.x, "y": to.y }),
+                    );
+                    note(error, res);
+                } else {
+                    self.edit_note(session, &id);
+                }
+            }
             Purpose::MoveSelection => {
                 let (Some(sel), true) = (self.selection, live.travel() >= TAP_TRAVEL) else {
                     return;
@@ -428,11 +783,41 @@ impl InkCanvas {
                 let tool = state.get("tool").and_then(Value::as_str).unwrap_or("pen");
                 match tool {
                     "text" => {
-                        self.text = Some(TextEntry {
-                            at: a,
-                            text: String::new(),
-                            device: live.kind,
-                        });
+                        let notes = Self::notes(session);
+                        if let Some((id, _, _)) = notes.iter().find(|n| n.1.contains(a)) {
+                            // A tap on a note selects it and opens it for typing.
+                            self.note = Some(id.clone());
+                            let id = id.clone();
+                            self.edit_note(session, &id);
+                        } else if self.note.take().is_some() {
+                            // The first tap away from a selected note just lets it go.
+                        } else {
+                            let size = state
+                                .pointer("/text/size")
+                                .and_then(Value::as_f64)
+                                .unwrap_or(12.0) as f32;
+                            let color = state
+                                .pointer("/text/color")
+                                .and_then(Value::as_str)
+                                .and_then(parse_color)
+                                .unwrap_or(Color32::BLACK);
+                            let mut entry = TextEntry {
+                                at: a,
+                                text: String::new(),
+                                device: live.kind,
+                                note: None,
+                                size,
+                                color,
+                                measured: None,
+                                anchor: None,
+                            };
+                            let rects: Vec<Rect> = notes.iter().map(|n| n.1).collect();
+                            let box_size = entry_rect(&entry, session).size();
+                            entry.at = Self::free_spot(a, box_size, &rects);
+                            entry.anchor =
+                                session.view_to_page(f64::from(entry.at.x), f64::from(entry.at.y));
+                            self.text = Some(entry);
+                        }
                     }
                     "stamp" => {
                         let mut p = json!({ "x": a.x, "y": a.y, "device": device });
@@ -484,17 +869,29 @@ impl InkCanvas {
                             "annotate.stroke",
                             &json!({ "points": points, "device": device }),
                         );
+                        let image = if tool == "highlighter" {
+                            self.preview_rect
+                                .take()
+                                .and_then(|r| self.preview.take()?.tex.map(|t| (t, r)))
+                        } else {
+                            None
+                        };
                         if let Some(v) = note(error, r)
                             && v.get("drawn").and_then(Value::as_bool) == Some(true)
                             && tool != "eraser"
                             && let Some(fp) = v.get("filePage").and_then(Value::as_u64)
                             && let Some((pts, stroke)) = live_shape(&live, session, state)
                         {
+                            let (shape, image) = match image {
+                                Some(im) => (Vec::new(), Some(im)),
+                                None => (pts, None),
+                            };
                             self.pending.push(Pending {
                                 file_page: usize::try_from(fp.saturating_sub(1)).unwrap_or(0),
                                 texture: None,
-                                shape: pts,
+                                shape,
                                 stroke,
+                                image,
                                 born: now,
                             });
                         }
@@ -502,6 +899,23 @@ impl InkCanvas {
                 }
             }
         }
+    }
+
+    /// Opens note `id` for typing in place.
+    fn edit_note(&mut self, session: &Session, id: &str) {
+        let Some((_, r, n)) = Self::notes(session).into_iter().find(|n| n.0 == id) else {
+            return;
+        };
+        self.text = Some(TextEntry {
+            at: r.min,
+            text: n.text,
+            device: PointerKind::Pen,
+            note: Some(id.to_owned()),
+            size: n.size,
+            color: parse_color(&n.color).unwrap_or(Color32::BLACK),
+            measured: None,
+            anchor: None,
+        });
     }
 
     /// Notes which texture each kept stroke's page had when it was committed, and drops the
@@ -544,11 +958,16 @@ impl InkCanvas {
                 blue,
             );
         }
+        let full_uv = Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
         for p in &self.pending {
-            painter.add(Shape::line(
-                p.shape.iter().map(|q| *q + off).collect(),
-                p.stroke,
-            ));
+            if let Some((t, r)) = &p.image {
+                painter.image(t.id(), r.translate(off), full_uv, Color32::WHITE);
+            } else {
+                painter.add(Shape::line(
+                    p.shape.iter().map(|q| *q + off).collect(),
+                    p.stroke,
+                ));
+            }
         }
         if let Some(live) = &self.live {
             let tool = state.get("tool").and_then(Value::as_str).unwrap_or("pen");
@@ -563,19 +982,32 @@ impl InkCanvas {
                     );
                 }
                 (Purpose::Tool, "stamp" | "text") => {}
+                (Purpose::Tool, "highlighter") => {
+                    // One flat layer, as the page will draw it (never darker where it overlaps).
+                    if let (Some(pv), Some(r)) = (&self.preview, self.preview_rect)
+                        && let Some(t) = &pv.tex
+                    {
+                        painter.image(t.id(), r.translate(off), full_uv, Color32::WHITE);
+                    }
+                }
+                (Purpose::Tool, "eraser") => {
+                    // Only where the eraser is: no trail behind it.
+                    let state_w = state
+                        .pointer("/eraser/width")
+                        .and_then(Value::as_f64)
+                        .unwrap_or(8.0) as f32;
+                    let px = session
+                        .points_per_pixel(f64::from(live.last().x), f64::from(live.last().y))
+                        .map_or(1.0, |d| (1.0 / d) as f32);
+                    painter.circle_stroke(
+                        live.last() + off,
+                        (state_w * px / 2.0).max(4.0),
+                        Stroke::new(1.5, Color32::from_gray(110)),
+                    );
+                }
                 (Purpose::Tool, _) => {
                     if let Some((pts, stroke)) = live_shape(live, session, state) {
-                        let last = pts.last().copied();
                         painter.add(Shape::line(pts.iter().map(|q| *q + off).collect(), stroke));
-                        if tool == "eraser"
-                            && let Some(at) = last
-                        {
-                            painter.circle_stroke(
-                                at + off,
-                                (stroke.width * 4.0).max(4.0),
-                                Stroke::new(1.0, Color32::GRAY),
-                            );
-                        }
                     }
                 }
                 (Purpose::MoveSelection, _) => {
@@ -589,7 +1021,7 @@ impl InkCanvas {
                         );
                     }
                 }
-                (Purpose::Ruler, _) => {}
+                (Purpose::Ruler | Purpose::MoveNote, _) => {}
             }
         }
         if let Some((y, half, _)) = ruler(state) {
@@ -614,25 +1046,51 @@ impl InkCanvas {
                 painter.rect_filled(Rect::from_center_size(c, vec2(7.0, 7.0)), 1.0, red);
             }
         }
-        if let Some(t) = &self.text {
-            // The new note's red box with its handle on the left (screenshot 29).
-            let red = Color32::from_rgb(0xd0, 0x30, 0x30);
-            let at = t.at + off;
-            let size = state
-                .pointer("/text/size")
-                .and_then(Value::as_f64)
-                .unwrap_or(12.0) as f32;
-            let px = session
-                .points_per_pixel(f64::from(t.at.x), f64::from(t.at.y))
-                .map_or(1.0, |d| (1.0 / d) as f32);
-            let h = size * 1.5 * px;
-            let w = (t.text.chars().count().max(4) as f32 * size * 0.55 * px).min(rect.width());
-            let r = Rect::from_min_size(at, vec2(w, h));
-            painter.rect_stroke(r, 0.0, Stroke::new(1.5, red), egui::StrokeKind::Outside);
-            let grip = Rect::from_center_size(pos2(r.left() - 8.0, r.center().y), vec2(8.0, h));
-            painter.rect_filled(grip, 2.0, red);
+        // The selected note: its red box and handle show it can be moved (dragged by the box).
+        if self.text.is_none()
+            && state.get("tool").and_then(Value::as_str) == Some("text")
+            && let Some(r) = self.note_rect(session)
+        {
+            let d = self
+                .live
+                .as_ref()
+                .filter(|l| l.purpose == Purpose::MoveNote)
+                .map_or(Vec2::ZERO, |l| l.last() - l.first());
+            note_box(painter, r.translate(off + d));
         }
     }
+}
+
+/// A note's red box with its handle on the left (screenshot 29).
+pub fn note_box(painter: &Painter, r: Rect) {
+    let red = Color32::from_rgb(0xd0, 0x30, 0x30);
+    painter.rect_stroke(r, 0.0, Stroke::new(1.5, red), egui::StrokeKind::Outside);
+    let grip = Rect::from_center_size(pos2(r.left() - 8.0, r.center().y), vec2(8.0, r.height()));
+    painter.rect_filled(grip, 2.0, red);
+}
+
+/// The box a note being typed takes, reader-local: as wide as its text (four characters at
+/// least), as tall as its lines.
+pub fn entry_rect(entry: &TextEntry, session: &Session) -> Rect {
+    if let Some(size) = entry.measured {
+        return Rect::from_min_size(entry.at, size);
+    }
+    let px = session
+        .points_per_pixel(f64::from(entry.at.x), f64::from(entry.at.y))
+        .map_or(1.0, |d| (1.0 / d) as f32);
+    let size = entry.size * px;
+    let lines = entry.text.split('\n').count().max(1) as f32;
+    let longest = entry
+        .text
+        .split('\n')
+        .map(|l| l.chars().count())
+        .max()
+        .unwrap_or(0)
+        .max(4) as f32;
+    Rect::from_min_size(
+        entry.at,
+        vec2(longest * size * 0.6 + 8.0, lines * size * 1.3 + 6.0),
+    )
 }
 
 /// Records an engine error; returns the value on success.
