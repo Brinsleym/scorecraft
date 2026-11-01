@@ -370,6 +370,7 @@ fn entry(g: &mut IdGen, label: &str) -> ListEntry {
         id: g.id(NOW_MS),
         item: EntryItem::Placeholder {
             label: label.into(),
+            page: None,
         },
         note: String::new(),
     }
@@ -380,7 +381,7 @@ fn labels(lib: &Library, list: scorecraft_doc::ListId) -> Vec<String> {
         .entries
         .iter()
         .map(|e| match &e.item {
-            EntryItem::Placeholder { label } => label.clone(),
+            EntryItem::Placeholder { label, .. } => label.clone(),
             EntryItem::Score { .. } => "score".into(),
         })
         .collect()
@@ -418,7 +419,7 @@ fn sync_t8_list_order_merges_inserts_and_moves() {
     let x = entry(&mut g, "X");
     let es = &mut b.lib.lists.get_mut(&list).unwrap().entries;
     es.insert(2, x);
-    es.retain(|e| !matches!(&e.item, EntryItem::Placeholder { label } if label == "C"));
+    es.retain(|e| !matches!(&e.item, EntryItem::Placeholder { label, .. } if label == "C"));
     b.edit(&[Record::List(list)], NOW_MS + 2);
     let mut devs = [a, b];
     sync_all(&mut devs, NOW_MS + 3);

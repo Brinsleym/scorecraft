@@ -470,6 +470,13 @@ impl App {
                         }
                         crate::library_view::LibraryAction::Command(id, p) => {
                             let r = self.command(id, &p);
+                            if id == "list.entry.add"
+                                && let (Ok(v), Some(list)) =
+                                    (&r, p.get("list").and_then(Value::as_str))
+                            {
+                                self.library.range_notice =
+                                    crate::library_view::RangeNotice::from_added(list, v);
+                            }
                             self.report(r);
                         }
                         crate::library_view::LibraryAction::SyncNow => {

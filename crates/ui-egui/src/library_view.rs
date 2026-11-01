@@ -130,8 +130,35 @@ pub struct LibraryView {
     list_detail: Value,
     lists: Value,
     new_list: String,
+    /// The name typed for a new placeholder.
+    placeholder_name: String,
+    /// A score just added to a list brought the library's page range with it: the list, the
+    /// entry, and the range offered for tweaking (1-based).
+    pub range_notice: Option<RangeNotice>,
     /// Search inside the scores' PDFs and notes (LIB-6) rather than their details.
     pub full_text: bool,
+}
+
+/// The quiet notice after adding a score whose library entry has a page range.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RangeNotice {
+    pub list: String,
+    pub entry: String,
+    pub first: u64,
+    pub last: u64,
+}
+
+impl RangeNotice {
+    /// From `list.entry.add`'s answer, when the score brought a range.
+    pub fn from_added(list: &str, added: &Value) -> Option<RangeNotice> {
+        let r = added.get("pageRange")?;
+        Some(RangeNotice {
+            list: list.to_owned(),
+            entry: added.get("entry")?.as_str()?.to_owned(),
+            first: r.get("first")?.as_u64()?,
+            last: r.get("last")?.as_u64()?,
+        })
+    }
 }
 
 impl Default for LibraryView {
@@ -151,6 +178,8 @@ impl Default for LibraryView {
             list_detail: Value::Null,
             lists: Value::Null,
             new_list: String::new(),
+            placeholder_name: String::new(),
+            range_notice: None,
             full_text: false,
         }
     }
@@ -555,11 +584,23 @@ impl LibraryView {
             {
                 out.push(LibraryAction::Command("list.play", json!({ "list": list })));
             }
-            if ui.button("Add break").clicked() {
+            ui.add(
+                egui::TextEdit::singleline(&mut self.placeholder_name)
+                    .hint_text("Interval")
+                    .desired_width(110.0),
+            );
+            if ui
+                .button("Add placeholder")
+                .on_hover_text("A blank A4 page with this name on it, to write on")
+                .clicked()
+            {
+                let name = self.placeholder_name.trim();
+                let label = if name.is_empty() { "Interval" } else { name };
                 out.push(LibraryAction::Command(
                     "list.entry.addPlaceholder",
-                    json!({ "list": list, "label": "Break" }),
+                    json!({ "list": list, "label": label }),
                 ));
+                self.placeholder_name.clear();
             }
             if ui.button("Delete list").clicked() {
                 out.push(LibraryAction::Command(
@@ -569,6 +610,7 @@ impl LibraryView {
                 self.open_list = None;
             }
         });
+        self.range_notice_ui(ui, &list, out);
         egui::ScrollArea::vertical()
             .id_salt("list-entries")
             .show(ui, |ui| {
@@ -613,6 +655,44 @@ impl LibraryView {
                     });
                 }
             });
+    }
+
+    /// The quiet notice that an added score kept its library page range, with the range to
+    /// tweak for this entry only.
+    fn range_notice_ui(&mut self, ui: &mut Ui, list: &str, out: &mut Vec<LibraryAction>) {
+        let Some(n) = self.range_notice.as_mut() else {
+            return;
+        };
+        if n.list != list {
+            return;
+        }
+        let mut done = false;
+        ui.horizontal_wrapped(|ui| {
+            ui.label(RichText::new("ⓘ Kept the score's page range: pages").weak());
+            ui.add(egui::DragValue::new(&mut n.first).range(1..=n.last.max(1)));
+            ui.label(RichText::new("to").weak());
+            ui.add(egui::DragValue::new(&mut n.last).range(n.first..=9999));
+            if ui.small_button("Apply").clicked() {
+                out.push(LibraryAction::Command(
+                    "list.entry.pageRange.set",
+                    json!({ "list": n.list, "entry": n.entry, "first": n.first, "last": n.last }),
+                ));
+                done = true;
+            }
+            if ui.small_button("All pages").clicked() {
+                out.push(LibraryAction::Command(
+                    "list.entry.pageRange.set",
+                    json!({ "list": n.list, "entry": n.entry }),
+                ));
+                done = true;
+            }
+            if ui.small_button("OK").clicked() {
+                done = true;
+            }
+        });
+        if done {
+            self.range_notice = None;
+        }
     }
 
     fn card(

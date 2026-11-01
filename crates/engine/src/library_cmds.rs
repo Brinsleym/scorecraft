@@ -108,7 +108,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "score.newManuscript",
             "New Manuscript Paper…",
             "File",
-            r#"{"paper":"single|grand|tab"="single","size":"letter|a4"="letter","pages":1..200=4,"title":string?}"#,
+            r#"{"paper":"single|grand|tab|blank"="single","size":"letter|a4"="letter","pages":1..200=4,"title":string?}"#,
             false,
             library_open,
             new_manuscript as _,
@@ -287,10 +287,11 @@ fn scores(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
     let sort = session.library_sort;
     let l = session.lib_mut(ID)?;
     let lib = &l.lib;
+    let hidden = lib.placeholder_pages();
     let pool: Vec<&Score> = lib
         .scores
         .values()
-        .filter(|s| lib.is_trashed(s.id) == trashed)
+        .filter(|s| lib.is_trashed(s.id) == trashed && !hidden.contains(&s.id))
         .filter(|s| folder.is_none_or(|f| s.folder == f))
         .collect();
     let list: Vec<Value> = crate::find_cmds::sorted(sort, pool)
@@ -413,7 +414,7 @@ fn new_manuscript(session: &mut Session, params: &Value) -> Result<Value, Engine
     reject_unknown_keys(ID, p, &["paper", "size", "pages", "title"])?;
     let paper_id = opt_str(ID, p, "paper")?.unwrap_or("single");
     let paper = scorecraft_pdf::Paper::from_id(paper_id)
-        .ok_or_else(|| bad(ID, "`paper` must be single, grand or tab".into()))?;
+        .ok_or_else(|| bad(ID, "`paper` must be single, grand, tab or blank".into()))?;
     let (w, h) = match opt_str(ID, p, "size")?.unwrap_or("letter") {
         "letter" => (612.0, 792.0),
         "a4" => (595.28, 841.89),
@@ -424,6 +425,7 @@ fn new_manuscript(session: &mut Session, params: &Value) -> Result<Value, Engine
         scorecraft_pdf::Paper::Single => "Manuscript paper",
         scorecraft_pdf::Paper::Grand => "Piano manuscript paper",
         scorecraft_pdf::Paper::Tab => "Tablature paper",
+        scorecraft_pdf::Paper::Blank => "Blank paper",
     });
     check_len(ID, "title", title, 200)?;
     let pdf = scorecraft_pdf::manuscript(paper, w, h, usize::try_from(pages).unwrap_or(4), title)?;
@@ -466,7 +468,11 @@ impl Session {
             .lib
             .scores
             .values()
-            .find(|s| s.source.blob == blob && !l.lib.is_trashed(s.id))
+            .find(|s| {
+                s.source.blob == blob
+                    && !l.lib.is_trashed(s.id)
+                    && !l.lib.placeholder_pages().contains(&s.id)
+            })
             .map(|s| s.id);
         let (id, imported) = match existing {
             Some(id) => (id, false),

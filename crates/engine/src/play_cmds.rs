@@ -1,7 +1,8 @@
 //! Playing a setlist (feature-map LIST-4, spec `docs/spec/performance.md`): its scores in turn,
 //! each within its entry's page range, a turn past the last page opening the next entry at its
-//! first page (and back past the first, the previous entry at its last page). Breaks
-//! (placeholders) are passed over and reported, so the shell can show them. The same score can
+//! first page (and back past the first, the previous entry at its last page). A placeholder's
+//! page is stopped on like a score; older placeholders without a page are passed over and
+//! reported, so the shell can show them. The same score can
 //! be in many lists and several times in one (LIST-6): entries refer to it, never copy it.
 
 use serde_json::{Value, json};
@@ -116,7 +117,14 @@ fn find(
             } if lib.scores.contains_key(score) && !lib.is_trashed(*score) => {
                 return Ok(Some((i, *score, *page_range, *tempo, breaks)));
             }
-            EntryItem::Placeholder { label } => breaks.push(label.clone()),
+            // A placeholder with a page of its own is stopped on, like a score (owner,
+            // 2026-11-01); one without (made before pages) is passed over and reported.
+            EntryItem::Placeholder {
+                page: Some(page), ..
+            } if lib.scores.contains_key(page) && !lib.is_trashed(*page) => {
+                return Ok(Some((i, *page, None, None, breaks)));
+            }
+            EntryItem::Placeholder { label, .. } => breaks.push(label.clone()),
             // A score in the trash or gone is passed over.
             EntryItem::Score { .. } => {}
         }
