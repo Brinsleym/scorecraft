@@ -1,4 +1,5 @@
-//! Export with ink (feature-map EXP-2, spec `docs/spec/ink.md`): the open library score as a new
+//! Export with ink (feature-map EXP-2, spec `docs/spec/ink.md`): a library score (the open one,
+//! or one named by id) as a new
 //! PDF, its pages in the score's order with its rotation, crop, hidden pages and page range
 //! applied, and the chosen layers' markings flattened or as PDF annotations. The imported file
 //! is never changed (ANNO-15).
@@ -14,10 +15,10 @@ use scorecraft_pdf::{ExportMark, ExportMode, ExportPage, InkFill, MarkKind, expo
 use scorecraft_render::Filter;
 use scorecraft_render::ink::{Fill, fills, hairpin_lines, is_drawn};
 
-use crate::annotate_cmds::markup_ready;
 use crate::commands::{
-    CommandSpec, bad, opt_str, params_object, reject_unknown_keys, req_str, truncate,
+    CommandSpec, bad, opt_id, opt_str, params_object, reject_unknown_keys, req_str, truncate,
 };
+use crate::library::library_open;
 use crate::text_cmds::library_score;
 use crate::{EngineError, Session};
 
@@ -30,9 +31,9 @@ pub fn specs() -> Vec<CommandSpec> {
         label: "Export PDF…",
         menu: "File>Export",
         shortcut: None,
-        params: r#"{"path":path,"mode":"flatten|annotations"="flatten","layers":[id]?,"password":string?}"#,
+        params: r#"{"path":path,"score":id?,"mode":"flatten|annotations"="flatten","layers":[id]?,"password":string?}"#,
         ours: false,
-        enabled: markup_ready,
+        enabled: library_open,
         run: export,
     }]
 }
@@ -151,7 +152,7 @@ fn pages(score: &Score, layers: &[LayerId], curve: &PressureCurve) -> Vec<Export
 fn export(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
     const ID: &str = "score.export.pdf";
     let p = params_object(ID, params)?;
-    reject_unknown_keys(ID, p, &["path", "mode", "layers", "password"])?;
+    reject_unknown_keys(ID, p, &["path", "score", "mode", "layers", "password"])?;
     let out_path = req_str(ID, p, "path")?;
     let (pdf, mut out) = build(session, ID, p)?;
     write_atomic(out_path, &pdf)?;
@@ -166,7 +167,7 @@ impl Session {
     pub fn export_pdf_bytes(&mut self, params: &Value) -> Result<Vec<u8>, EngineError> {
         const ID: &str = "score.export.pdf";
         let p = params_object(ID, params)?;
-        reject_unknown_keys(ID, p, &["mode", "layers", "password"])?;
+        reject_unknown_keys(ID, p, &["score", "mode", "layers", "password"])?;
         build(self, ID, p).map(|(pdf, _)| pdf)
     }
 }
@@ -191,11 +192,15 @@ fn build(
         }
     };
     let password = opt_str(cmd, p, "password")?;
-    let score_id = session
-        .score
-        .as_ref()
-        .and_then(|o| o.library_score)
-        .ok_or_else(|| EngineError::Disabled(cmd.to_owned()))?;
+    // A library score named by id (Share from the library), or the open one.
+    let score_id = match opt_id(cmd, p, "score")? {
+        Some(id) => id,
+        None => session
+            .score
+            .as_ref()
+            .and_then(|o| o.library_score)
+            .ok_or_else(|| EngineError::Disabled(cmd.to_owned()))?,
+    };
     let score = library_score(session, score_id)?.clone();
     let layers: Vec<LayerId> = match p.and_then(|m| m.get("layers")) {
         None | Some(Value::Null) => score
