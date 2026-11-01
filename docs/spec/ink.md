@@ -1,6 +1,6 @@
 # Ink and markup
 
-> **Last reviewed:** 2026-10-31 · **Last updated:** 2026-11-01 · **Change:** minor (the owner's answers on highlighter overlap, notes, page edges and the ruler; earlier: M4 part 5: export with ink; earlier: M4 part 4: the pen in the app; earlier: M4 part 3: rectangle select, shapes switch, pen button; earlier: ANNO-8 text notes from the owner's observation; earlier: owner's answers to the open questions; earlier: owner's direction on the toolbar; earlier: first version) · **Target:** enScore 3.7 (2026)
+> **Last reviewed:** 2026-10-31 · **Last updated:** 2026-11-01 · **Change:** minor (the owner's first hands-on feedback: notes typed in their box, selected and edited later, never placed on top of another; black stamps; no eraser trail; one-layer highlighter preview; markup survives scrolling and turns; earlier: the owner's answers on highlighter overlap, notes, page edges and the ruler; earlier: M4 part 5: export with ink; earlier: M4 part 4: the pen in the app; earlier: M4 part 3: rectangle select, shapes switch, pen button; earlier: ANNO-8 text notes from the owner's observation; earlier: owner's answers to the open questions; earlier: owner's direction on the toolbar; earlier: first version) · **Target:** enScore 3.7 (2026)
 
 How the player marks up a score: pens, highlighters, whiteout, erasers, text notes, stamps,
 layers, selection, shapes, and exporting the result. Written for milestone M4.
@@ -113,6 +113,9 @@ layers, selection, shapes, and exporting the result. Written for milestone M4.
   drawing order. Where two strokes overlap, of one colour or two, the later one replaces the
   earlier, so the page is never darker there and colours never mix. Pen, text and stamps drawn
   later still go on top.
+- **The stroke being drawn looks as it will** (owner, 2026-11-01): while the highlighter is down,
+  the shell shows the stroke as one flat layer of its colour, never darker where it crosses itself
+  or where its segments join, and keeps showing it that way until the page has redrawn with it.
 - Default: the highlighter's first swatch (yellow), 12 pt nib.
 
 ### ANNO-4 Colours, widths and presets
@@ -160,6 +163,8 @@ layers, selection, shapes, and exporting the result. Written for milestone M4.
   nothing records nothing.
 - Only strokes on visible, unlocked layers are erased. Text notes and stamps are not erased by
   either eraser (they are deleted by selecting them, ANNO-12).
+- While the eraser is down, the shell shows only the eraser's circle where it is now: no grey
+  trail behind it (owner, 2026-11-01).
 
 ### ANNO-7 Pixel eraser
 
@@ -195,6 +200,21 @@ Observed in enScore (screenshot 29, [observation](../observations/anno-markup-to
 - Notes are stored in page space like ink, so they stay on the same music when the page is
   rotated or moved.
 
+Typing and editing in place (owner, 2026-11-01):
+
+- **Text is typed straight into the red box** on the page, in the note's size and colour. There
+  is no separate *Text Note* dialog. **Enter** keeps the note (Shift+Enter starts a new line),
+  **Escape** drops a new note or the change to an old one, and a tap anywhere else keeps it and
+  does nothing more (it does not start another note).
+- A note just placed **stays selected**: its red box and handle stay so it is clear it can be
+  moved. A tap away from it clears the selection.
+- With the text tool, a **tap on a note selects it and opens it for typing**; a **drag on a note
+  moves it**. Notes are kept in the score's library, so this works after the score is closed or
+  the app restarted.
+- **A new note never starts on top of another.** A tap that would put the new box over a note
+  starts it just below that note instead. A note can still be dragged over another afterwards.
+- A note being typed when the page turns, scrolls or zooms is kept where it was put on its page.
+
 ScoreCraft's own additions, beyond what was observed:
 
 - The style of a note can be changed from its selection: colour (the pen's swatches), bold and
@@ -212,12 +232,13 @@ ScoreCraft's own additions, beyond what was observed:
 - Dynamics are set in the **Edwin** font, bold italic as engraved dynamics are. Without the font
   installed, a built-in fallback shape is used, so stamps always show.
 - Tapping the page places the selected dynamic centred where the player tapped, at a size the
-  player picks (8–96 pt, 18 pt by default), in the pen's colour.
+  player picks (8–96 pt, 18 pt by default), **in black** (owner, 2026-11-01): stamps never take
+  the pen's or any other tool's colour.
 - A hairpin is placed by dragging from where it starts to where it ends (a tap places one 72 pt
   long). A placed hairpin shows three handles when selected: one at each end, which stretch it
   longer or shorter, and one in the middle, which moves it. Its opening is a fixed height (a
   third of the size setting) whatever its length.
-- Every placed stamp can be moved, resized, recoloured and deleted like any selection (ANNO-12).
+- Every placed stamp can be moved, resized and deleted like any selection (ANNO-12).
   Each placement and each handle drag is one undo step.
 
 ### ANNO-10 Layers
@@ -394,6 +415,8 @@ ScoreCraft's own additions, beyond what was observed:
 | INK-4 | A stroke with pressures 0.1 then 1.0 | its outline is built | it is narrower at the start than the end, and never narrower than 25% of the width |
 | INK-5 | A highlighter stroke that crosses itself over white paper | the page is composed | the crossing pixel has the same colour as a pixel the stroke covers once |
 | INK-50 | Two highlighter strokes crossing, of one colour and then of two; a pen stroke after them; and a flattened export of two overlapping highlighters | the page is composed; the export is rendered | the crossing is no darker than one stroke; with two colours it shows the later one unmixed; the pen is on top; the exported overlap matches a single stroke |
+| INK-52 | The app, the text tool | the page is tapped, *Slower* typed and Enter pressed; then a tap away, a tap on the note, more typing and Enter; then a tap just above the note | no dialog; the note is added and stays selected; the tap away only deselects; the same note is edited, not covered; the new note starts below it; Escape drops a new note |
+| INK-53 | The app in markup mode, a stroke just drawn | the wheel turns the page, a stroke is drawn there; then a note being typed when the page turns | the turn happens and the new stroke is kept; the note is kept on the page it was typed on and no box is left on screen |
 | INK-51 | A pen line selected on a 612 × 792 pt page | it is dropped past the bottom-right corner, grown 10×, then dropped past the top-left corner | the whole line, ink width included, ends at the right and top edges; grown, it is as wide as the page and no wider; it never crosses an edge |
 | INK-6 | A highlighter over black notation | the page is composed | the notation pixel stays black |
 | INK-7 | Whiteout over notation, then a pen stroke over it | the page is composed | the notation is covered by paper colour and the pen shows on top |
@@ -425,7 +448,7 @@ ScoreCraft's own additions, beyond what was observed:
 | INK-34 | A score with one layer | a layer is added and a stroke drawn | the new layer is active and holds the stroke; choosing the first layer again sends the next stroke there |
 | INK-35 | A layer with two strokes | it is deleted | the layer and both strokes go in one undo step; undo restores both; the last layer can't be deleted |
 | INK-36 | A highlighter preset saved, then the pen chosen | the preset is applied | the highlighter is active with the preset's colour and width |
-| INK-37 | The stamp tool, first time | the page is tapped | a **p** is placed, centred on the tap, 18 pt, in the pen's colour; near an edge it is kept inside the page |
+| INK-37 | The stamp tool, first time | the page is tapped | a **p** is placed, centred on the tap, 18 pt, in black whatever the pen's colour; near an edge it is kept inside the page |
 | INK-38 | A crescendo placed by a tap | its end handle is dragged, then its middle | it stretches to the new end, then moves whole; each is one undo step; its opening stays a third of the size |
 | INK-39 | Three strokes and a note inside a rectangle, one stroke mostly outside | they are selected and dropped on page 2 | the three move to page 2 keeping their ids, the other stays; one undo puts them back |
 | INK-40 | A pen and a highlighter stroke selected | they are copied, scaled 2×, recoloured, then deleted | copies get new ids and originals stay; points spread and widths double about the centre; both take the colour; delete is one undo step; 11× is refused |
@@ -451,7 +474,7 @@ INK-33 is a `scorecraft-text` and engine test (`crates/text/src/layout.rs`,
 stamps, layers, selection, shapes and export get their acceptance tests when their part of M4
 lands, and are added to this table. INK-39 to INK-42 are engine tests
 (`crates/engine/src/select_cmds/tests.rs`), with `scorecraft-ink` tests of the shape fit
-(`crates/ink/src/shape.rs`). INK-43 to INK-46 are shell tests driving egui frames
+(`crates/ink/src/shape.rs`). INK-43 to INK-46, INK-52 and INK-53 are shell tests driving egui frames
 (`crates/ui-egui/src/app.rs`). INK-47 to INK-49 are engine tests
 (`crates/engine/src/export_cmds/tests.rs`), with `scorecraft-pdf` tests of the writer
 (`crates/pdf/src/export.rs`).
@@ -493,6 +516,7 @@ swatches and palette (screenshot 28); the stylus shortcut (pen and eraser).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-01 | minor | Owner's first hands-on feedback: notes typed in their box with no dialog, kept selected, selectable and editable later, never placed on top of another; stamps always black; no eraser trail; the highlighter shows one flat layer while drawn; markup keeps working after scrolls and turns; INK-52, INK-53 |
 | 2026-11-01 | minor | Built: nothing a selection carries leaves the page (INK-51); the ruler's two edges hold a stroke until lift (INK-27) |
 | 2026-11-01 | minor | Built: one highlighter layer in the reader and in flattened export (knockout group); INK-50 |
 | 2026-11-01 | minor | Owner's answers: one highlighter layer with no build-up or mixing; chisel upright on the page; preset note widths; nothing moves past the page edge; ruler moves and strokes snap to its edges until lift |

@@ -551,9 +551,11 @@ fn select_recolor(session: &mut Session, params: &Value) -> Result<Value, Engine
                 Tool::Pen => s.color = color,
             },
             AnnotationKind::Text(t) => t.style.color = rgb,
-            AnnotationKind::Stamp(st) => st.color = rgb,
-            AnnotationKind::Hairpin(h) => h.color = rgb,
-            AnnotationKind::Snip(_) | AnnotationKind::Shortcut(_) => {}
+            // Stamps stay black (owner, 2026-11-01).
+            AnnotationKind::Stamp(_)
+            | AnnotationKind::Hairpin(_)
+            | AnnotationKind::Snip(_)
+            | AnnotationKind::Shortcut(_) => {}
         }
         Ok(())
     })

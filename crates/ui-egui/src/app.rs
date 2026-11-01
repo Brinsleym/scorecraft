@@ -1496,6 +1496,154 @@ mod tests {
         assert_eq!(app.session.reader_state().unwrap()["page"], 1);
     }
 
+    /// A mouse click at (x, y), as the frames that carry it.
+    fn click(x: f32, y: f32) -> Vec<Vec<egui::Event>> {
+        let button = |pressed| egui::Event::PointerButton {
+            pos: pos2(x, y),
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        vec![
+            vec![egui::Event::PointerMoved(pos2(x, y)), button(true)],
+            vec![button(false)],
+            Vec::new(),
+        ]
+    }
+
+    fn key(k: egui::Key) -> Vec<Vec<egui::Event>> {
+        let e = |pressed| egui::Event::Key {
+            key: k,
+            physical_key: None,
+            pressed,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        };
+        vec![vec![e(true), e(false)], Vec::new()]
+    }
+
+    fn typed(text: &str) -> Vec<Vec<egui::Event>> {
+        vec![vec![egui::Event::Text(text.to_owned())], Vec::new()]
+    }
+
+    fn notes(app: &App) -> Vec<(String, [f64; 4])> {
+        app.session
+            .notes_on_screen()
+            .into_iter()
+            .map(|n| (n.text, n.rect))
+            .collect()
+    }
+
+    #[test]
+    fn anno_8_notes_are_typed_in_their_box_and_can_be_selected_moved_and_edited() {
+        let (mut app, ctx) = markup_app();
+        app.command("annotate.tool.text", &json!({})).unwrap();
+        app.command("input.pen.only", &json!({ "on": false }))
+            .unwrap();
+        let mut t = 1.0;
+        let mut run = |app: &mut App, s: Vec<Vec<egui::Event>>| {
+            script(app, &ctx, t, s);
+            t += 1.0;
+        };
+        // A tap opens a box right there; what is typed goes in it; Enter keeps it, selected.
+        run(&mut app, click(400.0, 300.0));
+        assert!(app.reader.ink.text.is_some(), "typing in place, no dialog");
+        run(&mut app, typed("Slower"));
+        run(&mut app, key(egui::Key::Enter));
+        assert!(app.reader.ink.text.is_none());
+        let first = notes(&app);
+        assert_eq!(first.len(), 1, "{:?}", app.state.message);
+        assert_eq!(first[0].0, "Slower");
+        assert!(app.reader.ink.note.is_some(), "the new note stays selected");
+        // A tap away only drops the selection.
+        run(&mut app, click(900.0, 600.0));
+        assert!(app.reader.ink.note.is_none());
+        assert!(app.reader.ink.text.is_none());
+        // A tap on the note opens it again (it is not covered by a new one). Notes are
+        // reader-local; the reader starts below the two toolbars, 104 points down.
+        let [x0, y0, x1, y1] = first[0].1;
+        let (cx, cy) = (((x0 + x1) / 2.0) as f32, ((y0 + y1) / 2.0) as f32);
+        run(&mut app, click(cx, cy + 104.0));
+        assert_eq!(
+            app.reader.ink.text.as_ref().map(|e| e.text.as_str()),
+            Some("Slower")
+        );
+        run(&mut app, typed(" here"));
+        run(&mut app, key(egui::Key::Enter));
+        let edited = notes(&app);
+        assert_eq!(edited.len(), 1, "edited, not added on top");
+        assert_eq!(edited[0].0, "Slower here");
+        // A new note tapped onto an old one starts below it, never on top.
+        run(&mut app, click(900.0, 600.0));
+        run(&mut app, click(cx - 10.0, y0 as f32 + 100.0));
+        run(&mut app, typed("pp"));
+        run(&mut app, key(egui::Key::Enter));
+        let both = notes(&app);
+        assert_eq!(both.len(), 2);
+        let (a, b) = (both[0].1, both[1].1);
+        assert!(
+            a[3] <= b[1] || b[3] <= a[1],
+            "the new note does not overlap: {a:?} {b:?}"
+        );
+        // Escape drops a new note.
+        run(&mut app, click(900.0, 600.0));
+        run(&mut app, click(700.0, 500.0));
+        run(&mut app, typed("gone"));
+        run(&mut app, key(egui::Key::Escape));
+        assert_eq!(notes(&app).len(), 2);
+    }
+
+    #[test]
+    fn a_turn_or_scroll_keeps_markup_working_and_keeps_a_note_being_typed() {
+        let (mut app, ctx) = markup_app();
+        app.command("view.layout.single", &json!({})).unwrap();
+        script(&mut app, &ctx, 1.0, drag(7, 400.0, 700.0, 300.0, true));
+        script(&mut app, &ctx, 2.0, vec![Vec::new()]);
+        assert_eq!(strokes_on_page(&mut app), 1);
+        // The wheel turns while the first stroke is still drawn by the shell.
+        script(
+            &mut app,
+            &ctx,
+            3.0,
+            vec![
+                vec![
+                    egui::Event::PointerMoved(pos2(640.0, 400.0)),
+                    egui::Event::MouseWheel {
+                        unit: egui::MouseWheelUnit::Page,
+                        delta: vec2(0.0, -1.0),
+                        modifiers: egui::Modifiers::NONE,
+                        phase: egui::TouchPhase::Move,
+                        source: egui::MouseWheelSource::Wheel,
+                    },
+                ],
+                Vec::new(),
+                Vec::new(),
+            ],
+        );
+        assert_eq!(
+            app.session.reader_state().unwrap()["page"],
+            2,
+            "the wheel turned"
+        );
+        assert!(app.reader.ink.text.is_none());
+        // Drawing on the new page works.
+        script(&mut app, &ctx, 4.0, drag(8, 400.0, 700.0, 350.0, true));
+        script(&mut app, &ctx, 5.0, vec![Vec::new()]);
+        assert_eq!(strokes_on_page(&mut app), 1, "{:?}", app.state.message);
+        // A note being typed when the page turns is kept, on its page.
+        app.command("annotate.tool.text", &json!({})).unwrap();
+        app.command("input.pen.only", &json!({ "on": false }))
+            .unwrap();
+        script(&mut app, &ctx, 6.0, click(400.0, 300.0));
+        script(&mut app, &ctx, 7.0, typed("cresc."));
+        app.command("view.turn.next", &json!({})).unwrap();
+        script(&mut app, &ctx, 8.0, vec![Vec::new(), Vec::new()]);
+        assert!(app.reader.ink.text.is_none(), "no box left floating");
+        app.command("view.turn.previous", &json!({})).unwrap();
+        script(&mut app, &ctx, 9.0, vec![Vec::new()]);
+        assert_eq!(notes(&app).len(), 1);
+    }
+
     #[test]
     fn markup_tools_and_colours_come_back_next_launch() {
         let (mut app, _) = markup_app();
