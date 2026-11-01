@@ -218,15 +218,84 @@ fn resources_with(doc: &Cos, page: &Dict, states: &States) -> Dict {
     res
 }
 
-/// Draws `marks` into the page content.
+/// Draws `marks` into the page content. The highlighter fills (the multiplied ones) all go into
+/// one knockout transparency group, multiplied onto the page at the first one's place: inside a
+/// knockout group a later shape replaces an earlier one, so overlapping highlighter strokes
+/// never darken or mix, as in the reader (spec `docs/spec/ink.md`, owner's answer 2026-11-01).
 fn flatten(doc: &mut Cos, page_ref: ObjRef, marks: &[ExportMark]) -> Result<(), PdfError> {
     let mut states = States::default();
     let mut budget = MAX_EXPORT_POINTS;
     let mut ops = String::new();
+    let highlights: Vec<InkFill> = marks
+        .iter()
+        .flat_map(|m| m.fills.iter().filter(|f| f.multiply).cloned())
+        .collect();
+    let mut group = None;
+    let mut xobjects = Vec::new();
     for m in marks {
-        ops.push_str(&fill_ops(&m.fills, &mut states, &mut budget));
+        if m.fills.iter().any(|f| f.multiply) && group.is_none() {
+            let r = highlight_group(doc, &highlights, &mut budget)?;
+            group = Some(r);
+            if let Some(r) = r {
+                let gs = states.name(1.0, true);
+                let _ = writeln!(ops, "q /{gs} gs /SChighlight Do Q");
+                xobjects.push(("SChighlight".to_owned(), r));
+            }
+        }
+        let rest: Vec<InkFill> = m.fills.iter().filter(|f| !f.multiply).cloned().collect();
+        ops.push_str(&fill_ops(&rest, &mut states, &mut budget));
     }
-    append_content(doc, page_ref, &ops, &states, &[])
+    append_content(doc, page_ref, &ops, &states, &xobjects)
+}
+
+/// The page's highlighter fills as an isolated knockout group (a form XObject), drawn "over"
+/// inside it; `None` when there is nothing to draw.
+fn highlight_group(
+    doc: &mut Cos,
+    fills: &[InkFill],
+    budget: &mut usize,
+) -> Result<Option<ObjRef>, PdfError> {
+    let plain: Vec<InkFill> = fills
+        .iter()
+        .map(|f| InkFill {
+            multiply: false,
+            ..f.clone()
+        })
+        .collect();
+    let mut states = States::default();
+    let ops = fill_ops(&plain, &mut states, budget);
+    let mark = ExportMark {
+        kind: MarkKind::Ink {
+            paths: Vec::new(),
+            width: 0.0,
+        },
+        fills: plain,
+        rgb: [0, 0, 0],
+    };
+    let Some(b) = bounds(&mark, 1.0) else {
+        return Ok(None);
+    };
+    if ops.is_empty() {
+        return Ok(None);
+    }
+    let mut g = Dict::new();
+    g.set(b"S".to_vec(), Object::name("Transparency"));
+    g.set(b"I".to_vec(), Object::Bool(true));
+    g.set(b"K".to_vec(), Object::Bool(true));
+    let mut res = Dict::new();
+    res.set(b"ExtGState".to_vec(), Object::Dict(states.dict()));
+    let mut d = Dict::new();
+    d.set(b"Type".to_vec(), Object::name("XObject"));
+    d.set(b"Subtype".to_vec(), Object::name("Form"));
+    d.set(
+        b"BBox".to_vec(),
+        Object::Array(b.iter().map(|v| real(*v)).collect()),
+    );
+    d.set(b"Group".to_vec(), Object::Dict(g));
+    d.set(b"Resources".to_vec(), Object::Dict(res));
+    Ok(Some(
+        doc.add(Object::Stream(Stream::flate(d, ops.as_bytes()))),
+    ))
 }
 
 /// `[a b c d e f]` matrices: `first` then `then`.
@@ -622,6 +691,34 @@ mod tests {
         assert!(inside[0] > 150 && inside[1] < 60, "{inside:?}");
         let outside = pixel(&mut doc, 0, 300.0, 300.0);
         assert!(outside.iter().all(|c| *c > 200), "{outside:?}");
+    }
+
+    #[test]
+    fn ink_50_flattened_highlighters_are_one_knockout_group() {
+        let hl = |x: f64, rgb: [u8; 3]| InkFill {
+            alpha: 0.4,
+            ..square(x, 100.0, 60.0, rgb, true)
+        };
+        let pages = vec![ExportPage {
+            file_page: 0,
+            rotate: 0,
+            crop: None,
+            marks: vec![
+                mark(hl(100.0, [255, 230, 0])),
+                mark(hl(130.0, [255, 230, 0])),
+            ],
+        }];
+        let out = export_pdf(source(1), None, &pages, ExportMode::Flatten).unwrap();
+        let text = String::from_utf8_lossy(&out);
+        assert!(
+            text.contains("/K true") && text.contains("/I true"),
+            "a knockout group"
+        );
+        let mut doc = Document::open(Arc::new(out)).unwrap();
+        let one = pixel(&mut doc, 0, 110.0, 130.0);
+        let both = pixel(&mut doc, 0, 145.0, 130.0);
+        assert_ne!(one, [255, 255, 255]);
+        assert_eq!(one, both, "no darker where they overlap");
     }
 
     #[test]
