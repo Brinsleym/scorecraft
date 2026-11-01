@@ -99,9 +99,7 @@
 
 ## Open questions
 
-- Whether the text tool has colour or font options (none show in screenshot 29), and how
-  the maximum width is set: a fixed share of the page, or a fixed size.
-- Whether a note dragged towards an edge stops at it or is pushed back inside when dropped.
-- Whether the chisel turns with the page when a page is rotated (ScoreCraft keeps it upright on
-  the page, like a marker on paper).
-- How strokes follow enScore's ruler edges, and whether the ruler can be moved up and down.
+None left. The owner answered all four on 2026-11-01; the answers are in the
+[ink spec](../spec/ink.md#open-questions): preset note widths per tool, nothing moves past the
+page edge, the chisel stays upright on the page, and the ruler moves up and down with strokes
+snapping to its edges until the pen lifts. Text notes' colour and font options stay as specified.

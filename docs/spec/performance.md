@@ -1,6 +1,6 @@
 # Performance: setlists on stage, shortcuts, snips and the metronome
 
-> **Last reviewed:** 2026-10-31 · **Last updated:** 2026-10-31 · **Change:** patch (M6 part 4: the Lists panel; earlier: M6 part 3: shortcuts and snips; earlier: M6 part 2: metronome; earlier: first version) · **Target:** enScore 3.7 (2026)
+> **Last reviewed:** 2026-10-31 · **Last updated:** 2026-11-01 · **Change:** minor (the owner's answers on placeholders and page ranges; earlier: M6 part 4: the Lists panel; earlier: M6 part 3: shortcuts and snips; earlier: M6 part 2: metronome; earlier: first version) · **Target:** enScore 3.7 (2026)
 
 What a musician needs on stage, beyond reading one score: playing a setlist from piece to piece,
 jumping at repeats and codas, seeing the bars after a turn before it, and a metronome. Written
@@ -113,14 +113,25 @@ PERF-1 also checks that the window and layout carry over to the next score.
 
 ## Open questions
 
-- Whether enScore stops at a placeholder (an interval screen) or passes it; ScoreCraft passes it
-  and reports it.
-- Whether enScore's list entry ranges hide the other pages entirely or only start and end there.
+None left. Answered by the owner on 2026-11-01. Marked *(to build)* where the code does not do it yet.
+
+- **Placeholders are ScoreCraft's own** (enScore has none). A placeholder in a list (for example
+  "Interval") is a real, editable page: a blank A4 page made from a template, with the
+  placeholder's name in large centred text. The name is sanitised before it is drawn (plain text,
+  length-capped, no control characters). The pen and text tools work on it like any page, and
+  playing the list stops on it like any score *(to build: today a placeholder is passed and
+  reported)*.
+- **Page ranges.** An entry's range limits what plays: turning past its last page goes to the next
+  entry (as built). When a score that has a page range in the library is added to a list, the
+  entry copies that range and an unobtrusive notice says so, with a way to change it there. From
+  then on the list entry's range and the library score's range are independent *(to build: the
+  copy and the notice)*.
 
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-01 | minor | Owner's answers: placeholders become editable A4 template pages; a library page range is copied to a new list entry with a notice, then independent |
 | 2026-10-31 | patch | The metronome's click: synthesis and audio output on Windows and macOS; PERF-13 |
 | 2026-10-31 | patch | M6 part 4: shortcut outlines, snips in export, snip resizing |
 | 2026-10-31 | patch | M6 part 4: the Lists panel and the now-playing strip; scores in a list keep the window and layout; PERF-12 |

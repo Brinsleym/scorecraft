@@ -1,6 +1,6 @@
 # Library
 
-> **Last reviewed:** 2026-10-31 · **Last updated:** 2026-10-31 · **Change:** patch (M5 part 2: covers and the window; earlier: first version) · **Target:** enScore 3.7 (2026)
+> **Last reviewed:** 2026-10-31 · **Last updated:** 2026-11-01 · **Change:** minor (the owner's answers on search and sort; earlier: M5 part 2: covers and the window; earlier: first version) · **Target:** enScore 3.7 (2026)
 
 Finding scores in the library: search, sort, the recently opened list, importing a whole folder,
 and the library window with covers. Written for milestone M5. Importing files, folders as places
@@ -114,15 +114,24 @@ to file scores, metadata, the trash and Verify & Repair are M1's
 
 ## Open questions
 
-- Whether enScore's search matches inside words ("nata" finding *Sonata*) or only at their
-  starts; ScoreCraft matches word starts.
-- Which fields enScore searches, and how it ranks; ranking here is ScoreCraft's own.
-- Whether enScore ignores leading articles when sorting.
+Answered by the owner on 2026-11-01, see [the Edit Details note](../observations/library-edit-details.md). Marked *(to build)* where the code does not do it yet.
+
+- **Search matches inside words**: "nata" finds *Sonata*. A match at a word start still ranks
+  above one inside a word *(to build: today only word starts match)*.
+- **Search covers every Edit Details field**: title, composer, tags, key, arranger, lyricist,
+  instruments and voices, genre, difficulty, year composed, catalogue number, publisher or
+  edition, description. Ranking stays ScoreCraft's own: title, then composer, then the rest
+  *(to build: the fields `doc::Metadata` lacks, and searching them)*.
+- **Sorting does not ignore leading articles**: *The Lark Ascending* sorts under T *(to build:
+  today the sort key drops "the", "a" and "an")*.
+
+Still open: the questions in the [Edit Details note](../observations/library-edit-details.md#open-questions).
 
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-01 | minor | Owner's answers: search inside words and in every Edit Details field; no article stripping in sort |
 | 2026-10-31 | patch | LIB-6 search inside scores: PDF text and notes, a lazy on-disk text cache; LIBS-11, -12 |
 | 2026-10-31 | patch | M5 part 3: LIB-13 names perf scenarios P6 and P7 (10,000 scores), first measurement |
 | 2026-10-31 | patch | M5 part 2: LIBS-9, -10 for covers and the library window |

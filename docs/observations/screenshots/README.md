@@ -24,6 +24,9 @@ files).
 | 4 | [`library/04-library-sort-menu.png`](library/04-library-sort-menu.png) | Library toolbar, sort menu expanded: alphabetical, recent, by composer | LIB-9 |
 | 5 | [`library/05-library-import-menu.png`](library/05-library-import-menu.png) | Library toolbar, import menu expanded: PDFs, folder, scanner, IMSLP, blank manuscript, forScore `.4sc` | LIB-1, LIB-2, IMP-2, IMP-4, IMP-5, PAGE-6 |
 | 6 | [`library/06-library-filter-sidebar-bach.png`](library/06-library-filter-sidebar-bach.png) | Filter: a right sidebar for filtering the library. The search field holds "Bach" and the view shows all the user's Bach scores | LIB-5 |
+| 30 | [`library/30-library-edit-details-default.png`](library/30-library-edit-details-default.png) | Edit Details (2026-11-01): a "Suggested" composer bar with Apply, cover thumbnail, Title, Composer, Tags, and the *Add details* pills for the optional fields. Described in [library-edit-details.md](../library-edit-details.md) | LIB-4, LIB-7 |
+| 31 | [`library/31-library-edit-details-fields-added.png`](library/31-library-edit-details-fields-added.png) | Edit Details with tags as chips and optional fields added: Key drop-down, Arranger, Lyricist (focused), Instruments & voices | LIB-4 |
+| 32 | [`library/32-library-edit-details-scrolled.png`](library/32-library-edit-details-scrolled.png) | Edit Details scrolled down: Genre, Difficulty as five stars, Year composed, Catalogue number, Publisher or edition, Description | LIB-4 |
 
 ## Lists
 
