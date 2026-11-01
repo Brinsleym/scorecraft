@@ -15,7 +15,7 @@ pub mod power;
 pub mod sound;
 
 pub use power::{KeepAwake, PowerError};
-pub use sound::{ClickOut, SoundError};
+pub use sound::{Click, ClickOut, SoundError};
 
 /// The crate's package name, used by `cargo xtask layers` smoke tests and diagnostics.
 pub const CRATE_NAME: &str = env!("CARGO_PKG_NAME");

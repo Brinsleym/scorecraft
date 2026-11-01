@@ -61,6 +61,16 @@ pub fn specs() -> Vec<CommandSpec> {
             false,
             snip_place as _,
         ),
+        CommandSpec {
+            id: "nav.back",
+            label: "Back",
+            menu: "View>Go To",
+            shortcut: Some("Alt+Left"),
+            params: "{}",
+            ours: false,
+            enabled: crate::commands::always,
+            run: back,
+        },
         spec(
             "annotate.delete",
             "Delete Marking",
@@ -212,8 +222,30 @@ fn shortcut_follow(session: &mut Session, params: &Value) -> Result<Value, Engin
         // The target page is hidden or outside the range: nothing to jump to.
         return Ok(json!({ "followed": false, "reason": "targetHidden" }));
     };
+    // Remember where the jump came from, so `nav.back` returns there (NAV-3).
+    if let Some(from) = session
+        .reader_state()
+        .and_then(|st| st.get("page").and_then(Value::as_u64))
+    {
+        session.nav_history.push(from);
+        if session.nav_history.len() > 64 {
+            session.nav_history.remove(0);
+        }
+    }
     let mut v = session.dispatch("view.page.goto", &json!({ "page": index + 1 }))?;
     crate::commands::set(&mut v, "followed", json!(true));
+    Ok(v)
+}
+
+/// Back to the page the last shortcut jumped from (NAV-3).
+fn back(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
+    const ID: &str = "nav.back";
+    reject_unknown_keys(ID, params_object(ID, params)?, &[])?;
+    let Some(page) = session.nav_history.pop() else {
+        return Ok(json!({ "back": false }));
+    };
+    let mut v = session.dispatch("view.page.goto", &json!({ "page": page }))?;
+    crate::commands::set(&mut v, "back", json!(true));
     Ok(v)
 }
 

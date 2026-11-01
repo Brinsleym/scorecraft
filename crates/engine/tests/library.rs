@@ -447,3 +447,65 @@ fn opening_a_file_twice_reuses_its_library_score() {
         "io_error"
     );
 }
+
+#[test]
+fn page_6_manuscript_paper_is_a_new_library_score() {
+    let mut s = Session::new();
+    fixed_clock(&mut s);
+    s.create_memory_library().unwrap();
+    let r = run(
+        &mut s,
+        "score.newManuscript",
+        json!({ "paper": "grand", "size": "a4", "pages": 3, "title": "Lesson 4" }),
+    );
+    assert_eq!(r["imported"], true);
+    let st = s.reader_state().unwrap();
+    assert_eq!(st["pageCount"], 3);
+    let scores = run(&mut s, "library.scores", json!({}));
+    assert_eq!(scores["scores"][0]["title"], "Lesson 4");
+    assert_eq!(
+        fails(&mut s, "score.newManuscript", json!({ "paper": "harp" })),
+        "bad_params"
+    );
+    assert_eq!(
+        fails(&mut s, "score.newManuscript", json!({ "pages": 0 })),
+        "bad_params"
+    );
+}
+
+#[test]
+fn imp_3_photos_become_a_score() {
+    let dir = temp("images");
+    let mut paths = Vec::new();
+    for (i, (w, h)) in [(60u32, 80u32), (60, 80), (90, 40)].iter().enumerate() {
+        let rgba = vec![180u8; (w * h * 4) as usize];
+        let png = scorecraft_codecs::png::encode_premultiplied(*w, *h, &rgba).unwrap();
+        let p = dir.join(format!("page{i}.png"));
+        std::fs::write(&p, png).unwrap();
+        paths.push(p.to_string_lossy().into_owned());
+    }
+    let mut s = Session::new();
+    fixed_clock(&mut s);
+    s.create_memory_library().unwrap();
+    let r = run(
+        &mut s,
+        "library.import.images",
+        json!({ "paths": paths, "title": "Phone scans" }),
+    );
+    assert_eq!(r["imported"], true);
+    assert_eq!(s.reader_state().unwrap()["pageCount"], 3);
+    assert_eq!(
+        run(&mut s, "library.scores", json!({}))["scores"][0]["title"],
+        "Phone scans"
+    );
+    let junk = dir.join("notes.txt");
+    std::fs::write(&junk, "hello").unwrap();
+    assert_eq!(
+        fails(
+            &mut s,
+            "library.import.images",
+            json!({ "paths": [junk.to_string_lossy()] })
+        ),
+        "invalid_pdf"
+    );
+}

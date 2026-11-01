@@ -2,6 +2,17 @@
 //! `audio` feature (cpal: WASAPI on Windows, Core Audio on macOS). Without it — or with no
 //! output device — [`ClickOut::new`] reports why and the app keeps the visual pulse alone.
 
+/// What the metronome plays (PRAC-1, PRAC-2).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Click {
+    pub bpm: f64,
+    pub beats: u8,
+    /// Clicks per beat, 1–4.
+    pub subdivision: u8,
+    /// The bar's first beat accented.
+    pub accent: bool,
+}
+
 /// Why there is no click.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SoundError(pub String);
@@ -65,11 +76,14 @@ mod imp {
             })
         }
 
-        /// Clicks at `bpm` in `beats`, or silence with `None`.
-        pub fn set(&self, click: Option<(f64, u8)>) {
+        /// Clicks per `click` (BPM, beats per bar, clicks per beat, accent), or silence.
+        pub fn set(&self, click: Option<super::Click>) {
             if let Ok(mut t) = self.track.lock() {
                 match click {
-                    Some((bpm, beats)) => t.set(true, bpm, beats),
+                    Some(c) => {
+                        t.set_feel(c.subdivision, c.accent);
+                        t.set(true, c.bpm, c.beats);
+                    }
                     None => t.set(false, 0.0, 1),
                 }
             }
@@ -89,7 +103,7 @@ mod imp {
             Err(SoundError("this build has no audio output".into()))
         }
 
-        pub fn set(&self, _click: Option<(f64, u8)>) {}
+        pub fn set(&self, _click: Option<super::Click>) {}
     }
 }
 

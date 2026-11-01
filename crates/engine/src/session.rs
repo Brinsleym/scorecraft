@@ -26,6 +26,8 @@ pub struct Session {
     pub(crate) metronome: scorecraft_practice::Metronome,
     /// Full-text indexes of the library's files, loaded or built by search (LIB-6).
     pub(crate) text_index: crate::fulltext_cmds::TextIndexes,
+    /// Pages a shortcut jumped from, most recent last (NAV-3), as score page numbers.
+    pub(crate) nav_history: Vec<u64>,
 }
 
 impl Default for Session {
@@ -48,6 +50,7 @@ impl Session {
             playback: None,
             metronome: scorecraft_practice::Metronome::new(),
             text_index: crate::fulltext_cmds::TextIndexes::new(),
+            nav_history: Vec::new(),
         }
     }
 

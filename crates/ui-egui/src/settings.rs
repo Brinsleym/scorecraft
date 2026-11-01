@@ -32,6 +32,8 @@ pub struct Settings {
     pub library_sort: Value,
     /// The library shows covers (true) or a list (LIB-14).
     pub library_grid: bool,
+    /// The page colours (READ-7): normal, dark or sepia.
+    pub filter: String,
 }
 
 impl Default for Settings {
@@ -50,6 +52,7 @@ impl Default for Settings {
             show_ruler_button: false,
             library_sort: Value::Null,
             library_grid: true,
+            filter: "normal".into(),
         }
     }
 }
@@ -88,6 +91,9 @@ impl Settings {
                 .unwrap_or(false);
             self.split = st.get("split").and_then(Value::as_f64).unwrap_or(0.5);
             self.fit_width = st.pointer("/zoom/fit").and_then(Value::as_str) == Some("width");
+            if let Some(f) = s("filter") {
+                self.filter = f;
+            }
         }
         if let Ok(m) = session.dispatch("input.pedal.map", &json!({})) {
             self.pedal_map = m.get("map").cloned().unwrap_or(Value::Null);
@@ -258,6 +264,9 @@ impl Settings {
         };
         if self.fit_width {
             let _ = session.dispatch("view.zoom.landscapeFit", &json!({}));
+        }
+        if self.filter != "normal" {
+            let _ = session.dispatch("view.filter.set", &json!({ "filter": self.filter }));
         }
     }
 }

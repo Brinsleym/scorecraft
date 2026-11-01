@@ -18,13 +18,13 @@ repository has merged-PR history. About 75% of the work parallelizes.
 
 | | Value | Kind |
 |---|---|---|
-| **Feature breadth** | **54%** | measured: 58 of 124 feature-map rows live (M3's reader app and M4's markup) |
+| **Feature breadth** | **58%** | measured: 65 of 124 feature-map rows live (M3's reader app and M4's markup) |
 | **Ready for real work** | **5%** | estimated: you can read a PDF and turn pages with a pedal on Windows; the pen marks up in the desktop app, unchecked on a tablet |
 | Practising musician | 0% | estimated ([method](docs/target-app-parity.md#practising-musician)) |
 | Essentials user | 0% | estimated ([method](docs/target-app-parity.md#essentials-user)) |
 | Remaining to **alpha** | **~105–287 h** | estimated |
-| Remaining to **beta** | **~520–1,105 h** | estimated |
-| Remaining to **full parity** | **~747–1,551 h** | estimated |
+| Remaining to **beta** | **~505–1,076 h** | estimated |
+| Remaining to **full parity** | **~732–1,522 h** | estimated |
 
 **Why pre-alpha.** The project has its process, clean-room rules, architecture and feature map, and
 the M0 skeleton, PDF reading over PDFCraft (M2) and the foundation (M1): the document model,
@@ -68,6 +68,9 @@ Detail: [docs/roadmap.md](docs/roadmap.md).
 
 | Date | Entry |
 |---|---|
+| 2026-10-31 | Photos and scans as a score (PNG, JPEG), one page each; parity 65 of 124 |
+| 2026-10-31 | Manuscript paper: staves, grand staves or tablature as a new library score (File > New); parity 64 of 124 |
+| 2026-10-31 | Page colours (normal, dark, sepia), list turns, back from a shortcut jump, metronome subdivisions and accent; the browser keeps its library in IndexedDB; parity 63 of 124 |
 | 2026-10-31 | ScoreCraft in the browser: the same shell on WebGL, scores from the file picker or a drop, checked in headless Chromium |
 | 2026-10-31 | LIB-6: search inside scores (the words in their PDFs and notes), indexed lazily into the library's cache; parity 58 of 124 |
 | 2026-10-31 | M3 follow-up: the half-page split snaps to the gap between systems |

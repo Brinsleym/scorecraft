@@ -75,6 +75,14 @@ fn perf_9_a_shortcut_jumps_to_its_page_when_tapped() {
         tap["followed"], true,
         "a tap in view space on the outline follows it"
     );
+    assert_eq!(s.reader_state().unwrap()["canGoBack"], true);
+    // NAV-3: back to where the jump came from.
+    let back = run(&mut s, "nav.back", json!({}));
+    assert_eq!(
+        (back["back"].as_bool(), back["page"].as_u64()),
+        (Some(true), Some(1))
+    );
+    assert_eq!(run(&mut s, "nav.back", json!({}))["back"], false);
     run(&mut s, "view.page.goto", json!({ "page": 1 }));
     let hit = run(
         &mut s,

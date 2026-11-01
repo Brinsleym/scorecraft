@@ -195,6 +195,8 @@ fn perf_3_one_score_in_many_lists_is_one_score() {
 #[test]
 fn perf_4_bad_plays_are_refused_and_opening_by_hand_stops() {
     let (mut s, ids) = library("bad", &[1]);
+    // TURN-7: list turns need a playing list.
+    assert!(s.dispatch("list.turn.next", &json!({})).is_err());
     let list = run(&mut s, "list.new", json!({ "name": "Empty" }))["list"]
         .as_str()
         .unwrap()
@@ -210,6 +212,11 @@ fn perf_4_bad_plays_are_refused_and_opening_by_hand_stops() {
             .is_err()
     );
     run(&mut s, "list.play", json!({ "list": list }));
+    assert_eq!(
+        run(&mut s, "list.turn.next", json!({}))["turned"],
+        false,
+        "one page, one entry"
+    );
     run(&mut s, "score.open", json!({ "score": ids[0] }));
     assert_eq!(run(&mut s, "list.state", json!({}))["playing"], false);
 }

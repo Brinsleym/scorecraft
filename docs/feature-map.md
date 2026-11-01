@@ -1,6 +1,6 @@
 # Feature map
 
-> **Last reviewed:** 2026-10-28 · **Last updated:** 2026-10-31 · **Change:** patch (PLAT-1 partial: Windows desktop and the browser; earlier: LIB-6 partial; earlier: M6 part 3: NAV-1, PAGE-7 partial; earlier: M6 part 2: PRAC-1 partial; earlier: M6 part 1: LIST-4, LIST-6, IMP-6 partial; earlier: M5 part 3: LIB-13 partial, measured; earlier: M5 part 2: LIB-14 partial; earlier: M5 part 1: LIB-2, -5, -9, -15 partial; earlier: M4 part 5: EXP-2 partial; earlier: M4 part 3: ANNO-11, ANNO-12 and ANNO-16 partial; earlier: M4 part 2c: ANNO-9 partial; earlier: M4 part 2b: ANNO-8 partial; earlier: M4 part 2a: ANNO-4 and ANNO-10 partial; earlier: owner's answers: ANNO-9 is ScoreCraft's own, ANNO-18 ruler angle added, 124 rows; earlier: M4 part 1: 8 ANNO rows partial, ANNO-17 Ruler added from the owner's observation, 123 rows; earlier: M3: READ-4, READ-9 and PLAT-4 partial: the reader window's full screen, keep-awake and theme; earlier: M3: TURN-1..4 partial: keys, pedal map, taps and swipes go through the engine; earlier: M3: 8 reader rows partial (layouts, half-page and alternating turns, zoom, go to page, contents), live in the engine, the reader window comes later in M3; summary counts recounted; earlier: M1: 16 library, page, list and undo rows partial, live in the engine with no UI yet; earlier: READ-1 partial: `score.open` and `view.render` are live; earlier: owner's sync design and platform priorities in SYNC-1, -5, -7 and PLAT-1; earlier: reconciled with the Microsoft Store description S8, 4 rows added, 1 corrected; 13 rows marked ♻ PDFCraft reuse; first version 118 rows) · **Target:** enScore 3.7 (2026)
+> **Last reviewed:** 2026-10-28 · **Last updated:** 2026-10-31 · **Change:** patch (IMP-3 partial; earlier: PAGE-6 partial; earlier: READ-7, TURN-7, NAV-2, NAV-3, PRAC-2 partial; earlier: PLAT-1 partial: Windows desktop and the browser; earlier: LIB-6 partial; earlier: M6 part 3: NAV-1, PAGE-7 partial; earlier: M6 part 2: PRAC-1 partial; earlier: M6 part 1: LIST-4, LIST-6, IMP-6 partial; earlier: M5 part 3: LIB-13 partial, measured; earlier: M5 part 2: LIB-14 partial; earlier: M5 part 1: LIB-2, -5, -9, -15 partial; earlier: M4 part 5: EXP-2 partial; earlier: M4 part 3: ANNO-11, ANNO-12 and ANNO-16 partial; earlier: M4 part 2c: ANNO-9 partial; earlier: M4 part 2b: ANNO-8 partial; earlier: M4 part 2a: ANNO-4 and ANNO-10 partial; earlier: owner's answers: ANNO-9 is ScoreCraft's own, ANNO-18 ruler angle added, 124 rows; earlier: M4 part 1: 8 ANNO rows partial, ANNO-17 Ruler added from the owner's observation, 123 rows; earlier: M3: READ-4, READ-9 and PLAT-4 partial: the reader window's full screen, keep-awake and theme; earlier: M3: TURN-1..4 partial: keys, pedal map, taps and swipes go through the engine; earlier: M3: 8 reader rows partial (layouts, half-page and alternating turns, zoom, go to page, contents), live in the engine, the reader window comes later in M3; summary counts recounted; earlier: M1: 16 library, page, list and undo rows partial, live in the engine with no UI yet; earlier: READ-1 partial: `score.open` and `view.render` are live; earlier: owner's sync design and platform priorities in SYNC-1, -5, -7 and PLAT-1; earlier: reconciled with the Microsoft Store description S8, 4 rows added, 1 corrected; 13 rows marked ♻ PDFCraft reuse; first version 118 rows) · **Target:** enScore 3.7 (2026)
 
 Every user-visible enScore capability we know of, one row each, with the ScoreCraft command that
 will implement it. This is ScoreCraft's equivalent of PhotoCraft's Photoshop menu catalog: it is
@@ -38,21 +38,21 @@ feature-map ids each one informs. `obs.` in the Source column means an observati
 
 | Area | Prefix | Rows | P0 | Done | Partial | Missing |
 |---|---|---:|---:|---:|---:|---:|
-| Reading and display | READ | 15 | 8 | 0 | 9 | 6 |
-| Page turning inputs | TURN | 8 | 4 | 0 | 5 | 3 |
+| Reading and display | READ | 15 | 8 | 0 | 10 | 5 |
+| Page turning inputs | TURN | 8 | 4 | 0 | 6 | 2 |
 | Annotation | ANNO | 18 | 8 | 0 | 17 | 1 |
 | Library and organisation | LIB | 15 | 6 | 0 | 13 | 2 |
-| Page editing | PAGE | 8 | 4 | 0 | 6 | 2 |
-| In-score navigation | NAV | 5 | 1 | 0 | 2 | 3 |
+| Page editing | PAGE | 8 | 4 | 0 | 7 | 1 |
+| In-score navigation | NAV | 5 | 1 | 0 | 4 | 1 |
 | Setlists | LIST | 7 | 3 | 0 | 6 | 1 |
 | Audio playback | PLAY | 7 | 0 | 0 | 0 | 7 |
 | MIDI | MIDI | 5 | 0 | 0 | 0 | 5 |
-| Practice tools | PRAC | 11 | 1 | 0 | 1 | 10 |
-| Import and scanning | IMP | 8 | 1 | 0 | 1 | 7 |
+| Practice tools | PRAC | 11 | 1 | 0 | 2 | 9 |
+| Import and scanning | IMP | 8 | 1 | 0 | 2 | 6 |
 | Export and print | EXP | 4 | 1 | 0 | 1 | 3 |
 | Sync and backup | SYNC | 8 | 0 | 0 | 0 | 8 |
 | Platforms, UI and languages | PLAT | 5 | 2 | 0 | 2 | 3 |
-| **Total** | | **124** | **39** | **0** | **63** | **61** |
+| **Total** | | **124** | **39** | **0** | **70** | **54** |
 
 Sum of the estimates: **~925–1,870 agent-hours** for every row, after PDFCraft reuse, the S8 rows and the ruler (P0 250–530, P1 350–680, P2 233–456, P3 92–194) (P0 alone: see [`roadmap.md`](roadmap.md#alpha-gate)).
 
@@ -66,7 +66,7 @@ Sum of the estimates: **~925–1,870 agent-hours** for every row, after PDFCraft
 | READ-4 | Full-screen (chrome hidden) performance mode | Free | S1, S4 | `ui.view.fullScreen` | ui-egui | P0 | 3–6 | partial |
 | READ-5 | Half-page turns: the next system appears before the full turn | Free | S1, S2, S3 | `view.turn.halfPage` (mode) | layout | P0 | 8–16 | partial |
 | READ-6 | Alternating page turns for awkward page breaks | Free | S4 | `view.turn.alternating` (mode) | layout | P1 | 4–8 | partial |
-| READ-7 | Display filters: light, dark, sepia (with intensity), inverted | Free | S1, S8 | `view.filter.set` | render | P1 | 6–10 | missing |
+| READ-7 | Display filters: light, dark, sepia (with intensity), inverted | Free | S1, S8 | `view.filter.set` | render | P1 | 6–10 | partial |
 | READ-8 | Enhance filter for scanned pages (contrast / clean-up) | Free | S1 | `view.filter.enhance` | algo | P2 | 8–16 | missing |
 | READ-9 | Keep the screen awake while a score or setlist is open | Free | S1, S4 | `ui.power.keepAwake` | app shell | P0 | 2–4 | partial |
 | READ-10 | Two scores side by side | Free | S1, S3 | `view.split.open` | engine, ui-egui | P2 | 8–16 | missing |
@@ -86,7 +86,7 @@ Sum of the estimates: **~925–1,870 agent-hours** for every row, after PDFCraft
 | TURN-4 | Bluetooth foot pedals (keyboard-emulating HID pedals, configurable key mapping) | Free | S1, S4 | `input.pedal.map` | input | P0 | 6–12 | partial |
 | TURN-5 | MIDI pedals and controllers turn pages | Free | S1 | `input.midi.mapTurn` | midi, input | P2 | 6–12 | missing |
 | TURN-6 | Record page turns during audio playback (half-page turns included); replay them automatically | Free | S1, S8 | `play.turns.record`, `play.turns.follow` | engine, audio | P2 | 8–16 | missing |
-| TURN-7 | Turn across score boundaries inside a setlist (last page → next piece) | Pro | S1 | `list.turn.next` | engine | P1 | 3–6 | missing |
+| TURN-7 | Turn across score boundaries inside a setlist (last page → next piece) | Pro | S1 | `list.turn.next` | engine | P1 | 3–6 | partial |
 | TURN-8 | Jump to first / last page, go to page number | Free | inferred | `view.page.goto` | engine | P1 | 1–2 | partial |
 
 ## ANNO: annotation
@@ -141,7 +141,7 @@ Sum of the estimates: **~925–1,870 agent-hours** for every row, after PDFCraft
 | PAGE-3 | Hide pages (kept, not shown) | Free | S1, S4 | `page.setHidden` | doc | P0 | 2–4 | partial |
 | PAGE-4 | Delete pages | Free | S1, S4 | `page.delete` | doc | P0 | 2–4 | partial |
 | PAGE-5 | Crop and straighten scanned pages without altering the file | Free | S1 | `page.straighten`, `page.crop.set` | algo, doc | P1 | 8–16 | missing |
-| PAGE-6 | Blank manuscript paper: single staff, grand staff or tab, any page size | Free | S1 | `score.newManuscript` | pdf ♻ pdfcraft-create | P1 | 4–8 | missing |
+| PAGE-6 | Blank manuscript paper: single staff, grand staff or tab, any page size | Free | S1 | `score.newManuscript` | pdf ♻ pdfcraft-create | P1 | 4–8 | partial |
 | PAGE-7 | Score Snips: copy bars from one place and paste them elsewhere, for example the bars after a page turn pasted before it, so the turn can come later | Pro | S1, S3, S4, S8 | `page.snip.create`, `page.snip.place` | doc, render | P1 | 12–24 | partial |
 | PAGE-8 | Page Range: limit a score to a range of its PDF's pages | Free | S1 | `score.pageRange.set` | doc | P1 | 3–6 | partial |
 
@@ -150,8 +150,8 @@ Sum of the estimates: **~925–1,870 agent-hours** for every row, after PDFCraft
 | Id | Feature | Tier | Source | Command | Crate | P | Est | Status |
 |---|---|---|---|---|---|---|---:|---|
 | NAV-1 | Score Shortcuts: tappable link on a repeat / D.S. / coda sign that jumps to its target | Pro | S1, S4 | `nav.shortcut.add`, `nav.shortcut.follow` | doc, engine | P1 | 10–18 | partial |
-| NAV-2 | Create a shortcut from the viewer menu | Pro | S1 | `nav.shortcut.add` | ui-egui | P1 | 2–4 | missing |
-| NAV-3 | Return from a jump (back to where the shortcut was followed) | Pro | inferred | `nav.back` | engine | P1 | 2–4 | missing |
+| NAV-2 | Create a shortcut from the viewer menu | Pro | S1 | `nav.shortcut.add` | ui-egui | P1 | 2–4 | partial |
+| NAV-3 | Return from a jump (back to where the shortcut was followed) | Pro | inferred | `nav.back` | engine | P1 | 2–4 | partial |
 | NAV-4 | Page-turn order follows shortcuts during a performance (repeat-aware turning) | Pro | S1, S4 | `nav.follow.mode` | engine | P2 | 8–16 | missing |
 | NAV-5 | Table of contents from PDF outline | Free | inferred | `view.outline.goto` | pdf ♻ pdfcraft-model | P0 | 2–4 | partial |
 
@@ -194,7 +194,7 @@ Sum of the estimates: **~925–1,870 agent-hours** for every row, after PDFCraft
 | Id | Feature | Tier | Source | Command | Crate | P | Est | Status |
 |---|---|---|---|---|---|---|---:|---|
 | PRAC-1 | Metronome with tap tempo | Free | S1, S4 | `practice.metronome.toggle`, `practice.metronome.tap` | practice | P0 | 6–12 | partial |
-| PRAC-2 | Metronome subdivisions and beats per bar, accent | Free | S1 | `practice.metronome.set` | practice | P1 | 3–6 | missing |
+| PRAC-2 | Metronome subdivisions and beats per bar, accent | Free | S1 | `practice.metronome.set` | practice | P1 | 3–6 | partial |
 | PRAC-3 | Nine metronome sounds (our own recordings or synthesis) | Free | S1 | `practice.metronome.sound.set` | practice | P2 | 4–8 | missing |
 | PRAC-4 | Tuner (pitch detection from the microphone, reference pitch) | Free | S1, S8 | `practice.tuner.toggle` | practice | P2 | 12–24 | missing |
 | PRAC-5 | Practice log kept automatically while playing: minutes per day, streaks, pieces practised and when | Free | S1, S8 | `practice.log.*` | practice, doc | P2 | 8–16 | missing |
@@ -211,7 +211,7 @@ Sum of the estimates: **~925–1,870 agent-hours** for every row, after PDFCraft
 |---|---|---|---|---|---|---|---:|---|
 | IMP-1 | Camera scan with automatic edge detection, perspective straightening, crop and clean-up into a PDF | Free | S1, S2 | `scan.camera` | scan, algo; pdf ♻ pdfcraft-create | P2 | 18–32 | missing |
 | IMP-2 | Wi-Fi flatbed and feeder scanners (eSCL / AirScan) | Free | S1 | `scan.network` | scan | P2 | 12–24 | missing |
-| IMP-3 | Import photos / images (PNG, JPEG, HEIC, TIFF) as pages | Free | S1 | `library.import.images` | io ♻ pdfcraft-create | P1 | 2–4 | missing |
+| IMP-3 | Import photos / images (PNG, JPEG, HEIC, TIFF) as pages | Free | S1 | `library.import.images` | io ♻ pdfcraft-create | P1 | 2–4 | partial |
 | IMP-4 | IMSLP search and import of public-domain scores | Pro | S1, S3, S4 | `imslp.search`, `imslp.import` | imslp | P2 | 12–24 | missing |
 | IMP-5 | Import a forScore library from a `.4sc` file: pages, ink, stamps, layers | Free | S1, S4, S8 | `library.import.forscore` | fsc, io | P1 | 30–60 | missing |
 | IMP-6 | Import report: what was imported, skipped, or could not be read | Free | inferred | n/a (result of import) | io | P0 | 2–4 | partial |
@@ -272,7 +272,7 @@ work on top of PDFCraft rather than new code. Estimates are agent-hours, before 
 | EXP-2 | pdfcraft-annot builds ISO 32000 annotations with appearance streams; pdfcraft-cos saves incrementally or flattens | 10–18 | 4–8 |
 | EXP-3 | pdfcraft-organize concatenates and reorders pages | 3–6 | 1–2 |
 | IMP-1 | pdfcraft-create assembles the scanned pages; capture and straightening stay ours | 24–40 | 18–32 |
-| **Total** | | **124** | **39** | **0** | **63** | **61** |
+| **Total** | | **124** | **39** | **0** | **70** | **54** |
 
 Outside the rows, the PDF engine milestone (M2, [gap G1](gaps.md#g1-pdf-engine-parse-render-write))
 shrinks from 80–160 h of new code to 20–40 h of integration: the `scorecraft-pdf` adapter, page-tile
@@ -311,6 +311,9 @@ framework rather than from enScore. They are counted in the scorecard, not in pa
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-31 | patch | IMP-3 photos and scans (PNG, JPEG) as a score partial |
+| 2026-10-31 | patch | PAGE-6 manuscript paper (staves, grand staves, tablature; letter or A4) partial |
+| 2026-10-31 | patch | READ-7 page colours, TURN-7 list turns, NAV-2 shortcut from the rectangle, NAV-3 back from a jump, PRAC-2 subdivisions and accent partial |
 | 2026-10-31 | patch | PLAT-1 partial: the Windows desktop app (M3) and now the browser build |
 | 2026-10-31 | patch | LIB-6 full-text search (PDF text and practice notes) partial |
 | 2026-10-31 | patch | M6 part 3: NAV-1 Score Shortcuts and PAGE-7 Score Snips partial |

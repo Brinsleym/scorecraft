@@ -504,6 +504,21 @@ mod tests {
     }
 
     #[test]
+    fn read_7_page_colours_switch_and_are_reported() {
+        let mut s = session(2);
+        assert_eq!(s.reader_state().unwrap()["filter"], "normal");
+        let r = s
+            .dispatch("view.filter.set", &json!({ "filter": "dark" }))
+            .unwrap();
+        assert_eq!(r["filter"], "dark");
+        assert_eq!(s.reader_state().unwrap()["filter"], "dark");
+        assert!(
+            s.dispatch("view.filter.set", &json!({ "filter": "neon" }))
+                .is_err()
+        );
+    }
+
+    #[test]
     fn disabled_without_a_score() {
         let mut s = Session::new();
         for c in specs() {

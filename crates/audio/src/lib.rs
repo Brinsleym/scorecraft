@@ -44,6 +44,8 @@ pub struct ClickTrack {
     sample_rate: u32,
     bpm: f64,
     beats: u8,
+    subdivision: u8,
+    accent_on: bool,
     running: bool,
     /// Samples since the track started.
     at: u64,
@@ -57,6 +59,8 @@ impl ClickTrack {
             sample_rate: sample_rate.max(1),
             bpm: 100.0,
             beats: 4,
+            subdivision: 1,
+            accent_on: true,
             running: false,
             at: 0,
             accent: click(sample_rate, true),
@@ -80,6 +84,13 @@ impl ClickTrack {
         self.running
     }
 
+    /// Clicks per beat (1–4; the extra ones softer) and whether the bar's first beat is
+    /// accented (PRAC-2).
+    pub fn set_feel(&mut self, subdivision: u8, accent: bool) {
+        self.subdivision = subdivision.clamp(1, 4);
+        self.accent_on = accent;
+    }
+
     /// Fills `out` (interleaved, `channels` per frame) with the next frames: clicks or silence.
     pub fn fill(&mut self, out: &mut [f32], channels: usize) {
         let channels = channels.max(1);
@@ -87,14 +98,23 @@ impl ClickTrack {
         for frame in out.chunks_mut(channels) {
             let v = if self.running {
                 let beat = self.at / per_beat;
-                let pos = (self.at % per_beat) as usize;
-                let table = if beat.is_multiple_of(u64::from(self.beats)) {
-                    &self.accent
-                } else {
-                    &self.beat
-                };
+                let pos = self.at % per_beat;
+                let per_sub = (per_beat / u64::from(self.subdivision.max(1))).max(1);
+                let (sub, sub_pos) = (pos / per_sub, (pos % per_sub) as usize);
                 self.at += 1;
-                table.get(pos).copied().unwrap_or(0.0)
+                if sub == 0 {
+                    let table = if self.accent_on && beat.is_multiple_of(u64::from(self.beats)) {
+                        &self.accent
+                    } else {
+                        &self.beat
+                    };
+                    table.get(sub_pos).copied().unwrap_or(0.0)
+                } else if sub < u64::from(self.subdivision) {
+                    // Subdivisions: the beat's click, softer.
+                    self.beat.get(sub_pos).copied().unwrap_or(0.0) * 0.45
+                } else {
+                    0.0
+                }
             } else {
                 0.0
             };
@@ -139,6 +159,30 @@ mod tests {
         let mut more = vec![1.0f32; 64];
         t.fill(&mut more, 2);
         assert!(more.iter().all(|v| *v == 0.0));
+    }
+
+    #[test]
+    fn subdivisions_click_softly_between_beats() {
+        let mut t = ClickTrack::new(48_000);
+        t.set(true, 60.0, 4);
+        t.set_feel(2, false);
+        let mut buf = vec![0.0f32; 48_000];
+        t.fill(&mut buf, 1);
+        let peak = |from: usize| {
+            buf[from..from + 1440]
+                .iter()
+                .map(|v| v.abs())
+                .fold(0.0, f32::max)
+        };
+        assert!(
+            peak(0) > 0.4 && peak(0) < 0.7,
+            "no accent: an ordinary beat"
+        );
+        assert!(
+            peak(24_000) > 0.1 && peak(24_000) < peak(0),
+            "the half-beat, softer"
+        );
+        assert_eq!(peak(12_000), 0.0);
     }
 
     #[test]

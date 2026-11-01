@@ -18,6 +18,16 @@ pub const DEFAULT_DPI: f64 = 144.0;
 pub fn specs() -> Vec<CommandSpec> {
     vec![
         CommandSpec {
+            id: "view.filter.set",
+            label: "Page Colours",
+            menu: "View",
+            shortcut: None,
+            params: r#"{"filter":"normal|dark|sepia"}"#,
+            ours: false,
+            enabled: score_open,
+            run: filter_set,
+        },
+        CommandSpec {
             id: "view.bookmark.goto",
             label: "Go to Bookmark",
             menu: "View>Bookmarks",
@@ -92,6 +102,24 @@ fn bookmark_goto(session: &mut Session, params: &Value) -> Result<Value, EngineE
 /// Renders a page (1-based `page`, default the current one) through the page cache and makes it
 /// the current page. A library score's visible ink is drawn on unless `ink` is false. With `out` (a `.png` path) the bitmap is written there. With `prefetch`, the
 /// pages a turn will show next are pre-rendered in the background.
+/// The display filter (READ-7): the file's own colours, dark (light ink on a dark page) or
+/// sepia. Pages cached for a filter stay cached, so switching back is instant.
+fn filter_set(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
+    const ID: &str = "view.filter.set";
+    let p = params_object(ID, params)?;
+    reject_unknown_keys(ID, p, &["filter"])?;
+    let name = opt_str(ID, p, "filter")?.ok_or_else(|| bad(ID, "`filter` is required".into()))?;
+    let filter = scorecraft_render::Filter::from_id(name)
+        .ok_or_else(|| bad(ID, "`filter` must be normal, dark or sepia".to_owned()))?;
+    let open = session
+        .score
+        .as_mut()
+        .ok_or_else(|| EngineError::Disabled(ID.to_owned()))?;
+    open.view.set_filter(filter);
+    session.prefetch_reader();
+    Ok(json!({ "filter": filter.id() }))
+}
+
 fn render(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
     const ID: &str = "view.render";
     let p = params_object(ID, params)?;
