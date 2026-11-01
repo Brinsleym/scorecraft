@@ -14,9 +14,16 @@ struct Details {
     title: String,
     composer: String,
     arranger: String,
+    lyricist: String,
     key: String,
     genre: String,
     tags: String,
+    instruments: String,
+    difficulty: u8,
+    year: String,
+    catalogue: String,
+    publisher: String,
+    description: String,
 }
 
 #[derive(Default)]
@@ -24,6 +31,27 @@ pub struct ScorePanel {
     pub open: bool,
     details: Details,
     bookmark: String,
+}
+
+/// A list field as "a, b, c".
+fn joined(v: &Value, k: &str) -> String {
+    v.pointer(k)
+        .and_then(Value::as_array)
+        .map(|t| {
+            t.iter()
+                .filter_map(Value::as_str)
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .unwrap_or_default()
+}
+
+/// "a, b ,, c" as ["a", "b", "c"].
+fn split_list(s: &str) -> Vec<String> {
+    s.split(',')
+        .map(|t| t.trim().to_owned())
+        .filter(|t| !t.is_empty())
+        .collect()
 }
 
 fn s(v: &Value, k: &str) -> String {
@@ -57,18 +85,20 @@ impl ScorePanel {
                 title: s(score, "/metadata/title"),
                 composer: s(score, "/metadata/composer"),
                 arranger: s(score, "/metadata/arranger"),
+                lyricist: s(score, "/metadata/lyricist"),
                 key: s(score, "/metadata/key"),
                 genre: s(score, "/metadata/genre"),
-                tags: score
-                    .pointer("/metadata/tags")
-                    .and_then(Value::as_array)
-                    .map(|t| {
-                        t.iter()
-                            .filter_map(Value::as_str)
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    })
-                    .unwrap_or_default(),
+                tags: joined(score, "/metadata/tags"),
+                instruments: joined(score, "/metadata/instruments"),
+                difficulty: score
+                    .pointer("/metadata/difficulty")
+                    .and_then(Value::as_u64)
+                    .and_then(|d| u8::try_from(d.min(5)).ok())
+                    .unwrap_or(0),
+                year: s(score, "/metadata/year"),
+                catalogue: s(score, "/metadata/catalogue"),
+                publisher: s(score, "/metadata/publisher"),
+                description: s(score, "/metadata/notes"),
             };
         }
         let mut open = self.open;
@@ -83,29 +113,52 @@ impl ScorePanel {
                     for (label, field) in [
                         ("Title", &mut d.title),
                         ("Composer", &mut d.composer),
-                        ("Arranger", &mut d.arranger),
-                        ("Key", &mut d.key),
-                        ("Genre", &mut d.genre),
                         ("Tags", &mut d.tags),
+                        ("Key", &mut d.key),
+                        ("Arranger", &mut d.arranger),
+                        ("Lyricist", &mut d.lyricist),
+                        ("Instruments & voices", &mut d.instruments),
+                        ("Genre", &mut d.genre),
+                        ("Year composed", &mut d.year),
+                        ("Catalogue number", &mut d.catalogue),
+                        ("Publisher or edition", &mut d.publisher),
                     ] {
                         ui.label(label);
                         ui.text_edit_singleline(field);
                         ui.end_row();
                     }
+                    ui.label("Difficulty");
+                    ui.horizontal(|ui| {
+                        for star in 1..=5u8 {
+                            let on = star <= d.difficulty;
+                            let text = RichText::new(if on { "★" } else { "☆" }).color(if on {
+                                tokens.accent
+                            } else {
+                                tokens.text
+                            });
+                            if ui.selectable_label(false, text).clicked() {
+                                // Tapping the chosen star again clears it.
+                                d.difficulty = if d.difficulty == star { 0 } else { star };
+                            }
+                        }
+                    });
+                    ui.end_row();
+                    ui.label("Description");
+                    ui.text_edit_multiline(&mut d.description);
+                    ui.end_row();
                 });
                 if ui.button("Save details").clicked() {
                     let d = &self.details;
-                    let tags: Vec<String> = d
-                        .tags
-                        .split(',')
-                        .map(|t| t.trim().to_owned())
-                        .filter(|t| !t.is_empty())
-                        .collect();
                     run.push((
                         "score.metadata.set",
                         json!({
                             "score": id, "title": d.title, "composer": d.composer,
-                            "arranger": d.arranger, "key": d.key, "genre": d.genre, "tags": tags,
+                            "arranger": d.arranger, "lyricist": d.lyricist, "key": d.key,
+                            "genre": d.genre, "tags": split_list(&d.tags),
+                            "instruments": split_list(&d.instruments),
+                            "difficulty": d.difficulty, "year": d.year,
+                            "catalogue": d.catalogue, "publisher": d.publisher,
+                            "notes": d.description,
                         }),
                     ));
                 }

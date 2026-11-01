@@ -71,7 +71,7 @@ fn find(s: &mut Session, q: &str) -> Vec<String> {
 }
 
 #[test]
-fn libs_1_2_search_matches_word_starts_without_accents_and_ranks_titles_first() {
+fn libs_1_2_search_matches_inside_words_without_accents_and_ranks_titles_first() {
     let (mut s, _, _) = library(
         "search",
         &[
@@ -82,6 +82,9 @@ fn libs_1_2_search_matches_word_starts_without_accents_and_ranks_titles_first() 
         ],
     );
     assert_eq!(find(&mut s, "moz son"), ["Sonata in A"]);
+    // Inside a word (owner's answer, 2026-11-01).
+    assert_eq!(find(&mut s, "nata"), ["Sonata in A"]);
+    assert_eq!(find(&mut s, "ozar"), ["Sonata in A"]);
     assert_eq!(find(&mut s, "etude"), ["Étude"]);
     assert!(find(&mut s, "chopin xyz").is_empty());
     assert_eq!(find(&mut s, "rondo"), ["Rondo", "Air"]);
@@ -92,6 +95,52 @@ fn libs_1_2_search_matches_word_starts_without_accents_and_ranks_titles_first() 
     );
     let r = run(&mut s, "library.search", json!({ "query": "", "limit": 2 }));
     assert_eq!((r["count"].as_u64(), titles(&r).len()), (Some(4), 2));
+}
+
+#[test]
+fn libs_13_search_covers_every_edit_details_field() {
+    let (mut s, ids, _) = library("fields", &[("Prelude", "Bach"), ("Waltz", "Chopin")]);
+    run(
+        &mut s,
+        "score.metadata.set",
+        json!({
+            "score": ids[0], "lyricist": "Goethe", "instruments": ["Cello", "SATB"],
+            "difficulty": 4, "year": "1720", "catalogue": "BWV 1007",
+            "publisher": "Bärenreiter", "notes": "Learn for the spring recital",
+            "genre": "Baroque",
+        }),
+    );
+    for q in [
+        "goethe",
+        "cello",
+        "satb",
+        "4 stars",
+        "1720",
+        "bwv 1007",
+        "barenreiter",
+        "spring",
+        "baroque",
+    ] {
+        assert_eq!(find(&mut s, q), ["Prelude"], "{q}");
+    }
+    let got = run(&mut s, "library.score.get", json!({ "score": ids[0] }));
+    assert_eq!(got["metadata"]["difficulty"], 4);
+    assert_eq!(got["metadata"]["instruments"], json!(["Cello", "SATB"]));
+    // Difficulty is 0 to 5; 0 clears it.
+    let e = s
+        .dispatch(
+            "score.metadata.set",
+            &json!({ "score": ids[0], "difficulty": 6 }),
+        )
+        .unwrap_err();
+    assert_eq!(e.code(), "bad_params");
+    run(
+        &mut s,
+        "score.metadata.set",
+        json!({ "score": ids[0], "difficulty": 0 }),
+    );
+    let got = run(&mut s, "library.score.get", json!({ "score": ids[0] }));
+    assert!(got["metadata"].get("difficulty").is_none());
 }
 
 #[test]

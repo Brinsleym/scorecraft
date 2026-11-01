@@ -208,15 +208,26 @@ fn search(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
         .into_iter()
         .enumerate()
         .filter_map(|(i, s)| {
-            let tags = s.metadata.tags.join(" ");
+            let m = &s.metadata;
+            let tags = m.tags.join(" ");
+            let instruments = m.instruments.join(" ");
+            let difficulty = difficulty_words(m.difficulty);
             let folders = folder_names(lib, s.folder).join(" ");
+            // Every field of Edit Details (docs/observations/library-edit-details.md).
             let fields = [
-                (Field::Title, s.metadata.title.as_str()),
-                (Field::Composer, s.metadata.composer.as_str()),
-                (Field::Other, s.metadata.arranger.as_str()),
-                (Field::Other, s.metadata.key.as_str()),
-                (Field::Other, s.metadata.genre.as_str()),
+                (Field::Title, m.title.as_str()),
+                (Field::Composer, m.composer.as_str()),
+                (Field::Other, m.arranger.as_str()),
+                (Field::Other, m.lyricist.as_str()),
+                (Field::Other, m.key.as_str()),
+                (Field::Other, m.genre.as_str()),
                 (Field::Other, tags.as_str()),
+                (Field::Other, instruments.as_str()),
+                (Field::Other, difficulty.as_str()),
+                (Field::Other, m.year.as_str()),
+                (Field::Other, m.catalogue.as_str()),
+                (Field::Other, m.publisher.as_str()),
+                (Field::Other, m.notes.as_str()),
                 (Field::Other, s.source.file_name.as_str()),
                 (Field::Other, folders.as_str()),
             ];
@@ -429,3 +440,12 @@ fn import_folder(session: &mut Session, params: &Value) -> Result<Value, EngineE
 
 #[cfg(test)]
 mod tests;
+
+/// Difficulty as searchable words: "3 stars" for 3, nothing when not set.
+fn difficulty_words(d: u8) -> String {
+    match d {
+        0 => String::new(),
+        1 => "1 star".into(),
+        n => format!("{n} stars"),
+    }
+}

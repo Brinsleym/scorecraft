@@ -1,10 +1,10 @@
 //! scorecraft-search: matching and ordering scores (spec `docs/spec/library.md`, LIB-5, LIB-9).
 //!
 //! Layer L2 in the workspace map (`docs/architecture.md` §2–3). Pure: no I/O and no clock.
-//! [`fold`] compares text without case or accents; [`Query`] matches every query word against
-//! the starts of a score's words and ranks the match; [`sort_key`] orders names the way a reader
-//! expects (numbers as numbers, leading articles ignored). The full-text index (LIB-6) comes
-//! later.
+//! [`fold`] compares text without case or accents; [`Query`] matches every query word anywhere
+//! inside a score's words ("nata" finds *Sonata*) and ranks whole words above word starts above
+//! the inside of a word; [`sort_key`] orders names the way a reader expects (numbers as numbers,
+//! leading articles kept: *The Swan* sorts under T, the owner's choice of 2026-11-01).
 #![deny(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -143,9 +143,9 @@ impl Query {
         })
     }
 
-    /// How well `fields` match: `None` when some query word starts no word in them; otherwise
-    /// higher is better. Each query word counts its best match: the field's weight, doubled for
-    /// a whole word.
+    /// How well `fields` match: `None` when some query word is in no word of them; otherwise
+    /// higher is better. Each query word counts its best match: the field's weight times 4 for a
+    /// whole word, 2 for a word start and 1 for the inside of a word.
     pub fn rank(&self, fields: &[(Field, &str)]) -> Option<u32> {
         if self.words.is_empty() {
             return Some(0);
@@ -158,8 +158,10 @@ impl Query {
                 .flat_map(|(f, ws)| {
                     ws.iter().filter_map(move |w| {
                         if w == q {
-                            Some(f.weight() * 2)
+                            Some(f.weight() * 4)
                         } else if w.starts_with(q.as_str()) {
+                            Some(f.weight() * 2)
+                        } else if w.contains(q.as_str()) {
                             Some(f.weight())
                         } else {
                             None
@@ -202,19 +204,11 @@ impl PartialOrd for Part {
 #[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SortKey(Vec<Part>);
 
-/// The sort key of `name`: folded, a leading "the", "a" or "an" dropped, runs of digits compared
-/// as numbers, spaces and punctuation ignored.
+/// The sort key of `name`: folded, runs of digits compared as numbers, spaces and punctuation
+/// ignored. Leading articles are kept: "The Swan" sorts under T.
 pub fn sort_key(name: &str) -> SortKey {
     let folded = fold(name);
-    let mut text = folded.trim_start();
-    for article in ["the ", "an ", "a "] {
-        if let Some(rest) = text.strip_prefix(article)
-            && !rest.trim().is_empty()
-        {
-            text = rest;
-            break;
-        }
-    }
+    let text = folded.trim_start();
     let mut parts = Vec::new();
     let mut cur = String::new();
     let mut digits = false;
@@ -276,11 +270,12 @@ mod tests {
     }
 
     #[test]
-    fn libs_1_every_word_must_start_a_word() {
+    fn libs_1_every_word_must_be_in_a_word() {
         let q = |s: &str| Query::parse(s).unwrap();
         assert!(q("moz son").rank(&sonata()).is_some());
         assert!(q("MOZART").rank(&sonata()).is_some());
-        assert!(q("nata").rank(&sonata()).is_none(), "word starts only");
+        assert!(q("nata").rank(&sonata()).is_some(), "inside a word");
+        assert!(q("xnata").rank(&sonata()).is_none());
         assert!(q("mozart xyz").rank(&sonata()).is_none());
         assert_eq!(q("").rank(&sonata()), Some(0));
         let etude = [(Field::Title, "Étude"), (Field::Composer, "Chopin")];
@@ -293,10 +288,14 @@ mod tests {
         let title = q.rank(&[(Field::Title, "Rondo"), (Field::Composer, "Mozart")]);
         let composer = q.rank(&[(Field::Title, "Air"), (Field::Composer, "Rondo")]);
         let start = q.rank(&[(Field::Title, "Rondoletto")]);
+        let inside = q.rank(&[(Field::Title, "Grondo")]);
         assert!(
-            title > composer && title > start,
-            "{title:?} {composer:?} {start:?}"
+            title > composer && title > start && start > inside,
+            "{title:?} {composer:?} {start:?} {inside:?}"
         );
+        // A word start in the title still beats the inside of a title word.
+        let son = Query::parse("son").unwrap();
+        assert!(son.rank(&[(Field::Title, "Sonata")]) > son.rank(&[(Field::Title, "Unison")]));
     }
 
     #[test]
@@ -327,12 +326,30 @@ mod tests {
 
     #[test]
     fn libs_4_names_sort_naturally() {
-        let mut names = vec!["The Swan", "Etude 10", "apple", "Etude 2", "Étude 1", "A"];
+        let mut names = vec![
+            "The Swan",
+            "Etude 10",
+            "apple",
+            "Etude 2",
+            "Étude 1",
+            "A",
+            "Swan Lake",
+        ];
         names.sort_by_key(|n| sort_key(n));
         assert_eq!(
             names,
-            ["A", "apple", "Étude 1", "Etude 2", "Etude 10", "The Swan"]
+            [
+                "A",
+                "apple",
+                "Étude 1",
+                "Etude 2",
+                "Etude 10",
+                "Swan Lake",
+                "The Swan"
+            ]
         );
+        // Articles are kept: "The Lark" sorts under T, after "Tango".
+        assert!(sort_key("The Lark Ascending") > sort_key("Tango"));
         assert_eq!(sort_key("Op. 007"), sort_key("op 7"));
         assert!(sort_key("10") > sort_key("9"));
         // A huge number never overflows.

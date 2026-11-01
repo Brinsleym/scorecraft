@@ -156,7 +156,7 @@ pub enum Op {
 )]
 pub enum ScoreField {
     Metadata {
-        metadata: Metadata,
+        metadata: Box<Metadata>,
     },
     Folder {
         folder: Option<FolderId>,
@@ -203,7 +203,7 @@ impl ScoreField {
     pub fn all(s: &Score) -> [ScoreField; 8] {
         [
             ScoreField::Metadata {
-                metadata: s.metadata.clone(),
+                metadata: Box::new(s.metadata.clone()),
             },
             ScoreField::Folder { folder: s.folder },
             ScoreField::Pages {
@@ -232,7 +232,7 @@ impl ScoreField {
 
     fn set(self, s: &mut Score) {
         match self {
-            ScoreField::Metadata { metadata } => s.metadata = metadata,
+            ScoreField::Metadata { metadata } => s.metadata = *metadata,
             ScoreField::Folder { folder } => s.folder = folder,
             ScoreField::Pages { pages, page_range } => {
                 s.pages = pages;
