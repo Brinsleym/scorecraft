@@ -108,6 +108,19 @@ impl Platform for Desktop {
         }
     }
 
+    fn pick_folder(&mut self) -> Option<String> {
+        #[cfg(any(windows, target_os = "macos"))]
+        {
+            rfd::FileDialog::new()
+                .pick_folder()
+                .map(|p| p.to_string_lossy().into_owned())
+        }
+        #[cfg(not(any(windows, target_os = "macos")))]
+        {
+            None
+        }
+    }
+
     fn library_dir(&self) -> Option<String> {
         let dir = library_dir()?;
         if let Some(parent) = dir.parent() {

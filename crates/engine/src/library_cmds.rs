@@ -266,13 +266,17 @@ fn scores(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
         )),
     };
     let trashed = opt_bool(ID, p, "trashed")?.unwrap_or(false);
+    let sort = session.library_sort;
     let l = session.lib_mut(ID)?;
     let lib = &l.lib;
-    let list: Vec<Value> = lib
+    let pool: Vec<&Score> = lib
         .scores
         .values()
         .filter(|s| lib.is_trashed(s.id) == trashed)
         .filter(|s| folder.is_none_or(|f| s.folder == f))
+        .collect();
+    let list: Vec<Value> = crate::find_cmds::sorted(sort, pool)
+        .into_iter()
         .map(|s| summary(lib, s))
         .collect();
     Ok(json!({ "scores": list }))
@@ -390,7 +394,7 @@ fn open_file(session: &mut Session, params: &Value) -> Result<Value, EngineError
     Ok(v)
 }
 
-fn import_one(
+pub(crate) fn import_one(
     l: &mut crate::library::LibrarySession,
     path: &str,
     folder: Option<FolderId>,

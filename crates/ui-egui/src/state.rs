@@ -62,12 +62,17 @@ pub struct UiState {
     pub theme: Theme,
     /// The last error, shown until the next action.
     pub message: Option<String>,
+    /// The library window is shown over the reader (LIB-14).
+    pub library: bool,
+    /// The library shows covers (true) or a list.
+    pub library_grid: bool,
 }
 
 impl UiState {
     pub fn new() -> UiState {
         UiState {
             chrome: true,
+            library_grid: true,
             ..UiState::default()
         }
     }

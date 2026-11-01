@@ -30,6 +30,10 @@ pub trait Platform {
     fn pick_export_path(&mut self, _name: &str) -> Option<String> {
         None
     }
+    /// Asks for a folder to import. `None` if cancelled or there is no dialog.
+    fn pick_folder(&mut self) -> Option<String> {
+        None
+    }
 }
 
 /// A platform that does nothing (tests, snapshots).
@@ -55,6 +59,8 @@ pub const SHELL_COMMANDS: &[(&str, &str, &str)] = &[
         "Show or Hide Controls",
         r#"{"on":bool?}"#,
     ),
+    ("ui.library.show", "Library", r#"{"on":bool?}"#),
+    ("ui.library.view", "Library View", r#"{"view":"grid|list"}"#),
 ];
 
 pub struct App {
@@ -69,6 +75,8 @@ pub struct App {
     applied_theme: Option<Theme>,
     /// The open score's id in the library, for undo.
     score_id: Option<String>,
+    /// The library window (LIB-14).
+    library: crate::library_view::LibraryView,
 }
 
 fn bool_param(params: &Value, key: &str) -> Result<Option<bool>, EngineError> {
@@ -108,6 +116,7 @@ impl App {
         settings.apply_markup(&mut session);
         state.theme = settings.theme;
         state.keep_awake.wanted = settings.keep_awake;
+        state.library_grid = settings.library_grid;
         App {
             session,
             state,
@@ -117,6 +126,7 @@ impl App {
             sent_full_screen: None,
             applied_theme: None,
             score_id: None,
+            library: crate::library_view::LibraryView::new(),
         }
     }
 
@@ -170,7 +180,13 @@ impl App {
                         .map(str::to_owned)
                 });
             self.opened(params);
+            self.state.library = false;
+            self.library.dirty = true;
             return r;
+        }
+        if r.is_ok() {
+            // Imports, edits and sorts change what the library window lists.
+            self.library.dirty = true;
         }
         // Markup settings are kept between launches; gestures and queries are not settings.
         let markup_setting = (id.starts_with("annotate.")
@@ -187,7 +203,9 @@ impl App {
             && !id.starts_with("annotate.stamp.")
             && !id.starts_with("annotate.layer."))
             || id == "input.pen.only"
-            || id == "input.touch.lock";
+            || id == "input.touch.lock"
+            || id == "library.sort.set"
+            || id == "ui.library.view";
         let changes_prefs = id.starts_with("view.layout")
             || id.starts_with("view.turn.halfPage")
             || id.starts_with("view.turn.alternating")
@@ -231,6 +249,21 @@ impl App {
             }
             "ui.chrome.toggle" => {
                 self.state.chrome = bool_param(params, "on")?.unwrap_or(!self.state.chrome);
+            }
+            "ui.library.show" => {
+                self.state.library = bool_param(params, "on")?.unwrap_or(!self.state.library);
+            }
+            "ui.library.view" => {
+                self.state.library_grid = match params.get("view").and_then(Value::as_str) {
+                    Some("grid") => true,
+                    Some("list") => false,
+                    _ => {
+                        return Err(EngineError::BadParams {
+                            command: id.into(),
+                            message: "`view` must be grid or list".into(),
+                        });
+                    }
+                };
             }
             _ => return Err(EngineError::UnknownCommand(id.chars().take(128).collect())),
         }
@@ -321,8 +354,12 @@ impl App {
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(tokens.reader_bg))
             .show(ui, |ui| {
-                if !self.session.has_score() {
-                    self.empty(ui, &tokens);
+                if self.state.library || !self.session.has_score() {
+                    if self.session.library().is_some() {
+                        self.library_window(ui, &tokens);
+                    } else {
+                        self.empty(ui, &tokens);
+                    }
                     return;
                 }
                 let keys = !ctx.egui_wants_keyboard_input();
@@ -332,6 +369,37 @@ impl App {
                 }
                 if let Some(e) = out.error {
                     self.state.message = Some(e);
+                }
+            });
+    }
+
+    fn library_window(&mut self, ui: &mut Ui, tokens: &Tokens) {
+        self.library.grid = self.state.library_grid;
+        egui::Frame::NONE
+            .fill(tokens.toolbar_bg)
+            .inner_margin(egui::Margin::same(12))
+            .show(ui, |ui| {
+                let actions = self.library.show(ui, &mut self.session, tokens);
+                for a in actions {
+                    match a {
+                        crate::library_view::LibraryAction::Open(id) => {
+                            let r = self.command("score.open", &json!({ "score": id }));
+                            self.report(r);
+                        }
+                        crate::library_view::LibraryAction::Command(id, p) => {
+                            let r = self.command(id, &p);
+                            self.report(r);
+                        }
+                        crate::library_view::LibraryAction::ImportFolder => {
+                            if let Some(path) = self.platform.pick_folder() {
+                                let r = self.command(
+                                    "library.import.folder",
+                                    &json!({ "path": path, "keepFolders": true }),
+                                );
+                                self.report(r);
+                            }
+                        }
+                    }
                 }
             });
     }
@@ -472,6 +540,11 @@ impl App {
             if self.icon_button(ui, tokens, "Open Score…", false, Icon::Open) {
                 self.pick_and_open();
             }
+            if self.session.library().is_some()
+                && self.icon_button(ui, tokens, "Library", self.state.library, Icon::Library)
+            {
+                run.push(("ui.library.show", json!({})));
+            }
             if has {
                 ui.menu_button("Export", |ui| {
                     if ui.button("PDF with ink drawn in…").clicked() {
@@ -602,6 +675,7 @@ enum Icon {
     Awake,
     Theme,
     Markup,
+    Library,
 }
 
 fn paint_icon(ui: &Ui, rect: Rect, c: Color32, icon: Icon) {
@@ -734,6 +808,22 @@ fn paint_icon(ui: &Ui, rect: Rect, c: Color32, icon: Icon) {
                 p.line_segment(
                     [ctr + d * r.width() * 0.34, ctr + d * r.width() * 0.5],
                     line,
+                );
+            }
+        }
+        Icon::Library => {
+            // Three book spines.
+            let w = r.width() / 4.0;
+            for i in 0..3 {
+                let x = r.left() + i as f32 * (w + 2.0);
+                p.rect_stroke(
+                    Rect::from_min_max(
+                        pos2(x, r.top() + (i % 2) as f32 * 3.0),
+                        pos2(x + w, r.bottom()),
+                    ),
+                    1.0,
+                    line,
+                    egui::StrokeKind::Middle,
                 );
             }
         }
@@ -1028,6 +1118,39 @@ mod tests {
             assert_eq!(after[key], before[key], "{key}");
         }
         assert_eq!(after["mode"], false, "markup mode itself is not kept");
+    }
+
+    #[test]
+    fn libs_10_the_library_window_lists_scores_with_covers() {
+        let (mut app, _) = app_with_score(2);
+        let ctx = Context::default();
+        let r = app.command("ui.library.show", &json!({})).unwrap();
+        assert_eq!(r["library"], true);
+        let mut ready = 0;
+        for k in 0..200 {
+            script(&mut app, &ctx, k as f64 * 0.016, vec![Vec::new()]);
+            ready = app.library.ready_covers();
+            if ready > 0 {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert_eq!(ready, 1, "the score's cover arrives");
+        let r = app
+            .command("ui.library.view", &json!({ "view": "list" }))
+            .unwrap();
+        assert_eq!(r["libraryGrid"], false);
+        frames(&mut app, &ctx, 1, Vec::new());
+        assert_eq!(
+            app.command("ui.library.view", &json!({ "view": "shelf" }))
+                .unwrap_err()
+                .code(),
+            "bad_params"
+        );
+        // Opening a score from the library closes the window.
+        let id = app.score_id.clone().unwrap();
+        app.command("score.open", &json!({ "score": id })).unwrap();
+        assert!(!app.state.library);
     }
 
     #[test]

@@ -65,6 +65,7 @@ pub fn run(root: &Path, update_baseline: bool) -> Result<(), String> {
     for (package, example) in [
         ("scorecraft-pdf", "perf"),
         ("scorecraft-engine", "reader_perf"),
+        ("scorecraft-engine", "library_perf"),
     ] {
         let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned());
         let mut cmd = Command::new(cargo);

@@ -1,8 +1,8 @@
 # ScoreCraft roadmap
 
-**Stage: pre-alpha** · next: alpha, the [alpha gate](docs/roadmap.md#alpha-gate) (~121–319 h away)
+**Stage: pre-alpha** · next: alpha, the [alpha gate](docs/roadmap.md#alpha-gate) (~116–309 h away)
 
-> **Last reviewed:** 2026-10-28 · **Last updated:** 2026-10-31 · **Change:** patch (M4 part 5: export with ink, breadth 47%; earlier: M4 part 4: the pen in the desktop app; earlier: merged with M3 done on main: M3 reader app done; earlier: M4 part 3: rectangle select, shapes and the pen button, breadth 46%; earlier: M4 part 2c: stamps, breadth 43%; earlier: M4 part 2b: text notes, breadth 42%; earlier: M4 part 2a: layers and presets, breadth 41%; earlier: owner's answers on markup, 124 rows, breadth 38%; earlier: M4 part 1: the ink engine and markup commands, breadth 39%; earlier: M1 foundation and M2 PDF reading done; earlier: owner's priorities after the M0 review; earlier: M0 skeleton done; earlier: 4 features added from the Microsoft Store description; PDF backend reuses PDFCraft) · **Target:** enScore 3.7 (2026)
+> **Last reviewed:** 2026-10-28 · **Last updated:** 2026-10-31 · **Change:** patch (M5 part 2: the library window, breadth 50%; earlier: M5 part 1: library search and sort, breadth 49%; earlier: M4 part 5: export with ink, breadth 47%; earlier: M4 part 4: the pen in the desktop app; earlier: merged with M3 done on main: M3 reader app done; earlier: M4 part 3: rectangle select, shapes and the pen button, breadth 46%; earlier: M4 part 2c: stamps, breadth 43%; earlier: M4 part 2b: text notes, breadth 42%; earlier: M4 part 2a: layers and presets, breadth 41%; earlier: owner's answers on markup, 124 rows, breadth 38%; earlier: M4 part 1: the ink engine and markup commands, breadth 39%; earlier: M1 foundation and M2 PDF reading done; earlier: owner's priorities after the M0 review; earlier: M0 skeleton done; earlier: 4 features added from the Microsoft Store description; PDF backend reuses PDFCraft) · **Target:** enScore 3.7 (2026)
 
 ScoreCraft's one-page summary of how close it is to enScore 3.7 (measured from public listings on
 2026-10-28). Detail: [target-app parity](docs/target-app-parity.md) (methodology, weights,
@@ -18,13 +18,13 @@ repository has merged-PR history. About 75% of the work parallelizes.
 
 | | Value | Kind |
 |---|---|---|
-| **Feature breadth** | **47%** | measured: 48 of 124 feature-map rows live (M3's reader app and M4's markup) |
+| **Feature breadth** | **50%** | measured: 53 of 124 feature-map rows live (M3's reader app and M4's markup) |
 | **Ready for real work** | **5%** | estimated: you can read a PDF and turn pages with a pedal on Windows; the pen marks up in the desktop app, unchecked on a tablet |
 | Practising musician | 0% | estimated ([method](docs/target-app-parity.md#practising-musician)) |
 | Essentials user | 0% | estimated ([method](docs/target-app-parity.md#essentials-user)) |
-| Remaining to **alpha** | **~121–319 h** | estimated |
-| Remaining to **beta** | **~565–1,189 h** | estimated |
-| Remaining to **full parity** | **~792–1,635 h** | estimated |
+| Remaining to **alpha** | **~116–309 h** | estimated |
+| Remaining to **beta** | **~551–1,162 h** | estimated |
+| Remaining to **full parity** | **~778–1,608 h** | estimated |
 
 **Why pre-alpha.** The project has its process, clean-room rules, architecture and feature map, and
 the M0 skeleton, PDF reading over PDFCraft (M2) and the foundation (M1): the document model,
@@ -59,7 +59,7 @@ enScore lists fifteen languages. ScoreCraft ships English first; the rest follow
 | Rank | Milestone | Estimate |
 |---|---|---:|
 | 1 | M4 ink: code complete; a check on a Windows tablet, then fixes from it | 5–20 h |
-| 2 | M5 library: search, sort, thumbnails, the library UI | 40–80 h |
+| 2 | M5 library: code complete; P6 and P7 on the reference device, polish from use | 5–15 h |
 | 3 | M3 follow-ups: half-page split that snaps between systems, first-render cost on big scans, more pedals | 20–40 h |
 
 Detail: [docs/roadmap.md](docs/roadmap.md).
@@ -68,6 +68,9 @@ Detail: [docs/roadmap.md](docs/roadmap.md).
 
 | Date | Entry |
 |---|---|
+| 2026-10-31 | M5 part 3: library speed measured: 10,000 scores open and list in 172 ms, search in 22 ms (development container) |
+| 2026-10-31 | M5 part 2: the library window: covers rendered off the frame, or a list; search box, sort, folders, folder import; `library.cover`; parity 53 of 124 |
+| 2026-10-31 | M5 part 1: [library spec](docs/spec/library.md); search (word starts, no case or accents, ranked), sort (natural, articles ignored), recently opened, folder import in the engine; parity 52 of 124 |
 | 2026-10-31 | M4 part 5: export with ink, flattened or as annotations, chosen layers, in the score's page order, rotation and crop; parity 48 of 124 |
 | 2026-10-31 | M4 part 4: the pen in the desktop app: markup bar, pen and touch through the palm filter, live strokes, ruler, selection; scores open through the library; markup settings kept |
 | 2026-10-31 | M4 part 3: rectangle select (move, copy, delete, scale, recolour), shapes (lines and ellipses) and the pen button in the engine; parity 47 of 124 |
@@ -90,6 +93,8 @@ Detail: [docs/roadmap.md](docs/roadmap.md).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-31 | patch | M5 part 2: breadth 49% → 50% (53 of 124); beta ~551–1,162 h, full ~778–1,608 h |
+| 2026-10-31 | patch | M5 part 1: breadth 47% → 49% (52 of 124); alpha ~116–309 h, beta ~556–1,172 h, full ~783–1,618 h |
 | 2026-10-31 | patch | M4 part 5, export with ink: breadth 46% → 47% (48 of 124); alpha ~121–319 h, beta ~565–1,189 h, full ~792–1,635 h |
 | 2026-10-31 | patch | M4 part 4, the pen in the desktop app: alpha ~135–345 → ~125–325 h, beta ~569–1,195 h, full ~796–1,641 h; breadth unchanged (46%) |
 | 2026-10-31 | patch | Merged with M3 done on main: M3's reduction (alpha −35/−50 h on top of M4's, beta −50/−95, full −50/−95) and its 5% ready for real work kept; breadth stays the measured 46% (47 of 124); alpha ~135–345 h, beta ~579–1,215 h, full ~806–1,661 h |

@@ -3,4 +3,11 @@
 # engine's registry, so feature-map rows whose command is `ui.*` can count as live without xtask
 # building egui. When the shell gains its command table, a ui-egui test checks that the table and
 # this list match (`app::tests::shell_commands_match_the_parity_list`).
-commands = ["ui.view.fullScreen", "ui.power.keepAwake", "ui.theme.set", "ui.chrome.toggle"]
+commands = [
+    "ui.view.fullScreen",
+    "ui.power.keepAwake",
+    "ui.theme.set",
+    "ui.chrome.toggle",
+    "ui.library.show",
+    "ui.library.view",
+]

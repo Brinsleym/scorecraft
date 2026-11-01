@@ -18,6 +18,8 @@ pub struct Session {
     pub(crate) key_gate: scorecraft_input::KeyGate,
     /// Markup tools, colours, widths and *Draw with Touch* (ANNO-1..7, ANNO-14).
     pub(crate) markup: crate::markup::Markup,
+    /// How the library lists scores (LIB-9).
+    pub(crate) library_sort: crate::find_cmds::LibrarySort,
 }
 
 impl Default for Session {
@@ -36,6 +38,7 @@ impl Session {
             pedal_map: scorecraft_input::PedalMap::default(),
             key_gate: scorecraft_input::KeyGate::new(scorecraft_input::DEFAULT_DEBOUNCE_MS),
             markup: crate::markup::Markup::default(),
+            library_sort: crate::find_cmds::LibrarySort::default(),
         }
     }
 

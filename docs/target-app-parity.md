@@ -1,6 +1,6 @@
 # ScoreCraft vs enScore: target-app parity
 
-> **Last reviewed:** 2026-10-28 · **Last updated:** 2026-10-31 · **Change:** patch (M4 part 5: breadth 47%, alpha ~121–319 h; earlier: M4 part 4: alpha ~125–325 h; earlier: merged with M3 done on main: M3 reader app done: breadth 30%, alpha ~170–395 h; earlier: M4 part 3: breadth 46%, 47 of 124 rows; earlier: M4 part 2c: breadth 43%, 44 of 124 rows; earlier: M4 part 2b: breadth 42%, 43 of 124 rows; earlier: M4 part 2a: breadth 41%, 42 of 124 rows; earlier: ANNO-18 added, breadth 38%, 40 of 124 rows; earlier: M4 part 1, with M3 below it: breadth 39% measured, 40 of 123 rows, ANNO-17 added; alpha ~200–460 h; earlier: M1 foundation done: breadth 14% measured, alpha ~220–490 h; earlier: M0 skeleton done, remaining hours lowered; earlier: 4 rows added from the Microsoft Store description; estimates lowered for PDFCraft reuse) · **Target:** enScore 3.7 (2026)
+> **Last reviewed:** 2026-10-28 · **Last updated:** 2026-10-31 · **Change:** patch (M5 part 2: breadth 50%; earlier: M5 part 1: breadth 49%, alpha ~116–309 h; earlier: M4 part 5: breadth 47%, alpha ~121–319 h; earlier: M4 part 4: alpha ~125–325 h; earlier: merged with M3 done on main: M3 reader app done: breadth 30%, alpha ~170–395 h; earlier: M4 part 3: breadth 46%, 47 of 124 rows; earlier: M4 part 2c: breadth 43%, 44 of 124 rows; earlier: M4 part 2b: breadth 42%, 43 of 124 rows; earlier: M4 part 2a: breadth 41%, 42 of 124 rows; earlier: ANNO-18 added, breadth 38%, 40 of 124 rows; earlier: M4 part 1, with M3 below it: breadth 39% measured, 40 of 123 rows, ANNO-17 added; alpha ~200–460 h; earlier: M1 foundation done: breadth 14% measured, alpha ~220–490 h; earlier: M0 skeleton done, remaining hours lowered; earlier: 4 rows added from the Microsoft Store description; estimates lowered for PDFCraft reuse) · **Target:** enScore 3.7 (2026)
 
 The authoritative answer to "how close is ScoreCraft to enScore, and how much work is left". The
 one-page summary is [`ROADMAP.md`](../ROADMAP.md); the ranked work list is [`gaps.md`](gaps.md);
@@ -15,14 +15,14 @@ the feature catalog is [`feature-map.md`](feature-map.md); the measured checklis
 
 | Number | Value | Kind |
 |---|---|---|
-| **Feature breadth** (does each enScore feature exist?) | **47%** weighted (48 of 124 feature-map rows live, all `partial`: engine commands with tests, plus the M3 Windows reader; the pen marks up in the desktop app) | measured by `cargo xtask parity` |
+| **Feature breadth** (does each enScore feature exist?) | **50%** weighted (53 of 124 feature-map rows live, all `partial`: engine commands with tests, plus the M3 Windows reader; the pen marks up in the desktop app) | measured by `cargo xtask parity` |
 | **Ready for real work** (could a musician replace enScore with it on stage?) | **0%** | estimated, weights below |
 | **Practising musician** (reads, marks, turns with a pedal, uses setlists) | 0% | estimated, [method](#practising-musician) |
 | **Essentials user** (open a PDF, turn pages, mark it up) | 0% | estimated, [method](#essentials-user) |
 | **Stage** | **pre-alpha** | the [alpha gate](roadmap.md#alpha-gate) does not pass |
-| Remaining to **alpha** | **~121–319 agent-hours** | estimated, uncalibrated: P0 rows (after PDFCraft reuse); M0 (2026-10-28), M2, M1 and M3 (2026-10-31) are done; M4 parts 1 to 4 (ink, layers, presets, text, stamps, selection, the pen in the desktop app, export with ink) took 50–75 h off |
-| Remaining to **beta** | **~565–1,189 agent-hours** | estimated, uncalibrated: alpha + P1 rows (350–680 h) + stability and performance (100–200 h) |
-| Remaining to **full parity** | **~792–1,635 agent-hours** | estimated, uncalibrated: beta + P2 rows (233–456 h, with the ruler); P3 (ours only) adds 80–170 h |
+| Remaining to **alpha** | **~116–309 agent-hours** | estimated, uncalibrated: P0 rows (after PDFCraft reuse); M0 (2026-10-28), M2, M1 and M3 (2026-10-31) are done; M4 parts 1 to 4 (ink, layers, presets, text, stamps, selection, the pen in the desktop app, export with ink) took 50–75 h off |
+| Remaining to **beta** | **~551–1,162 agent-hours** | estimated, uncalibrated: alpha + P1 rows (350–680 h) + stability and performance (100–200 h) |
+| Remaining to **full parity** | **~778–1,608 agent-hours** | estimated, uncalibrated: beta + P2 rows (233–456 h, with the ruler); P3 (ours only) adds 80–170 h |
 
 "Agent-hours" are wall-clock hours for one agent working sequentially, including tests, as in
 PhotoCraft's docs. They are **uncalibrated** until this repository has merged-PR history
@@ -45,19 +45,19 @@ parts.
 - enscore.app was not reachable from our build environment on 2026-10-28; reading it is the first
   re-measure task.
 
-## Feature breadth: 47% (weighted, 2026-10-31)
+## Feature breadth: 50% (weighted, 2026-10-31)
 
 | Component | Weight | Ours / enScore | % | Kind |
 |---|---:|---|---:|---|
 | Reading, layout and page turning (READ, TURN) | 25% | 14 / 23 | 61% | measured |
 | Annotation (ANNO) | 20% | 16 / 18 | 89% | measured |
-| Library, page editing, navigation (LIB, PAGE, NAV) | 15% | 12 / 28 | 43% | measured |
+| Library, page editing, navigation (LIB, PAGE, NAV) | 15% | 17 / 28 | 61% | measured |
 | Setlists (LIST) | 10% | 4 / 7 | 57% | measured |
 | Import, export, scanning, IMSLP, forScore (IMP, EXP) | 10% | 1 / 12 | 8% | measured |
 | Practice, audio, MIDI (PRAC, PLAY, MIDI) | 10% | 0 / 23 | 0% | measured |
 | Sync and backup (SYNC) | 5% | 0 / 8 | 0% | measured |
 | Platforms and languages (PLAT) | 5% | 1 / 5 | 20% | measured |
-| **Weighted** | 100% | | **47%** | |
+| **Weighted** | 100% | | **50%** | |
 
 Measured on the M4 branch, merged with M3 done (READ, TURN and PLAT rows come from M3; main's
 30% was measured before the feature map's M4 rows went live). Annotation rows are `partial`: the engine draws, erases and stores ink with tests, but
@@ -136,6 +136,8 @@ performance hardening before beta 100–200.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-31 | patch | M5 part 2 (the library window with covers): breadth 49% → 50% (53 of 124 rows); beta ~551–1,162 h, full ~778–1,608 h; alpha unchanged |
+| 2026-10-31 | patch | M5 part 1 (search, sort, recent, folder import in the engine): breadth 47% → 49% (52 of 124 rows; LIB, PAGE, NAV 12 → 16 of 28); alpha ~121–319 → ~116–309 h (LIB-5, -9 engine halves), beta ~556–1,172 h, full ~783–1,618 h |
 | 2026-10-31 | patch | M4 part 5 (export with ink): breadth 46% → 47% (48 of 124 rows; EXP 0 → 1 of 12); alpha ~125–325 → ~121–319 h, beta ~565–1,189 h, full ~792–1,635 h |
 | 2026-10-31 | patch | M4 part 4 (the pen in the desktop app): alpha ~135–345 → ~125–325 h, beta ~579–1,215 → ~569–1,195 h, full ~806–1,661 → ~796–1,641 h; breadth unchanged; ink feel stays 0% until judged on a device |
 | 2026-10-31 | patch | Merged with M3 done on main: hours combine M3's reduction with M4's (alpha ~135–345 h, beta ~579–1,215 h, full ~806–1,661 h); breadth stays the measured 46% (47 of 124 rows) |

@@ -3549,6 +3549,7 @@ dependencies = [
  "scorecraft-ops",
  "scorecraft-pdf",
  "scorecraft-render",
+ "scorecraft-search",
  "scorecraft-testkit",
  "scorecraft-text",
  "serde_json",
@@ -3685,6 +3686,9 @@ version = "0.0.1"
 [[package]]
 name = "scorecraft-search"
 version = "0.0.1"
+dependencies = [
+ "unicode-normalization",
+]
 
 [[package]]
 name = "scorecraft-sync"
