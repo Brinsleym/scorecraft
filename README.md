@@ -24,10 +24,11 @@
 </p>
 
 > [!IMPORTANT]
-> **Status: pre-alpha, documentation only.** This repository holds ScoreCraft's process, clean-room
-> rules, architecture and feature map. **There is no code yet.** Everything under
-> [Features](#features) is the plan, not something you can download. Where we stand, honestly and
-> dimension by dimension, is in the [roadmap](ROADMAP.md).
+> **Status: pre-alpha.** The desktop app reads PDFs, turns pages with a pedal, takes ink and
+> exports it, and has a library, lists, a metronome and folder sync; a browser build runs too.
+> None of it is released, and much of it is still unchecked on a Windows tablet. Features under
+> [Features](#features) that the [roadmap](ROADMAP.md) does not mark done are still the plan.
+> Where we stand, honestly and dimension by dimension, is in the roadmap.
 
 <br>
 
@@ -187,12 +188,12 @@ offscreen screenshots. See [`docs/control-protocol.md`](docs/control-protocol.md
 
 ## Get started
 
-There is nothing to build yet. The first milestone is the workspace skeleton
-([M0](docs/roadmap.md#milestone-definitions)). Once it lands:
+Nothing is released yet. To build from source (details in
+[`docs/development.md`](docs/development.md), including the browser build):
 
 ```sh
-git clone https://github.com/Brinsleym/enscore-cleanroom
-cd enscore-cleanroom
+git clone https://github.com/Brinsleym/scorecraft
+cd scorecraft
 cargo run --release -p scorecraft -- score.pdf   # the desktop app
 cargo test --workspace                           # the test suite
 ```

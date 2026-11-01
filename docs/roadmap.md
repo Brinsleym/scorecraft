@@ -1,6 +1,6 @@
 # Roadmap
 
-> **Last reviewed:** 2026-10-28 · **Last updated:** 2026-10-31 · **Change:** patch (M8 🟡 parts 2–3: every record and a shared-folder backend; earlier: M7 blocked, recorded; M8 🟡 part 1: the sync merge core; earlier: M6 🟡 part 3: shortcuts and snips; earlier: M6 🟡 part 2: the metronome; earlier: M6 🟡 part 1: playing a list; earlier: M5 🟡 part 2: the library window; earlier: M5 🟡 part 1: library search and sort; earlier: M4 part 5: export with ink; earlier: M4 part 4: the pen in the desktop app; earlier: merged with M3 done on main: M3 done: Windows check passed; earlier: M4 in progress: part 3, rectangle select, shapes and the pen button; earlier: M4 in progress: ink engine and markup commands; earlier: M3 in progress: control channel; earlier: reader window; earlier: reader layouts and turn commands; earlier: M1 done: geom, raster, doc, ops, format and the library commands; earlier: M2 done, PDF-2 partial on PDFCraft render gaps; earlier: M2 in progress: PDF adapter; earlier: owner's priorities: pedal moves to M3, Windows tablet first, Google Drive sync; earlier: M0 skeleton complete: workspace, CI, command registry, parity, scorecard, testkit; earlier: new S8 rows placed in M8–M10; M2 becomes PDFCraft integration) · **Target:** enScore 3.7 (2026)
+> **Last reviewed:** 2026-10-28 · **Last updated:** 2026-11-01 · **Change:** patch (current focus brought up to date; earlier: M8 🟡 parts 2–3: every record and a shared-folder backend; earlier: M7 blocked, recorded; M8 🟡 part 1: the sync merge core; earlier: M6 🟡 part 3: shortcuts and snips; earlier: M6 🟡 part 2: the metronome; earlier: M6 🟡 part 1: playing a list; earlier: M5 🟡 part 2: the library window; earlier: M5 🟡 part 1: library search and sort; earlier: M4 part 5: export with ink; earlier: M4 part 4: the pen in the desktop app; earlier: merged with M3 done on main: M3 done: Windows check passed; earlier: M4 in progress: part 3, rectangle select, shapes and the pen button; earlier: M4 in progress: ink engine and markup commands; earlier: M3 in progress: control channel; earlier: reader window; earlier: reader layouts and turn commands; earlier: M1 done: geom, raster, doc, ops, format and the library commands; earlier: M2 done, PDF-2 partial on PDFCraft render gaps; earlier: M2 in progress: PDF adapter; earlier: owner's priorities: pedal moves to M3, Windows tablet first, Google Drive sync; earlier: M0 skeleton complete: workspace, CI, command registry, parity, scorecard, testkit; earlier: new S8 rows placed in M8–M10; M2 becomes PDFCraft integration) · **Target:** enScore 3.7 (2026)
 
 Forward-looking plan: milestones, the **Current focus** list, and what's next with estimates.
 Where we stand today is in [`target-app-parity.md`](target-app-parity.md) and the ranked work list
@@ -57,17 +57,17 @@ Ranked; pick from the top unless an issue is assigned to you.
    registered in `xtask/src/layers.rs`, lints, `clippy.toml`, `rustfmt.toml`, `xtask layers` and
    `wasm`, `xtask ci`, CI on Linux, macOS, Windows and wasm, `xtask parity`, the engine command registry with `panic_hunt`~~ (done
    2026-10-28), `xtask scorecard` and testkit with a synthetic PDF generator~~.
-2. **PDFCraft integration** ([G1](gaps.md#g1-pdf-engine-parse-render-write),
-   [decision D1](decisions.md#2026-10-28-d1-reuse-pdfcrafts-pdf-crates)): pin a PDFCraft revision,
-   repeat its hayro, lopdf and vello_common patches (not its egui and winit ones; architecture §15),
-   write the `scorecraft-pdf` adapter, and run a 200-file public-domain score corpus through it
-   (correctness, speed, wasm size). A test build on 2026-10-28 showed the crates we take check
-   natively and for wasm32 with no C code.
+2. ~~**PDFCraft integration**~~ (M2), done 2026-10-31 with PDF-2 partial; the render gaps are PDFCraft's ([G1](gaps.md#g1-pdf-engine-parse-render-write)).
 3. ~~**M1 foundation**~~, done 2026-10-31: the model, history and library store under the reader.
-4. **Page turns and the pedal next** (owner's priority, 2026-10-28): M3 includes Bluetooth pedal
-   mapping (TURN-4), on the owner's Windows tablet first. Start with `docs/spec/page-turning.md`,
-   then `ink.md`, `library.md`, `setlists.md` from the public listings plus observation passes ([G17](gaps.md#g17-unknowns-behaviour-not-yet-observed)).
-5. **Create the corpus repository** with pinned public-domain scores and hostile synthetic PDFs.
+4. ~~**Page turns and the pedal**~~ (M3), done 2026-10-31 on the owner's Windows tablet.
+5. **Check M4, M5 and M6 on the Windows tablet** (pen ink, P6 and P7 with the owner's library,
+   the alpha gate's end-to-end checks), and give the metronome its click: the code is complete,
+   these checks close the three milestones and the alpha gate.
+6. **M8 sync**: the Google Drive API backend, then Wi-Fi between devices and log compaction; move
+   sync off the UI thread ([G10](gaps.md#g10-sync-and-backup)).
+7. **M7 mobile** waits on the owner's call on unsafe code for `android_main` and on a machine with
+   the Android SDK or Xcode ([G9](gaps.md#g9-mobile-platforms)).
+8. **Create the corpus repository** with pinned public-domain scores and hostile synthetic PDFs.
 
 ## What's next, with estimates
 
@@ -103,6 +103,7 @@ platforms (macOS, Windows, Linux) plus a wasm build.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-01 | patch | Current focus brought up to date: M2 and M3 struck, the tablet checks for M4–M6, then M8 and M7 |
 | 2026-10-31 | patch | M8 parts 2–3: every record merges, changes from edits, sync through a shared folder in the engine |
 | 2026-10-31 | patch | M7 marked blocked (no Android SDK/NDK or Xcode here; `android_main` needs unsafe code, the owner's call); M8 🟡 part 1: sync merge core with convergence tests |
 | 2026-10-31 | patch | The browser build runs the shell (file picker, drops, local-storage settings), checked in Chromium; `cargo xtask wasm` builds it |
