@@ -105,6 +105,14 @@ cargo run -p scorecraft-ui-egui --example snapshot -- --score corpus/public-doma
 
 It composes the reader on the CPU (`view.snapshot`), so it needs no GPU. Look at the PNG before you submit a UI change; attach before/after images to the PR.
 
+The whole shell (toolbars, library, menus, dialogs) renders the same way, egui's triangles filled
+on the CPU, with a scripted list of clicks, drags, pen strokes, keys and commands:
+
+```sh
+cargo run -p scorecraft-ui-egui --example shell -- --out /tmp/shell.png --pages 4 \
+  --steps "cmd annotate.mode.set {\"on\":true}; pen 300,300 500,330; click 440,26"
+```
+
 ## Environment variables
 
 | Variable | Effect |

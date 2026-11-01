@@ -1,6 +1,6 @@
 # Page turning
 
-> **Last reviewed:** 2026-10-31 · **Last updated:** 2026-11-01 · **Change:** minor (the owner's answers on turn mode, tap zones and default inputs; earlier: the half-page cut snaps between systems; earlier: first version) · **Target:** enScore 3.7 (2026)
+> **Last reviewed:** 2026-10-31 · **Last updated:** 2026-11-01 · **Change:** minor (the owner's UI feedback: the automatic layout is the default, first page alone removed, portrait turns full screen; earlier: the owner's answers on turn mode, tap zones and default inputs; earlier: the half-page cut snaps between systems; earlier: first version) · **Target:** enScore 3.7 (2026)
 
 How the reader lays pages out and turns them, and how taps, swipes, keys and foot pedals turn
 them. Written for milestone M3.
@@ -34,9 +34,19 @@ them. Written for milestone M3.
 ### READ-3 Two-page layout
 
 - Two facing pages side by side at the same height, the whole pair fitted and centred.
-- Pairs are 1–2, 3–4, … by default. With *first page alone* (for a title page or a score whose
-  page 2 is a left-hand page), page 1 stands alone and pairs are 2–3, 4–5, ….
-- A last page without a partner stands alone.
+- Pairs are 1–2, 3–4, …. A last page without a partner stands alone.
+- There is no *first page alone* option (owner, 2026-11-01: removed).
+
+### Automatic layout (owner, 2026-11-01; the default)
+
+- *Automatic* (`view.layout.auto`) chooses one page or two from the reader area each time it
+  changes size: two pages when both, side by side, are drawn at least 90% as large as one page
+  alone would be, otherwise one. A portrait reader area, a score of one page and a landscape
+  page always show one page. The choice is made on the page being read.
+- The layout is a drop-down on the toolbar: Automatic, Single page, Two pages.
+- When the screen turns to portrait while a score with the automatic layout is open and the
+  window is not full screen, the app goes full screen (it then shows one page). Only on the
+  turn itself, so the player can leave full screen again.
 
 ### READ-5 Half-page turns
 
@@ -57,7 +67,6 @@ them. Written for milestone M3.
 
 - In the two-page layout, each turn replaces only the page the player has finished: 1–2, then 3
   beside 2, then 3–4, then 5 beside 4. The page being read never moves.
-- With *first page alone*: 1, then 2–3, then 4 beside 3, ….
 - In the single-page layout it turns like a full turn.
 
 ### READ-12 Landscape Page Zoom, READ-15 zoom and pan
@@ -87,8 +96,8 @@ them. Written for milestone M3.
 
 ### A default, and a score's own choice (owner, 2026-11-01)
 
-- The layout and turn mode chosen in settings (*Turning* menu, `view.defaults.set`) are the
-  default for every score: single page, whole-page turns until changed. In single-page layout a
+- The layout and turn mode chosen in settings (`view.defaults.set`) are the default for every
+  score: the automatic layout and whole-page turns until changed. In single-page layout a
   turn moves one page.
 - Changing the layout or turn mode from a library score's own view (the toolbar, or the
   `view.layout.*` and `view.turn.*` commands) makes that the score's own choice: it opens that
@@ -128,7 +137,7 @@ them. Written for milestone M3.
 | Id | Given | When | Then |
 |---|---|---|---|
 | PT-1 | A 5-page score, two-page layout | the reader opens | pages 1–2 show, then 3–4, then 5 alone |
-| PT-2 | The same, first page alone | the user turns through it | 1, 2–3, 4–5 |
+| PT-2 | A 5-page score, automatic layout | the reader area is 1600 × 900, then 900 × 1600, then 1000 × 900 | two pages, then one, then one (two would be under 90% of one page's size); a fixed layout ignores the size |
 | PT-3 | A 3-page score, single layout, half-page turns | the user turns forward once | top part shows page 2, bottom part still page 1 |
 | PT-4 | PT-3 after one turn | the user turns back | page 1 fills the screen again |
 | PT-5 | 5 pages, two-page, alternating | the user turns three times | 3 beside 2, then 3–4, then 5 beside 4 |
@@ -142,7 +151,9 @@ them. Written for milestone M3.
 | PT-14 | Two library scores, default two pages with half-page turns | A opens and is switched to single page and whole turns; B opens; A again; the default becomes alternating; A's choice is forgotten | A opens two pages and half-page, then single and whole; B follows the default; A keeps its own until forgotten, then takes alternating; the choice is in the library settings, not the undo history |
 | PT-13 | The same reader | 30 then 40 px of wheel down; 200 more at once; −80 a second later; a right click; Enter; Backspace; the wheel while zoomed | the second step turns forward; the burst is ignored; then back; back; forward; back; zoomed, it pans |
 
-PT-1 to PT-9 are engine tests (`crates/layout`, `crates/engine/src/reader_cmds.rs`,
+PT-2 is `the_automatic_layout_follows_the_reader_area` in `crates/engine/src/reader_cmds.rs`, and
+the portrait rule is `turning_the_screen_to_portrait_goes_full_screen_once` in
+`crates/ui-egui/src/app.rs`. PT-1 and PT-3 to PT-9 are engine tests (`crates/layout`, `crates/engine/src/reader_cmds.rs`,
 `crates/engine/tests/library.rs`); PT-10 is perf scenario P1; PT-11 comes with the pedal map;
 PT-12 and PT-13 are `crates/engine/src/input_cmds.rs` and `crates/input/src/touch.rs` tests;
 PT-14 is `crates/engine/src/reader_choice/tests.rs`.
@@ -173,6 +184,7 @@ None left. Answered by the owner on 2026-11-01 (enScore's behaviour, and ScoreCr
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-01 | minor | Owner's UI feedback: the automatic layout (default), the layout drop-down, portrait goes full screen; *first page alone* removed; PT-2 replaced |
 | 2026-11-01 | minor | Built: a default layout and turn mode with each score's own choice over it; PT-14 |
 | 2026-11-01 | minor | Built: two tap halves and a top controls band, *Swipe to turn pages*, Enter and Backspace, wheel and right-click turns; PT-12, PT-13 |
 | 2026-11-01 | minor | Owner's answers: per-score turn mode over a default, two fixed tap zones and a swipe switch, every usual key and pointer input by default |

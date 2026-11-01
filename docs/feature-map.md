@@ -61,7 +61,7 @@ Sum of the estimates: **~925–1,870 agent-hours** for every row, after PDFCraft
 | Id | Feature | Tier | Source | Command | Crate | P | Est | Status |
 |---|---|---|---|---|---|---|---:|---|
 | READ-1 | Open a PDF score and render its pages crisply at any zoom, fast enough to turn without a visible delay | Free | S1 | `score.open`, `view.render` | pdf ♻ pdfcraft-cos, -render; render | P0 | 10–20 | partial |
-| READ-2 | Single-page layout | Free | S1, S4 | `view.layout.single` | layout | P0 | 4–8 | partial |
+| READ-2 | Single-page layout, and the automatic layout (one page or two from the window's shape; the default) | Free | S1, S4 | `view.layout.single`, `view.layout.auto` | layout | P0 | 4–8 | partial |
 | READ-3 | Two-page spread layout, with correct first-page placement for spreads | Free | S1 | `view.layout.twoPage` | layout | P0 | 6–12 | partial |
 | READ-4 | Full-screen (chrome hidden) performance mode | Free | S1, S4 | `ui.view.fullScreen` | ui-egui | P0 | 3–6 | partial |
 | READ-5 | Half-page turns: the next system appears before the full turn | Free | S1, S2, S3 | `view.turn.halfPage` (mode) | layout | P0 | 8–16 | partial |
@@ -98,7 +98,7 @@ Sum of the estimates: **~925–1,870 agent-hours** for every row, after PDFCraft
 | ANNO-3 | Highlighter that blends with the print like a real one (translucent multiply, no build-up within a stroke; stronger option) | Free | S1, S8 | `annotate.tool.highlighter` | ink | P0 | 4–8 | partial |
 | ANNO-4 | Custom pen colours and widths, saved presets: eight changeable swatches, a fixed palette of extra colours that replaces the selected swatch, a width slider per tool | Free | S1, obs. | `annotate.pen.preset.set` | ink, engine | P1 | 4–8 | partial |
 | ANNO-5 | Whiteout: cover printed marks, then write over them | Free | S1, S2 | `annotate.tool.whiteout` | ink | P1 | 4–8 | partial |
-| ANNO-6 | Stroke eraser (removes whole strokes) | Free | S1 | `annotate.tool.strokeEraser` | ink | P0 | 4–8 | partial |
+| ANNO-6 | Stroke eraser (removes whole strokes), and Clear Ink for the pages on screen or the whole score | Free | S1, owner | `annotate.tool.strokeEraser`, `annotate.clear` | ink | P0 | 4–8 | partial |
 | ANNO-7 | Pixel eraser (erases part of a stroke) | Free | S1 | `annotate.tool.pixelEraser` | ink | P1 | 8–16 | partial |
 | ANNO-8 | Typed text annotations, movable and editable: plain text with no background, wrapped to a maximum width, kept inside the page, a grip handle to move; Type with Touch | Free | S1, S4, obs. | `annotate.text.add`, `annotate.text.edit` | doc, text | P0 | 8–14 | partial |
 | ANNO-9 | Stamps (ScoreCraft's own; not an enScore feature, per the owner's observation): dynamics pp to ff in the Edwin font, crescendo and diminuendo hairpins with stretch and move handles | n/a | obs. | `annotate.stamp.place` | ink, text | P3 | 10–20 | partial |
@@ -311,6 +311,7 @@ framework rather than from enScore. They are counted in the scorecard, not in pa
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-01 | patch | Owner's UI feedback: READ-2 gains the automatic layout (`view.layout.auto`), ANNO-6 gains Clear Ink (`annotate.clear`); *first page alone* removed from READ-3 |
 | 2026-10-31 | patch | M8 part 3: SYNC-1 (`sync.now`, `sync.status`: scores, files, markings, lists, bookmarks and settings) and SYNC-7 (`sync.backend.set`: a shared folder, which Google Drive, OneDrive, Dropbox or iCloud Drive can keep in sync) partial |
 | 2026-10-31 | patch | M8 part 1: SYNC-3 (each device applies and logs its own changes; exchange by what each side has seen) and SYNC-6 (markings with tombstones, last-writer-wins edits and details, convergence property test) partial in `scorecraft-sync`; no command yet, so parity is unchanged |
 | 2026-10-31 | patch | IMP-3 photos and scans (PNG, JPEG) as a score partial |

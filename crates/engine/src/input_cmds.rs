@@ -309,6 +309,7 @@ mod tests {
         let bytes = PdfBuilder::new().pages(pages, PageSpec::default()).build();
         s.open_score_bytes(Arc::new(bytes), None, "test.pdf")
             .unwrap();
+        s.dispatch("view.layout.single", &json!({})).unwrap();
         s
     }
 

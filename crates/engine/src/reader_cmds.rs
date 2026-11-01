@@ -70,9 +70,18 @@ pub fn specs() -> Vec<CommandSpec> {
             "Two Pages",
             "View>Layout",
             None,
-            r#"{"firstAlone":bool=false,"remember":bool=true}"#,
+            r#"{"remember":bool=true}"#,
             false,
             layout_two_page as _,
+        ),
+        spec(
+            "view.layout.auto",
+            "Automatic",
+            "View>Layout",
+            None,
+            r#"{"remember":bool=true}"#,
+            true,
+            layout_auto as _,
         ),
         spec(
             "view.turn.halfPage",
@@ -241,6 +250,7 @@ fn layout_single(s: &mut Session, params: &Value) -> Result<Value, EngineError> 
     const ID: &str = "view.layout.single";
     let remember = remembering(ID, params)?;
     let v = with_reader(s, ID, params, &["remember"], |r, _| {
+        r.auto_layout = false;
         r.reader.set_layout(Layout::Single);
         Ok(json!({}))
     })?;
@@ -251,9 +261,22 @@ fn layout_single(s: &mut Session, params: &Value) -> Result<Value, EngineError> 
 fn layout_two_page(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
     const ID: &str = "view.layout.twoPage";
     let remember = remembering(ID, params)?;
-    let v = with_reader(s, ID, params, &["firstAlone", "remember"], |r, p| {
-        let first_alone = opt_bool(ID, p, "firstAlone")?.unwrap_or(false);
-        r.reader.set_layout(Layout::TwoPage { first_alone });
+    let v = with_reader(s, ID, params, &["remember"], |r, _| {
+        r.auto_layout = false;
+        r.reader.set_layout(Layout::TwoPage);
+        Ok(json!({}))
+    })?;
+    s.remember_view_choice(remember)?;
+    Ok(v)
+}
+
+/// The automatic layout: one page or two, from the reader area's shape (owner, 2026-11-01).
+fn layout_auto(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
+    const ID: &str = "view.layout.auto";
+    let remember = remembering(ID, params)?;
+    let v = with_reader(s, ID, params, &["remember"], |r, _| {
+        r.auto_layout = true;
+        r.resolve_layout();
         Ok(json!({}))
     })?;
     s.remember_view_choice(remember)?;
@@ -474,6 +497,7 @@ fn viewport_set(s: &mut Session, params: &Value) -> Result<Value, EngineError> {
             }
             r.viewport = size;
             r.pixels_per_point = ppp;
+            r.resolve_layout();
             Ok(json!({}))
         },
     )
@@ -490,11 +514,13 @@ mod tests {
     use super::*;
     use scorecraft_testkit::pdf::{PageSpec, PdfBuilder};
 
+    /// A score open on one page at a time (the default is the automatic layout).
     fn session(pages: usize) -> Session {
         let mut s = Session::new();
         let bytes = PdfBuilder::new().pages(pages, PageSpec::default()).build();
         s.open_score_bytes(Arc::new(bytes), None, "test.pdf")
             .unwrap();
+        s.dispatch("view.layout.single", &json!({})).unwrap();
         s
     }
 
@@ -578,11 +604,6 @@ mod tests {
         let r = run(&mut s, "view.layout.twoPage", json!({}));
         assert_eq!(r["onScreen"], json!([1, 2]));
         assert_eq!(r["slots"].as_array().unwrap().len(), 2);
-        let r = run(&mut s, "view.layout.twoPage", json!({ "firstAlone": true }));
-        assert_eq!(
-            (r["onScreen"].clone(), r["firstAlone"].clone()),
-            (json!([1]), json!(true))
-        );
         run(&mut s, "view.layout.single", json!({}));
         run(&mut s, "view.turn.halfPage", json!({ "split": 0.4 }));
         let r = run(&mut s, "view.turn.next", json!({}));
@@ -597,6 +618,75 @@ mod tests {
             (r["mode"].as_str(), r["half"].as_bool()),
             (Some("full"), Some(false))
         );
+    }
+
+    #[test]
+    fn the_automatic_layout_follows_the_reader_area() {
+        let mut s = session(5);
+        let wide = json!({ "width": 1600, "height": 900 });
+        let tall = json!({ "width": 900, "height": 1600 });
+        run(&mut s, "view.viewport.set", wide.clone());
+        let r = run(&mut s, "view.layout.auto", json!({}));
+        assert_eq!(
+            (r["layoutChoice"].as_str(), r["layout"].as_str()),
+            (Some("auto"), Some("twoPage"))
+        );
+        assert_eq!(r["onScreen"], json!([1, 2]));
+        let r = run(&mut s, "view.viewport.set", tall);
+        assert_eq!(
+            (r["layoutChoice"].as_str(), r["layout"].as_str()),
+            (Some("auto"), Some("single"))
+        );
+        // A landscape window too narrow for two pages keeps one.
+        let r = run(
+            &mut s,
+            "view.viewport.set",
+            json!({ "width": 1000, "height": 900 }),
+        );
+        assert_eq!(r["layout"], "single");
+        // A fixed layout stays put whatever the window does.
+        run(&mut s, "view.layout.single", json!({}));
+        let r = run(&mut s, "view.viewport.set", wide);
+        assert_eq!(
+            (r["layoutChoice"].as_str(), r["layout"].as_str()),
+            (Some("single"), Some("single"))
+        );
+    }
+
+    #[test]
+    fn auto_layout_shows_one_page_of_a_one_page_score_and_on_portrait_screens() {
+        use scorecraft_layout::Layout;
+        let a4 = Size {
+            width: 595.0,
+            height: 842.0,
+        };
+        let size = |w, h| Size {
+            width: w,
+            height: h,
+        };
+        assert_eq!(
+            crate::reader::auto_layout_for(size(1920.0, 1080.0), a4, 2),
+            Layout::TwoPage
+        );
+        assert_eq!(
+            crate::reader::auto_layout_for(size(1920.0, 1080.0), a4, 1),
+            Layout::Single
+        );
+        assert_eq!(
+            crate::reader::auto_layout_for(size(1080.0, 1920.0), a4, 9),
+            Layout::Single
+        );
+        // A landscape page is shown alone even on a wide screen.
+        assert_eq!(
+            crate::reader::auto_layout_for(size(1920.0, 1080.0), size(842.0, 595.0), 9),
+            Layout::Single
+        );
+        for bad in [0.0, f64::NAN, -1.0] {
+            assert_eq!(
+                crate::reader::auto_layout_for(size(bad, 1080.0), a4, 9),
+                Layout::Single
+            );
+        }
     }
 
     #[test]
