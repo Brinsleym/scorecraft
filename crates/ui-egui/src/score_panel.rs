@@ -169,8 +169,7 @@ impl ScorePanel {
                     .cloned()
                     .unwrap_or_default();
                 let n = pages.len();
-                egui::ScrollArea::vertical()
-                    .id_salt("pages")
+                crate::scroll::SmoothScroll::vertical("pages")
                     .max_height(260.0)
                     .show(ui, |ui| {
                         for (i, p) in pages.iter().enumerate() {

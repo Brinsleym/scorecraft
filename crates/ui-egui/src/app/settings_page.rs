@@ -45,7 +45,8 @@ impl App {
             .inner_margin(egui::Margin::same(12))
             .show(ui, |ui| {
                 ui.set_min_size(ui.available_size());
-                egui::ScrollArea::vertical()
+                crate::scroll::SmoothScroll::vertical("settings")
+                    .gutter(12.0)
                     .auto_shrink(false)
                     .show(ui, |ui| {
                         ui.label(
