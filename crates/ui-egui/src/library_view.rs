@@ -1,9 +1,11 @@
-//! The library window (feature-map LIB-14, spec `docs/spec/library.md`): a search box and the
-//! sort above a grid of covers or a list, folders first. Every list comes from the engine
+//! The library window (feature-map LIB-14, spec `docs/spec/library.md`): a sidebar of sections
+//! (Library, Lists, Recordings, Practice, Search, Recently Deleted, Settings), and in Library a
+//! grid of covers or a list, folders first, with a floating toolbar on the right and a menu on
+//! each score. Every list comes from the engine
 //! (`library.search`, `library.info`); covers are rendered off the frame (a worker thread on
 //! native builds, one per frame on the web) and cached by score.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use egui::{
     Color32, ColorImage, Context, RichText, Sense, TextureHandle, TextureOptions, Ui, vec2,
@@ -11,6 +13,7 @@ use egui::{
 use scorecraft_engine::{CoverJob, Session};
 use serde_json::{Value, json};
 
+use crate::icons::{self, Icon};
 use crate::theme::Tokens;
 
 /// The longest side of a cover, in pixels.
@@ -35,6 +38,41 @@ pub enum LibraryAction {
     ChooseSyncFolder,
     /// Sync now and report what happened.
     SyncNow,
+    /// Ask the player for PDFs and import them into the folder shown.
+    ImportFiles,
+    /// Ask the player for photos and make one score of them.
+    ImportPhotos,
+    /// Show this score's details to edit.
+    EditDetails(String),
+    /// Export this score as a PDF (`flatten` or `annotations`) and offer it.
+    Share(String, &'static str),
+    /// Make a list with this name and add these scores to it.
+    NewListWith(String, Vec<String>),
+}
+
+/// The library's sections, as the sidebar lists them (owner, 2026-11-01).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Section {
+    #[default]
+    Library,
+    Lists,
+    Recordings,
+    Practice,
+    Search,
+    Trash,
+    Settings,
+}
+
+impl Section {
+    /// The sidebar's rows above the gap; Settings sits at the bottom.
+    pub const MAIN: [(Section, &'static str, Icon); 6] = [
+        (Section::Library, "Library", Icon::Library),
+        (Section::Lists, "Lists", Icon::Lists),
+        (Section::Recordings, "Recordings", Icon::Recordings),
+        (Section::Practice, "Practice", Icon::Practice),
+        (Section::Search, "Search", Icon::Search),
+        (Section::Trash, "Recently Deleted", Icon::Trash),
+    ];
 }
 
 enum Cover {
@@ -144,6 +182,13 @@ pub struct LibraryView {
     stranded: Value,
     /// From `library.scores` with `trashed`, while Recently Deleted is shown.
     trashed: Value,
+    /// The section the sidebar shows.
+    pub section: Section,
+    /// Taps select scores instead of opening them; the scores selected.
+    pub selecting: bool,
+    pub selected: BTreeSet<String>,
+    /// The name typed for a new folder.
+    new_folder: String,
 }
 
 /// The quiet notice after adding a score whose library entry has a page range.
@@ -192,6 +237,10 @@ impl Default for LibraryView {
             deleted_folders: Value::Null,
             stranded: Value::Null,
             trashed: Value::Null,
+            section: Section::Library,
+            selecting: false,
+            selected: BTreeSet::new(),
+            new_folder: String::new(),
         }
     }
 }
@@ -220,13 +269,18 @@ impl LibraryView {
             .ok()
             .and_then(|v| v.get("sort").cloned())
             .unwrap_or(Value::Null);
+        // Search looks through the whole library; Library through the folder shown.
+        let folder = match self.section {
+            Section::Search => None,
+            _ => self.folder.clone(),
+        };
         let ask = (
             format!(
                 "{}{}",
                 if self.full_text { "\u{1}" } else { "" },
                 self.query
             ),
-            self.folder.clone(),
+            folder.clone(),
             sort,
         );
         if !self.dirty && self.asked.as_ref() == Some(&ask) {
@@ -245,7 +299,7 @@ impl LibraryView {
             r
         } else {
             let mut p = json!({ "query": self.query, "limit": 500 });
-            if let (Some(f), Some(o)) = (&self.folder, p.as_object_mut()) {
+            if let (Some(f), Some(o)) = (&folder, p.as_object_mut()) {
                 o.insert("folder".into(), json!(f));
             }
             session
@@ -324,7 +378,60 @@ impl LibraryView {
         }
     }
 
-    /// The window, filling `ui`. Returns what the player chose.
+    /// The left sidebar (owner, 2026-11-01): compact rows for Library, Lists, Recordings,
+    /// Practice, Search and Recently Deleted, then a gap and Settings at the bottom. When a
+    /// score is open, a row on top goes back to it.
+    pub fn sidebar(&mut self, ui: &mut Ui, open_score: Option<&str>) -> Vec<LibraryAction> {
+        let mut out = Vec::new();
+        ui.add_space(6.0);
+        if let Some(title) = open_score {
+            if icons::row(ui, Icon::Back, title, false)
+                .on_hover_text("Back to the open score")
+                .clicked()
+            {
+                out.push(LibraryAction::Command(
+                    "ui.library.show",
+                    json!({ "on": false }),
+                ));
+            }
+            ui.separator();
+        }
+        for (section, label, icon) in Section::MAIN {
+            if icons::row(ui, icon, label, self.section == section).clicked() {
+                self.go(section);
+            }
+        }
+        let rest = ui.available_height() - 40.0;
+        if rest > 0.0 {
+            ui.add_space(rest);
+        }
+        ui.separator();
+        if icons::row(
+            ui,
+            Icon::Settings,
+            "Settings",
+            self.section == Section::Settings,
+        )
+        .clicked()
+        {
+            self.go(Section::Settings);
+        }
+        out
+    }
+
+    /// Shows a section of the sidebar.
+    pub fn go(&mut self, section: Section) {
+        if self.section != section {
+            self.section = section;
+            self.show_trash = section == Section::Trash;
+            self.selecting = false;
+            self.selected.clear();
+            self.dirty = true;
+        }
+    }
+
+    /// The section shown, filling `ui` (Settings is the shell's own page). Returns what the
+    /// player chose.
     pub fn show(
         &mut self,
         ui: &mut Ui,
@@ -339,12 +446,103 @@ impl LibraryView {
         let ctx = ui.ctx().clone();
         self.take_covers(&ctx);
         self.refresh(session);
+        match self.section {
+            Section::Library => self.library_section(ui, session, tokens, &mut out),
+            Section::Search => self.search_section(ui, session, tokens, &mut out),
+            Section::Lists => self.lists_panel(ui, tokens, &mut out),
+            Section::Trash => {
+                heading(ui, tokens, "Recently Deleted");
+                self.trash_ui(ui, tokens, &mut out);
+            }
+            Section::Recordings => {
+                heading(ui, tokens, "Recordings");
+                ui.label(
+                    RichText::new(
+                        "Recordings made while practising will be kept here. Not built yet.",
+                    )
+                    .color(tokens.text),
+                );
+            }
+            Section::Practice => {
+                heading(ui, tokens, "Practice");
+                ui.label(RichText::new("Coming later.").color(tokens.text));
+            }
+            Section::Settings => {}
+        }
+        out
+    }
+
+    /// The library: the folder shown, its folders and scores, with the floating toolbar on
+    /// the right (owner, 2026-11-01; enScore's screenshot 3 for the arrangement).
+    fn library_section(
+        &mut self,
+        ui: &mut Ui,
+        session: &mut Session,
+        tokens: &Tokens,
+        out: &mut Vec<LibraryAction>,
+    ) {
+        let folders = self.folder_list();
+        let here = self
+            .folder
+            .as_ref()
+            .and_then(|cur| folders.iter().find(|f| &f.0 == cur).cloned());
         ui.horizontal(|ui| {
-            ui.add(
+            if let Some((_, name, parent)) = &here {
+                if icons::small_button_sized(ui, Icon::Back, "Up a folder", 28.0, false).clicked() {
+                    self.folder = parent.clone();
+                    self.dirty = true;
+                }
+                heading(ui, tokens, name);
+            } else {
+                heading(ui, tokens, "Library");
+            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                self.floating_toolbar(ui, session, tokens, out);
+            });
+        });
+        self.stranded_prompt(ui, tokens, out);
+        if self.selecting {
+            self.selection_bar(ui, tokens, &folders, out);
+        }
+        if !self.query.trim().is_empty() {
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new(format!("Filtered by “{}”", self.query.trim()))
+                        .color(tokens.text),
+                );
+                if ui.small_button("Clear").clicked() {
+                    self.query.clear();
+                }
+            });
+        }
+        ui.add_space(4.0);
+        let subfolders: Vec<(String, String)> = folders
+            .iter()
+            .filter(|f| f.2 == self.folder)
+            .map(|f| (f.0.clone(), f.1.clone()))
+            .collect();
+        self.results_ui(ui, session, tokens, &subfolders, &folders, out);
+    }
+
+    /// Search (owner, 2026-11-01): the whole library by details or inside the scores. Searching
+    /// IMSLP for new scores comes later.
+    fn search_section(
+        &mut self,
+        ui: &mut Ui,
+        session: &mut Session,
+        tokens: &Tokens,
+        out: &mut Vec<LibraryAction>,
+    ) {
+        heading(ui, tokens, "Search");
+        ui.horizontal(|ui| {
+            let r = ui.add(
                 egui::TextEdit::singleline(&mut self.query)
-                    .hint_text("Search title, composer, tags, key…")
+                    .hint_text("Title, composer, tags, key…")
                     .desired_width(320.0),
             );
+            if self.query.is_empty() {
+                r.request_focus();
+            }
             if ui
                 .selectable_label(self.full_text, "Inside scores")
                 .on_hover_text("Search the words in the PDFs and practice notes")
@@ -352,81 +550,284 @@ impl LibraryView {
             {
                 self.full_text = !self.full_text;
             }
-            let sort = self
-                .asked
-                .as_ref()
-                .map(|a| a.2.clone())
-                .unwrap_or(Value::Null);
-            let by = sort
-                .get("by")
-                .and_then(Value::as_str)
-                .unwrap_or("title")
-                .to_owned();
-            let desc = sort
-                .get("descending")
-                .and_then(Value::as_bool)
-                .unwrap_or(false);
-            egui::ComboBox::from_id_salt("sort")
-                .selected_text(match by.as_str() {
-                    "composer" => "Composer",
-                    "added" => "Date added",
-                    "opened" => "Recently opened",
-                    _ => "Title",
-                })
-                .show_ui(ui, |ui| {
-                    for (id, label) in [
-                        ("title", "Title"),
-                        ("composer", "Composer"),
-                        ("added", "Date added"),
-                        ("opened", "Recently opened"),
+        });
+        ui.label(
+            RichText::new("Searching IMSLP for new scores is not built yet.")
+                .weak()
+                .italics(),
+        );
+        ui.add_space(4.0);
+        if self.query.trim().is_empty() {
+            return;
+        }
+        let folders = self.folder_list();
+        self.results_ui(ui, session, tokens, &[], &folders, out);
+    }
+
+    /// Right-anchored floating toolbar: More, Filter, Sort, New Folder, Import.
+    fn floating_toolbar(
+        &mut self,
+        ui: &mut Ui,
+        session: &mut Session,
+        tokens: &Tokens,
+        out: &mut Vec<LibraryAction>,
+    ) {
+        egui::Frame::NONE
+            .fill(tokens.toolbar_bg)
+            .stroke(egui::Stroke::new(1.0, tokens.text.gamma_multiply(0.15)))
+            .corner_radius(10)
+            .inner_margin(egui::Margin::symmetric(6, 3))
+            .shadow(egui::Shadow {
+                offset: [0, 2],
+                blur: 8,
+                spread: 0,
+                color: Color32::from_black_alpha(40),
+            })
+            .show(ui, |ui| {
+                // Right to left: the last button added shows first.
+                let import = icons::labelled(ui, Icon::Plus, "Import");
+                egui::Popup::menu(&import).show(|ui| {
+                    if icons::labelled(ui, Icon::Score, "PDF files…").clicked() {
+                        out.push(LibraryAction::ImportFiles);
+                        ui.close();
+                    }
+                    if !cfg!(target_arch = "wasm32") {
+                        if icons::labelled(ui, Icon::Folder, "A folder of scores…").clicked() {
+                            out.push(LibraryAction::ImportFolder);
+                            ui.close();
+                        }
+                        if ui.button("Photos as one score…").clicked() {
+                            out.push(LibraryAction::ImportPhotos);
+                            ui.close();
+                        }
+                    }
+                    ui.separator();
+                    ui.label(RichText::new("New blank score").weak());
+                    for (paper, label) in [
+                        ("single", "Manuscript paper"),
+                        ("grand", "Piano manuscript paper"),
+                        ("tab", "Tablature paper"),
                     ] {
-                        if ui.selectable_label(by == id, label).clicked() {
+                        if ui.button(label).clicked() {
+                            out.push(LibraryAction::Command(
+                                "score.newManuscript",
+                                json!({ "paper": paper }),
+                            ));
+                            ui.close();
+                        }
+                    }
+                });
+                let nf = icons::labelled(ui, Icon::NewFolder, "New Folder");
+                let parent = self.folder.clone();
+                egui::Popup::menu(&nf)
+                    .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+                    .show(|ui| {
+                        let r = ui.add(
+                            egui::TextEdit::singleline(&mut self.new_folder)
+                                .hint_text("Folder name")
+                                .desired_width(180.0),
+                        );
+                        r.request_focus();
+                        let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                        if (ui.button("Create").clicked() || enter)
+                            && !self.new_folder.trim().is_empty()
+                        {
+                            let mut p = json!({ "name": self.new_folder.trim() });
+                            if let (Some(f), Some(o)) = (&parent, p.as_object_mut()) {
+                                o.insert("parent".into(), json!(f));
+                            }
+                            out.push(LibraryAction::Command("library.folder.new", p));
+                            self.new_folder.clear();
+                            ui.close();
+                        }
+                    });
+                ui.separator();
+                let sort = self
+                    .asked
+                    .as_ref()
+                    .map(|a| a.2.clone())
+                    .unwrap_or(Value::Null);
+                let by = sort
+                    .get("by")
+                    .and_then(Value::as_str)
+                    .unwrap_or("title")
+                    .to_owned();
+                let desc = sort
+                    .get("descending")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                let sorts = [
+                    ("title", "Title"),
+                    ("composer", "Composer"),
+                    ("added", "Date added"),
+                    ("opened", "Recently opened"),
+                ];
+                let label = sorts.iter().find(|s| s.0 == by).map_or("Title", |s| s.1);
+                let sr =
+                    icons::labelled(ui, Icon::Sort, &format!("By {label}")).on_hover_text("Sort");
+                egui::Popup::menu(&sr).show(|ui| {
+                    for (id, label) in sorts {
+                        if icons::labelled_selected(ui, Icon::Check, label, by == id).clicked() {
                             out.push(LibraryAction::Command(
                                 "library.sort.set",
                                 json!({ "by": id }),
                             ));
+                            ui.close();
                         }
                     }
+                    ui.separator();
+                    if ui.selectable_label(desc, "Reverse order").clicked() {
+                        out.push(LibraryAction::Command(
+                            "library.sort.set",
+                            json!({ "descending": !desc }),
+                        ));
+                        ui.close();
+                    }
                 });
-            if ui.selectable_label(desc, "Reverse").clicked() {
-                out.push(LibraryAction::Command(
-                    "library.sort.set",
-                    json!({ "descending": !desc }),
-                ));
-            }
-            ui.separator();
-            if ui.selectable_label(self.grid, "Covers").clicked() {
-                out.push(LibraryAction::Command(
-                    "ui.library.view",
-                    json!({ "view": "grid" }),
-                ));
-            }
-            if ui.selectable_label(!self.grid, "List").clicked() {
-                out.push(LibraryAction::Command(
-                    "ui.library.view",
-                    json!({ "view": "list" }),
-                ));
-            }
-            ui.separator();
-            // Browsers can't hand over a folder of files here.
-            if !cfg!(target_arch = "wasm32") && ui.button("Import Folder…").clicked() {
-                out.push(LibraryAction::ImportFolder);
-            }
-            if !cfg!(target_arch = "wasm32") {
-                sync_buttons(ui, session, &mut out);
+                let filtering = !self.query.trim().is_empty();
+                let fr = icons::small_button_sized(ui, Icon::Filter, "Filter", 28.0, filtering);
+                egui::Popup::menu(&fr)
+                    .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+                    .show(|ui| {
+                        let r = ui.add(
+                            egui::TextEdit::singleline(&mut self.query)
+                                .hint_text("Show only scores matching…")
+                                .desired_width(220.0),
+                        );
+                        r.request_focus();
+                        ui.checkbox(&mut self.full_text, "Inside scores");
+                    });
+                let more = icons::small_button_sized(ui, Icon::More, "More", 28.0, false);
+                egui::Popup::menu(&more).show(|ui| {
+                    if ui
+                        .button(if self.selecting {
+                            "Done selecting"
+                        } else {
+                            "Select"
+                        })
+                        .clicked()
+                    {
+                        self.selecting = !self.selecting;
+                        self.selected.clear();
+                        ui.close();
+                    }
+                    ui.separator();
+                    if ui.radio(self.grid, "Show as covers").clicked() {
+                        out.push(LibraryAction::Command(
+                            "ui.library.view",
+                            json!({ "view": "grid" }),
+                        ));
+                        ui.close();
+                    }
+                    if ui.radio(!self.grid, "Show as a list").clicked() {
+                        out.push(LibraryAction::Command(
+                            "ui.library.view",
+                            json!({ "view": "list" }),
+                        ));
+                        ui.close();
+                    }
+                    if !cfg!(target_arch = "wasm32") {
+                        ui.separator();
+                        sync_buttons(ui, session, out);
+                    }
+                });
+            });
+    }
+
+    /// While selecting: how many, and what to do with them.
+    fn selection_bar(
+        &mut self,
+        ui: &mut Ui,
+        tokens: &Tokens,
+        folders: &[(String, String, Option<String>)],
+        out: &mut Vec<LibraryAction>,
+    ) {
+        let ids: Vec<String> = self.selected.iter().cloned().collect();
+        ui.horizontal(|ui| {
+            ui.label(
+                RichText::new(match ids.len() {
+                    0 => "Tap scores to select them".to_owned(),
+                    1 => "1 selected".to_owned(),
+                    n => format!("{n} selected"),
+                })
+                .color(tokens.text),
+            );
+            ui.add_enabled_ui(!ids.is_empty(), |ui| {
+                ui.menu_button("Add to list", |ui| {
+                    self.list_menu(ui, &ids, out);
+                });
+                ui.menu_button("Move to", |ui| {
+                    move_menu(ui, folders, &ids, out);
+                });
+                if ui.button("Delete").clicked() {
+                    for id in &ids {
+                        out.push(LibraryAction::Command(
+                            "library.score.delete",
+                            json!({ "score": id }),
+                        ));
+                    }
+                    self.selected.clear();
+                }
+            });
+            if ui.button("Done").clicked() {
+                self.selecting = false;
+                self.selected.clear();
             }
         });
-        ui.add_space(6.0);
-        let area = ui.available_rect_before_wrap();
-        let panel = egui::Rect::from_min_size(area.min, vec2(260.0, area.height()));
-        let mut panel_ui = ui.new_child(egui::UiBuilder::new().max_rect(panel));
-        self.lists_panel(&mut panel_ui, tokens, &mut out);
-        let rest = egui::Rect::from_min_max(egui::pos2(panel.right() + 12.0, area.top()), area.max);
-        let mut rest_ui = ui.new_child(egui::UiBuilder::new().max_rect(rest));
-        let ui = &mut rest_ui;
-        // Folders inside the one shown, then a way back up.
-        let folders: Vec<(String, String, Option<String>)> = self
-            .folders
+    }
+
+    /// The lists, to add `scores` to one (or to a new list).
+    fn list_menu(&mut self, ui: &mut Ui, scores: &[String], out: &mut Vec<LibraryAction>) {
+        let lists = self.list_names();
+        if lists.is_empty() {
+            ui.label(RichText::new("No lists yet").weak());
+        }
+        for (list, name) in lists {
+            if ui.button(name).clicked() {
+                for id in scores {
+                    out.push(LibraryAction::Command(
+                        "list.entry.add",
+                        json!({ "list": list, "score": id }),
+                    ));
+                }
+                ui.close();
+            }
+        }
+        ui.separator();
+        ui.horizontal(|ui| {
+            ui.add(
+                egui::TextEdit::singleline(&mut self.new_list)
+                    .hint_text("New list")
+                    .desired_width(120.0),
+            );
+            if ui.button("Add").clicked() && !self.new_list.trim().is_empty() {
+                out.push(LibraryAction::NewListWith(
+                    self.new_list.trim().to_owned(),
+                    scores.to_vec(),
+                ));
+                self.new_list.clear();
+                ui.close();
+            }
+        });
+    }
+
+    fn list_names(&self) -> Vec<(String, String)> {
+        self.lists
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|l| {
+                Some((
+                    l.get("id")?.as_str()?.to_owned(),
+                    l.get("name")?.as_str()?.to_owned(),
+                ))
+            })
+            .collect()
+    }
+
+    /// Every folder: id, name, parent.
+    fn folder_list(&self) -> Vec<(String, String, Option<String>)> {
+        self.folders
             .as_array()
             .into_iter()
             .flatten()
@@ -437,57 +838,22 @@ impl LibraryView {
                     f.get("parent").and_then(Value::as_str).map(str::to_owned),
                 ))
             })
-            .collect();
-        ui.horizontal_wrapped(|ui| {
-            if let Some(cur) = self.folder.clone() {
-                let up = folders
-                    .iter()
-                    .find(|f| f.0 == cur)
-                    .and_then(|f| f.2.clone());
-                if ui.button("⬅ Up").clicked() {
-                    self.folder = up;
-                }
-                let name = folders
-                    .iter()
-                    .find(|f| f.0 == cur)
-                    .map(|f| f.1.clone())
-                    .unwrap_or_default();
-                ui.label(RichText::new(name).strong().color(tokens.text));
-            }
-            for (id, name, parent) in &folders {
-                if *parent != self.folder {
-                    continue;
-                }
-                let b = ui.button(format!("📁 {name}"));
-                if b.clicked() {
-                    self.folder = Some(id.clone());
-                }
-                b.context_menu(|ui| {
-                    if ui.button("Delete folder").clicked() {
-                        out.push(LibraryAction::Command(
-                            "library.folder.delete",
-                            json!({ "folder": id }),
-                        ));
-                        ui.close();
-                    }
-                });
-            }
-            if ui
-                .selectable_label(self.show_trash, "🗑 Recently Deleted")
-                .clicked()
-            {
-                self.show_trash = !self.show_trash;
-                self.dirty = true;
-            }
-        });
-        self.stranded_prompt(ui, tokens, &mut out);
-        if self.show_trash {
-            self.trash_ui(ui, tokens, &mut out);
-            return out;
-        }
+            .collect()
+    }
+
+    /// Folders, then the scores of the last search, as covers or a list.
+    fn results_ui(
+        &mut self,
+        ui: &mut Ui,
+        session: &mut Session,
+        tokens: &Tokens,
+        subfolders: &[(String, String)],
+        folders: &[(String, String, Option<String>)],
+        out: &mut Vec<LibraryAction>,
+    ) {
         if let Some(e) = self.results.get("error").and_then(Value::as_str) {
             ui.colored_label(tokens.error, e);
-            return out;
+            return;
         }
         let scores: Vec<Value> = self
             .results
@@ -505,15 +871,11 @@ impl LibraryView {
             .get("pending")
             .and_then(Value::as_u64)
             .unwrap_or(0);
-        ui.label(
-            RichText::new(match (count, pending) {
-                (1, 0) => "1 score".to_owned(),
-                (n, 0) => format!("{n} scores"),
-                (n, p) => format!("{n} so far; reading {p} more…"),
-            })
-            .color(tokens.text),
-        );
         if pending > 0 {
+            ui.label(
+                RichText::new(format!("{count} so far; reading {pending} more…"))
+                    .color(tokens.text),
+            );
             ui.ctx().request_repaint();
         }
         egui::ScrollArea::vertical()
@@ -522,64 +884,343 @@ impl LibraryView {
                 if self.grid {
                     ui.horizontal_wrapped(|ui| {
                         ui.spacing_mut().item_spacing = vec2(14.0, 14.0);
+                        for (id, name) in subfolders {
+                            self.folder_card(ui, tokens, id, name, out);
+                        }
                         for s in &scores {
-                            if let Some(a) = self.card(ui, session, s, tokens) {
-                                out.push(a);
+                            self.card(ui, session, s, tokens, folders, out);
+                        }
+                    });
+                    if scores.is_empty() && subfolders.is_empty() {
+                        ui.label(RichText::new("No scores here.").color(tokens.text));
+                    }
+                    return;
+                }
+                for (id, name) in subfolders {
+                    let r = icons::row(ui, Icon::Folder, name, false);
+                    if r.clicked() {
+                        self.folder = Some(id.clone());
+                        self.dirty = true;
+                    }
+                    folder_menu(&r, id, out);
+                }
+                egui::Grid::new("library-list")
+                    .striped(true)
+                    .num_columns(4)
+                    .show(ui, |ui| {
+                        ui.strong("Title");
+                        ui.strong("Composer");
+                        ui.strong("Pages");
+                        ui.strong("Added");
+                        ui.end_row();
+                        for s in &scores {
+                            let id = s.get("id").and_then(Value::as_str).unwrap_or("").to_owned();
+                            let title = s.get("title").and_then(Value::as_str).unwrap_or("");
+                            let chosen = self.selected.contains(&id);
+                            let r = if self.selecting {
+                                ui.selectable_label(chosen, title)
+                            } else {
+                                ui.link(title)
+                            };
+                            if r.clicked() {
+                                self.tap_score(&id, out);
+                            }
+                            self.score_menu(&r, &id, folders, out);
+                            ui.label(s.get("composer").and_then(Value::as_str).unwrap_or(""));
+                            ui.label(
+                                s.get("visiblePages")
+                                    .map(ToString::to_string)
+                                    .unwrap_or_default(),
+                            );
+                            ui.label(day(s.get("addedMs").and_then(Value::as_u64).unwrap_or(0)));
+                            ui.end_row();
+                            if let Some(sn) = s
+                                .get("snippet")
+                                .or_else(|| s.get("notes"))
+                                .and_then(Value::as_str)
+                            {
+                                let page = s
+                                    .get("filePage")
+                                    .and_then(Value::as_u64)
+                                    .map(|p| format!("p. {p}: "))
+                                    .unwrap_or_default();
+                                ui.label(RichText::new(format!("{page}{sn}")).weak().italics());
+                                ui.end_row();
                             }
                         }
                     });
-                } else {
-                    egui::Grid::new("library-list")
-                        .striped(true)
-                        .num_columns(4)
-                        .show(ui, |ui| {
-                            ui.strong("Title");
-                            ui.strong("Composer");
-                            ui.strong("Pages");
-                            ui.strong("Added");
-                            ui.end_row();
-                            for s in &scores {
-                                let id =
-                                    s.get("id").and_then(Value::as_str).unwrap_or("").to_owned();
-                                let title = s.get("title").and_then(Value::as_str).unwrap_or("");
-                                if ui.link(title).clicked() {
-                                    out.push(LibraryAction::Open(id));
-                                }
-                                ui.label(s.get("composer").and_then(Value::as_str).unwrap_or(""));
-                                ui.label(
-                                    s.get("visiblePages")
-                                        .map(ToString::to_string)
-                                        .unwrap_or_default(),
-                                );
-                                ui.label(day(s
-                                    .get("addedMs")
-                                    .and_then(Value::as_u64)
-                                    .unwrap_or(0)));
-                                ui.end_row();
-                                if let Some(sn) = s
-                                    .get("snippet")
-                                    .or_else(|| s.get("notes"))
-                                    .and_then(Value::as_str)
-                                {
-                                    let page = s
-                                        .get("filePage")
-                                        .and_then(Value::as_u64)
-                                        .map(|p| format!("p. {p}: "))
-                                        .unwrap_or_default();
-                                    ui.label(RichText::new(format!("{page}{sn}")).weak().italics());
-                                    ui.end_row();
-                                }
-                            }
-                        });
-                }
             });
-        out
     }
 
+    /// A tap on a score: opens it, or while selecting, toggles it.
+    fn tap_score(&mut self, id: &str, out: &mut Vec<LibraryAction>) {
+        if self.selecting {
+            if !self.selected.remove(id) {
+                self.selected.insert(id.to_owned());
+            }
+        } else {
+            out.push(LibraryAction::Open(id.to_owned()));
+        }
+    }
+
+    /// A score's right-click menu, in the owner's order (2026-11-01): Edit Details, Add to
+    /// list, Move to, Select, Share, Print, Delete.
+    fn score_menu(
+        &mut self,
+        r: &egui::Response,
+        id: &str,
+        folders: &[(String, String, Option<String>)],
+        out: &mut Vec<LibraryAction>,
+    ) {
+        r.context_menu(|ui| {
+            if icons::labelled(ui, Icon::Info, "Edit Details").clicked() {
+                out.push(LibraryAction::EditDetails(id.to_owned()));
+                ui.close();
+            }
+            ui.menu_button("Add to list", |ui| {
+                self.list_menu(ui, &[id.to_owned()], out);
+            });
+            ui.menu_button("Move to", |ui| {
+                move_menu(ui, folders, &[id.to_owned()], out);
+            });
+            if icons::labelled(ui, Icon::Check, "Select").clicked() {
+                self.selecting = true;
+                self.selected.insert(id.to_owned());
+                ui.close();
+            }
+            ui.menu_button("Share", |ui| {
+                if ui.button("PDF with ink drawn in…").clicked() {
+                    out.push(LibraryAction::Share(id.to_owned(), "flatten"));
+                    ui.close();
+                }
+                if ui.button("PDF with ink as annotations…").clicked() {
+                    out.push(LibraryAction::Share(id.to_owned(), "annotations"));
+                    ui.close();
+                }
+            });
+            ui.add_enabled(false, egui::Button::new("Print"))
+                .on_disabled_hover_text("Printing is not built yet");
+            ui.separator();
+            if icons::labelled(ui, Icon::Trash, "Delete").clicked() {
+                out.push(LibraryAction::Command(
+                    "library.score.delete",
+                    json!({ "score": id }),
+                ));
+                ui.close();
+            }
+        });
+    }
+
+    /// A folder as a card: its icon and name.
+    fn folder_card(
+        &mut self,
+        ui: &mut Ui,
+        tokens: &Tokens,
+        id: &str,
+        name: &str,
+        out: &mut Vec<LibraryAction>,
+    ) {
+        let (rect, r) = ui.allocate_exact_size(CARD, Sense::click());
+        if ui.is_rect_visible(rect) {
+            let p = ui.painter();
+            let art = egui::Rect::from_center_size(
+                egui::pos2(rect.center().x, rect.top() + (CARD.y - 44.0) / 2.0),
+                vec2(110.0, 110.0),
+            );
+            icons::paint(p, art, tokens.accent, Icon::Folder);
+            p.text(
+                egui::pos2(rect.center().x, rect.top() + CARD.y - 32.0),
+                egui::Align2::CENTER_CENTER,
+                clip(name),
+                egui::FontId::proportional(13.0),
+                tokens.text,
+            );
+            if r.hovered() {
+                p.rect_stroke(
+                    rect,
+                    4.0,
+                    egui::Stroke::new(1.5, tokens.accent),
+                    egui::StrokeKind::Inside,
+                );
+            }
+        }
+        if r.clicked() {
+            self.folder = Some(id.to_owned());
+            self.dirty = true;
+        }
+        folder_menu(&r, id, out);
+    }
+
+    fn card(
+        &mut self,
+        ui: &mut Ui,
+        session: &mut Session,
+        s: &Value,
+        tokens: &Tokens,
+        folders: &[(String, String, Option<String>)],
+        out: &mut Vec<LibraryAction>,
+    ) {
+        let Some(id) = s.get("id").and_then(Value::as_str).map(str::to_owned) else {
+            return;
+        };
+        let (rect, r) = ui.allocate_exact_size(CARD, Sense::click());
+        if !ui.is_rect_visible(rect) {
+            return;
+        }
+        self.want_cover(session, &id);
+        let p = ui.painter();
+        let cover_rect = egui::Rect::from_min_size(rect.min, vec2(CARD.x, CARD.y - 44.0));
+        match self.covers.get(&id) {
+            Some(Cover::Ready(t)) => {
+                let size = t.size_vec2();
+                let k = (cover_rect.width() / size.x).min(cover_rect.height() / size.y);
+                let img = egui::Rect::from_center_size(cover_rect.center(), size * k);
+                p.image(
+                    t.id(),
+                    img,
+                    egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                    Color32::WHITE,
+                );
+                p.rect_stroke(
+                    img,
+                    0.0,
+                    egui::Stroke::new(1.0, Color32::from_gray(160)),
+                    egui::StrokeKind::Outside,
+                );
+            }
+            _ => {
+                p.rect_filled(cover_rect.shrink(8.0), 2.0, tokens.placeholder);
+            }
+        }
+        let title = s.get("title").and_then(Value::as_str).unwrap_or("");
+        let composer = s.get("composer").and_then(Value::as_str).unwrap_or("");
+        p.text(
+            egui::pos2(rect.center().x, cover_rect.bottom() + 12.0),
+            egui::Align2::CENTER_CENTER,
+            clip(title),
+            egui::FontId::proportional(13.0),
+            tokens.text,
+        );
+        p.text(
+            egui::pos2(rect.center().x, cover_rect.bottom() + 30.0),
+            egui::Align2::CENTER_CENTER,
+            clip(composer),
+            egui::FontId::proportional(11.0),
+            tokens.text.gamma_multiply(0.7),
+        );
+        let chosen = self.selected.contains(&id);
+        if r.hovered() || chosen {
+            p.rect_stroke(
+                rect,
+                4.0,
+                egui::Stroke::new(if chosen { 2.5 } else { 1.5 }, tokens.accent),
+                egui::StrokeKind::Inside,
+            );
+        }
+        if self.selecting {
+            let tick = egui::Rect::from_min_size(rect.min + vec2(6.0, 6.0), vec2(22.0, 22.0));
+            p.circle_filled(
+                tick.center(),
+                11.0,
+                if chosen {
+                    tokens.accent
+                } else {
+                    Color32::from_white_alpha(200)
+                },
+            );
+            if chosen {
+                icons::paint(p, tick.shrink(3.0), Color32::WHITE, Icon::Check);
+            }
+        }
+        let r = r.on_hover_text(format!("{title}\n{composer}"));
+        if r.clicked() {
+            self.tap_score(&id, out);
+        }
+        self.score_menu(&r, &id, folders, out);
+    }
+}
+
+/// An icon in a row of text, `side` points square.
+fn glyph(ui: &mut Ui, icon: Icon, color: Color32, side: f32) {
+    let (rect, _) = ui.allocate_exact_size(vec2(side, side), Sense::hover());
+    icons::paint(ui.painter(), rect, color, icon);
+}
+
+/// A section's heading.
+fn heading(ui: &mut Ui, tokens: &Tokens, text: &str) {
+    ui.label(RichText::new(text).size(22.0).strong().color(tokens.text));
+}
+
+/// A name cut to fit under a card.
+fn clip(t: &str) -> String {
+    if t.chars().count() > 22 {
+        format!("{}…", t.chars().take(21).collect::<String>())
+    } else {
+        t.to_owned()
+    }
+}
+
+/// The folders to move `scores` to: the library's top level, then every folder by path.
+fn move_menu(
+    ui: &mut Ui,
+    folders: &[(String, String, Option<String>)],
+    scores: &[String],
+    out: &mut Vec<LibraryAction>,
+) {
+    let mut send = |folder: Value, ui: &mut Ui| {
+        for id in scores {
+            out.push(LibraryAction::Command(
+                "library.score.move",
+                json!({ "score": id, "folder": folder }),
+            ));
+        }
+        ui.close();
+    };
+    if icons::labelled(ui, Icon::Library, "Library (no folder)").clicked() {
+        send(Value::Null, ui);
+    }
+    for (id, _, _) in folders {
+        if icons::labelled(ui, Icon::Folder, &folder_path(folders, id)).clicked() {
+            send(json!(id), ui);
+        }
+    }
+}
+
+/// "Parent / Child" for a folder.
+fn folder_path(folders: &[(String, String, Option<String>)], id: &str) -> String {
+    let mut parts = Vec::new();
+    let mut cur = Some(id.to_owned());
+    // A cycle in bad data can't loop forever.
+    for _ in 0..=folders.len() {
+        let Some(c) = cur else { break };
+        let Some(f) = folders.iter().find(|f| f.0 == c) else {
+            break;
+        };
+        parts.push(f.1.clone());
+        cur = f.2.clone();
+    }
+    parts.reverse();
+    parts.join(" / ")
+}
+
+/// A folder's right-click menu.
+fn folder_menu(r: &egui::Response, id: &str, out: &mut Vec<LibraryAction>) {
+    r.context_menu(|ui| {
+        if icons::labelled(ui, Icon::Trash, "Delete folder").clicked() {
+            out.push(LibraryAction::Command(
+                "library.folder.delete",
+                json!({ "folder": id }),
+            ));
+            ui.close();
+        }
+    });
+}
+
+impl LibraryView {
     /// The setlists (LIST-1, LIST-4): pick one to see its entries, reorder or remove them, add a
     /// break, and play from any entry. Scores are added from their covers' menus.
     fn lists_panel(&mut self, ui: &mut Ui, tokens: &Tokens, out: &mut Vec<LibraryAction>) {
-        ui.label(RichText::new("Lists").strong().color(tokens.text));
+        heading(ui, tokens, "Lists");
         let lists: Vec<(String, String, u64)> = self
             .lists
             .as_array()
@@ -626,7 +1267,10 @@ impl LibraryView {
             .unwrap_or_default();
         ui.horizontal(|ui| {
             if ui
-                .add_enabled(!entries.is_empty(), egui::Button::new("▶ Play"))
+                .add_enabled_ui(!entries.is_empty(), |ui| {
+                    icons::labelled(ui, Icon::Play, "Play")
+                })
+                .inner
                 .clicked()
             {
                 out.push(LibraryAction::Command("list.play", json!({ "list": list })));
@@ -671,29 +1315,25 @@ impl LibraryView {
                         .unwrap_or("?");
                     ui.horizontal(|ui| {
                         ui.label(format!("{}. {label}", i + 1));
-                        if ui
-                            .small_button("▶")
-                            .on_hover_text("Play from here")
-                            .clicked()
-                        {
+                        if icons::small_button(ui, Icon::Play, "Play from here").clicked() {
                             out.push(LibraryAction::Command(
                                 "list.play",
                                 json!({ "list": list, "entry": i + 1 }),
                             ));
                         }
-                        if i > 0 && ui.small_button("↑").clicked() {
+                        if i > 0 && icons::small_button(ui, Icon::Up, "Move up").clicked() {
                             out.push(LibraryAction::Command(
                                 "list.entry.move",
                                 json!({ "list": list, "from": i + 1, "to": i }),
                             ));
                         }
-                        if i + 1 < n && ui.small_button("↓").clicked() {
+                        if i + 1 < n && icons::small_button(ui, Icon::Down, "Move down").clicked() {
                             out.push(LibraryAction::Command(
                                 "list.entry.move",
                                 json!({ "list": list, "from": i + 1, "to": i + 2 }),
                             ));
                         }
-                        if ui.small_button("✕").clicked() {
+                        if icons::small_button(ui, Icon::Close, "Remove from the list").clicked() {
                             out.push(LibraryAction::Command(
                                 "list.entry.remove",
                                 json!({ "list": list, "entry": entry }),
@@ -762,7 +1402,8 @@ impl LibraryView {
                         continue;
                     };
                     ui.horizontal(|ui| {
-                        ui.label(format!("📁 {path}"));
+                        glyph(ui, Icon::Folder, tokens.text, 18.0);
+                        ui.label(path);
                         if let Some(at) = f.get("deletedMs").and_then(Value::as_u64) {
                             ui.label(RichText::new(format!("deleted {}", day(at))).weak());
                         }
@@ -780,7 +1421,8 @@ impl LibraryView {
                     };
                     let title = s.get("title").and_then(Value::as_str).unwrap_or("?");
                     ui.horizontal(|ui| {
-                        ui.label(format!("🎼 {title}"));
+                        glyph(ui, Icon::Score, tokens.text, 18.0);
+                        ui.label(title);
                         if ui.small_button("Restore").clicked() {
                             out.push(LibraryAction::Command(
                                 "library.trash.restore",
@@ -803,7 +1445,8 @@ impl LibraryView {
         }
         let mut done = false;
         ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new("ⓘ Kept the score's page range: pages").weak());
+            glyph(ui, Icon::Info, ui.visuals().weak_text_color(), 16.0);
+            ui.label(RichText::new("Kept the score's page range: pages").weak());
             ui.add(egui::DragValue::new(&mut n.first).range(1..=n.last.max(1)));
             ui.label(RichText::new("to").weak());
             ui.add(egui::DragValue::new(&mut n.last).range(n.first..=9999));
@@ -829,91 +1472,6 @@ impl LibraryView {
             self.range_notice = None;
         }
     }
-
-    fn card(
-        &mut self,
-        ui: &mut Ui,
-        session: &mut Session,
-        s: &Value,
-        tokens: &Tokens,
-    ) -> Option<LibraryAction> {
-        let id = s.get("id").and_then(Value::as_str)?.to_owned();
-        let (rect, r) = ui.allocate_exact_size(CARD, Sense::click());
-        if !ui.is_rect_visible(rect) {
-            return None;
-        }
-        self.want_cover(session, &id);
-        let p = ui.painter();
-        let cover_rect = egui::Rect::from_min_size(rect.min, vec2(CARD.x, CARD.y - 44.0));
-        match self.covers.get(&id) {
-            Some(Cover::Ready(t)) => {
-                let size = t.size_vec2();
-                let k = (cover_rect.width() / size.x).min(cover_rect.height() / size.y);
-                let img = egui::Rect::from_center_size(cover_rect.center(), size * k);
-                p.image(
-                    t.id(),
-                    img,
-                    egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
-                    Color32::WHITE,
-                );
-                p.rect_stroke(
-                    img,
-                    0.0,
-                    egui::Stroke::new(1.0, Color32::from_gray(160)),
-                    egui::StrokeKind::Outside,
-                );
-            }
-            _ => {
-                p.rect_filled(cover_rect.shrink(8.0), 2.0, tokens.placeholder);
-            }
-        }
-        let title = s.get("title").and_then(Value::as_str).unwrap_or("");
-        let composer = s.get("composer").and_then(Value::as_str).unwrap_or("");
-        let font = egui::FontId::proportional(13.0);
-        let clip = |t: &str| -> String {
-            if t.chars().count() > 22 {
-                format!("{}…", t.chars().take(21).collect::<String>())
-            } else {
-                t.to_owned()
-            }
-        };
-        p.text(
-            egui::pos2(rect.center().x, cover_rect.bottom() + 12.0),
-            egui::Align2::CENTER_CENTER,
-            clip(title),
-            font.clone(),
-            tokens.text,
-        );
-        p.text(
-            egui::pos2(rect.center().x, cover_rect.bottom() + 30.0),
-            egui::Align2::CENTER_CENTER,
-            clip(composer),
-            egui::FontId::proportional(11.0),
-            tokens.text.gamma_multiply(0.7),
-        );
-        if r.hovered() {
-            p.rect_stroke(
-                rect,
-                4.0,
-                egui::Stroke::new(1.5, tokens.accent),
-                egui::StrokeKind::Inside,
-            );
-        }
-        let r = r.on_hover_text(format!("{title}\n{composer}"));
-        let mut add = None;
-        if let Some(list) = self.open_list.clone() {
-            r.context_menu(|ui| {
-                if ui.button("Add to the open list").clicked() {
-                    add = Some(LibraryAction::Command(
-                        "list.entry.add",
-                        json!({ "list": list, "score": id }),
-                    ));
-                    ui.close();
-                }
-            });
-        }
-        add.or_else(|| r.clicked().then_some(LibraryAction::Open(id)))
-    }
 }
 
 /// A Unix-millisecond time as a date, `YYYY-MM-DD` (UTC).
@@ -933,11 +1491,10 @@ pub fn day(ms: u64) -> String {
 }
 
 /// Sync through a shared folder: choose one, or sync now with what happened last on hover.
-fn sync_buttons(ui: &mut Ui, session: &mut Session, out: &mut Vec<LibraryAction>) {
+pub(crate) fn sync_buttons(ui: &mut Ui, session: &mut Session, out: &mut Vec<LibraryAction>) {
     let status = session
         .dispatch("sync.status", &json!({}))
         .unwrap_or(Value::Null);
-    ui.separator();
     match status.get("backend").and_then(Value::as_str) {
         Some(folder) => {
             let waiting = status
@@ -957,14 +1514,13 @@ fn sync_buttons(ui: &mut Ui, session: &mut Session, out: &mut Vec<LibraryAction>
             {
                 tip.push_str(&format!("\nLast problem: {}", p.as_str().unwrap_or("")));
             }
-            if ui.button("⟳ Sync").on_hover_text(tip).clicked() {
-                out.push(LibraryAction::SyncNow);
-            }
-            if ui
-                .small_button("…")
-                .on_hover_text("Sync through another folder")
+            if icons::labelled(ui, Icon::Sync, "Sync now")
+                .on_hover_text(tip)
                 .clicked()
             {
+                out.push(LibraryAction::SyncNow);
+            }
+            if ui.button("Sync through another folder…").clicked() {
                 out.push(LibraryAction::ChooseSyncFolder);
             }
         }

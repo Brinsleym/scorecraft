@@ -600,6 +600,40 @@ pub fn labelled_selected(ui: &mut Ui, icon: Icon, text: &str, selected: bool) ->
     r
 }
 
+/// A full-width row with an icon and its text: the library sidebar's rows.
+pub fn row(ui: &mut Ui, icon: Icon, text: &str, selected: bool) -> Response {
+    let pad = ui.spacing().button_padding;
+    let font = egui::TextStyle::Button.resolve(ui.style());
+    let galley = ui
+        .painter()
+        .layout_no_wrap(text.to_owned(), font, Color32::PLACEHOLDER);
+    let side = galley.size().y.max(16.0) + 4.0;
+    let size = vec2(
+        ui.available_width().max(side + pad.x * 2.0),
+        (pad.y * 2.0 + side + 4.0).max(ui.spacing().interact_size.y),
+    );
+    let (rect, r) = ui.allocate_exact_size(size, Sense::click());
+    if ui.is_rect_visible(rect) {
+        let v = ui.style().interact_selectable(&r, selected);
+        if selected || r.hovered() {
+            ui.painter()
+                .rect_filled(rect, v.corner_radius, v.weak_bg_fill);
+        }
+        let icon_rect = Rect::from_min_size(
+            pos2(rect.left() + pad.x + 2.0, rect.center().y - side / 2.0),
+            Vec2::splat(side),
+        );
+        paint(ui.painter(), icon_rect, v.text_color(), icon);
+        let clip = Rect::from_min_max(pos2(icon_rect.right() + 8.0, rect.top()), rect.max);
+        ui.painter().with_clip_rect(clip).galley(
+            pos2(clip.left(), rect.center().y - galley.size().y / 2.0),
+            galley,
+            v.text_color(),
+        );
+    }
+    r
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

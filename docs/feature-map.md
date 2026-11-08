@@ -311,6 +311,7 @@ framework rather than from enScore. They are counted in the scorecard, not in pa
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-01 | patch | Owner's UI feedback: LIB-14 is now a sidebar, a floating toolbar and a score menu (spec `docs/spec/library.md`); EXP-2's `score.export.pdf` takes a `score` id so Share works from the library |
 | 2026-11-01 | patch | Owner's UI feedback: READ-2 gains the automatic layout (`view.layout.auto`), ANNO-6 gains Clear Ink (`annotate.clear`); *first page alone* removed from READ-3 |
 | 2026-10-31 | patch | M8 part 3: SYNC-1 (`sync.now`, `sync.status`: scores, files, markings, lists, bookmarks and settings) and SYNC-7 (`sync.backend.set`: a shared folder, which Google Drive, OneDrive, Dropbox or iCloud Drive can keep in sync) partial |
 | 2026-10-31 | patch | M8 part 1: SYNC-3 (each device applies and logs its own changes; exchange by what each side has seen) and SYNC-6 (markings with tombstones, last-writer-wins edits and details, convergence property test) partial in `scorecraft-sync`; no command yet, so parity is unchanged |

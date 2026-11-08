@@ -84,6 +84,8 @@ pub const SHELL_COMMANDS: &[(&str, &str, &str)] = &[
     ("ui.library.view", "Library View", r#"{"view":"grid|list"}"#),
 ];
 
+mod settings_page;
+
 pub struct App {
     pub session: Session,
     pub state: UiState,
@@ -416,7 +418,10 @@ impl App {
         self.shortcuts(&ctx);
         self.dropped_files(&ctx);
 
-        if self.state.chrome {
+        // The library has its own sidebar and floating toolbar instead (owner, 2026-11-01).
+        let in_library =
+            (self.state.library || !self.session.has_score()) && self.session.library().is_some();
+        if self.state.chrome && !in_library {
             egui::Panel::top("toolbar")
                 .exact_size(tokens.toolbar_height)
                 .resizable(false)
@@ -432,6 +437,7 @@ impl App {
             .dispatch("annotate.state", &json!({}))
             .unwrap_or(Value::Null);
         if self.state.chrome
+            && !in_library
             && self.session.has_score()
             && markup.get("mode").and_then(Value::as_bool) == Some(true)
         {
@@ -463,12 +469,31 @@ impl App {
                 });
         }
         self.score_window(&ctx, &tokens);
+        if in_library {
+            let open = self.open_title();
+            let actions = egui::Panel::left("library-sidebar")
+                .resizable(true)
+                .default_size(190.0)
+                .size_range(140.0..=320.0)
+                .frame(
+                    egui::Frame::NONE
+                        .fill(tokens.toolbar_bg)
+                        .inner_margin(egui::Margin::symmetric(6, 6)),
+                )
+                .show(ui, |ui| self.library.sidebar(ui, open.as_deref()))
+                .inner;
+            self.library_actions(actions);
+        }
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(tokens.reader_bg))
             .show(ui, |ui| {
                 if self.state.library || !self.session.has_score() {
                     if self.session.library().is_some() {
-                        self.library_window(ui, &tokens);
+                        if self.library.section == crate::library_view::Section::Settings {
+                            self.settings_page(ui, &tokens);
+                        } else {
+                            self.library_window(ui, &tokens);
+                        }
                     } else {
                         self.empty(ui, &tokens);
                     }
@@ -489,76 +514,138 @@ impl App {
 
     fn library_window(&mut self, ui: &mut Ui, tokens: &Tokens) {
         self.library.grid = self.state.library_grid;
-        egui::Frame::NONE
+        let actions = egui::Frame::NONE
             .fill(tokens.toolbar_bg)
             .inner_margin(egui::Margin::same(12))
             .show(ui, |ui| {
                 // The window fills the reader area, whatever its contents.
                 ui.set_min_size(ui.available_size());
-                let actions = self.library.show(ui, &mut self.session, tokens);
-                for a in actions {
-                    match a {
-                        crate::library_view::LibraryAction::Open(id) => {
-                            let r = self.command("score.open", &json!({ "score": id }));
+                self.library.show(ui, &mut self.session, tokens)
+            })
+            .inner;
+        self.library_actions(actions);
+    }
+
+    /// The open score's title (or "Score"), for the sidebar's way back to it.
+    fn open_title(&mut self) -> Option<String> {
+        if !self.session.has_score() {
+            return None;
+        }
+        let title = self.session.library_score_id().and_then(|id| {
+            self.session
+                .dispatch("library.score.get", &json!({ "score": id }))
+                .ok()
+                .and_then(|v| {
+                    let t = v.pointer("/metadata/title").and_then(Value::as_str)?;
+                    (!t.trim().is_empty()).then(|| t.to_owned())
+                })
+        });
+        Some(title.unwrap_or_else(|| "Back to the score".to_owned()))
+    }
+
+    /// Does what the library asked.
+    fn library_actions(&mut self, actions: Vec<crate::library_view::LibraryAction>) {
+        use crate::library_view::LibraryAction as A;
+        for a in actions {
+            match a {
+                A::Open(id) => {
+                    let r = self.command("score.open", &json!({ "score": id }));
+                    self.report(r);
+                }
+                A::Command(id, p) => {
+                    let r = self.command(id, &p);
+                    if id == "list.entry.add"
+                        && let (Ok(v), Some(list)) = (&r, p.get("list").and_then(Value::as_str))
+                    {
+                        self.library.range_notice =
+                            crate::library_view::RangeNotice::from_added(list, v);
+                    }
+                    self.report(r);
+                }
+                A::NewListWith(name, scores) => {
+                    let r = self.command("list.new", &json!({ "name": name }));
+                    let list = r
+                        .as_ref()
+                        .ok()
+                        .and_then(|v| v.get("list").and_then(Value::as_str).map(str::to_owned));
+                    self.report(r);
+                    for id in scores {
+                        if let Some(list) = &list {
+                            let r = self
+                                .command("list.entry.add", &json!({ "list": list, "score": id }));
                             self.report(r);
-                        }
-                        crate::library_view::LibraryAction::Command(id, p) => {
-                            let r = self.command(id, &p);
-                            if id == "list.entry.add"
-                                && let (Ok(v), Some(list)) =
-                                    (&r, p.get("list").and_then(Value::as_str))
-                            {
-                                self.library.range_notice =
-                                    crate::library_view::RangeNotice::from_added(list, v);
-                            }
-                            self.report(r);
-                        }
-                        crate::library_view::LibraryAction::SyncNow => {
-                            let r = self.command("sync.now", &json!({}));
-                            self.state.message = Some(match r {
-                                Ok(v) => sync_report(&v),
-                                Err(e) => e.to_string(),
-                            });
-                        }
-                        crate::library_view::LibraryAction::ChooseSyncFolder => {
-                            if let Some(path) = self.platform.pick_folder() {
-                                let set = self.command(
-                                    "sync.backend.set",
-                                    &json!({ "kind": "folder", "path": path }),
-                                );
-                                let r = set.and_then(|_| self.command("sync.now", &json!({})));
-                                self.state.message = Some(match r {
-                                    Ok(v) => sync_report(&v),
-                                    Err(e) => e.to_string(),
-                                });
-                            }
-                        }
-                        crate::library_view::LibraryAction::ImportFolder => {
-                            if let Some(path) = self.platform.pick_folder() {
-                                let r = self.command(
-                                    "library.import.folder",
-                                    &json!({ "path": path, "keepFolders": true }),
-                                );
-                                match r {
-                                    Ok(v) => self.state.message = Some(import_report(&v)),
-                                    Err(e) => self.state.message = Some(e.to_string()),
-                                }
-                            }
                         }
                     }
                 }
-            });
+                A::EditDetails(id) => {
+                    self.score_panel.score = Some(id);
+                    self.score_panel.open = true;
+                    self.score_cache = None;
+                }
+                A::Share(id, mode) => self.share(&id, mode),
+                A::ImportFiles => {
+                    if let Some(path) = self.platform.pick_score() {
+                        let mut p = json!({ "paths": [path] });
+                        if let (Some(f), Some(o)) = (&self.library.folder, p.as_object_mut()) {
+                            o.insert("folder".into(), json!(f));
+                        }
+                        match self.command("library.import.files", &p) {
+                            Ok(v) => self.state.message = Some(import_report(&v)),
+                            Err(e) => self.state.message = Some(e.to_string()),
+                        }
+                    }
+                }
+                A::ImportPhotos => {
+                    if let Some(paths) = self.platform.pick_images() {
+                        let r = self.command("library.import.images", &json!({ "paths": paths }));
+                        self.report(r);
+                    }
+                }
+                A::SyncNow => {
+                    let r = self.command("sync.now", &json!({}));
+                    self.state.message = Some(match r {
+                        Ok(v) => sync_report(&v),
+                        Err(e) => e.to_string(),
+                    });
+                }
+                A::ChooseSyncFolder => {
+                    if let Some(path) = self.platform.pick_folder() {
+                        let set = self.command(
+                            "sync.backend.set",
+                            &json!({ "kind": "folder", "path": path }),
+                        );
+                        let r = set.and_then(|_| self.command("sync.now", &json!({})));
+                        self.state.message = Some(match r {
+                            Ok(v) => sync_report(&v),
+                            Err(e) => e.to_string(),
+                        });
+                    }
+                }
+                A::ImportFolder => {
+                    if let Some(path) = self.platform.pick_folder() {
+                        let r = self.command(
+                            "library.import.folder",
+                            &json!({ "path": path, "keepFolders": true }),
+                        );
+                        match r {
+                            Ok(v) => self.state.message = Some(import_report(&v)),
+                            Err(e) => self.state.message = Some(e.to_string()),
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /// The Score panel, while open over a library score.
     fn score_window(&mut self, ctx: &Context, tokens: &Tokens) {
-        let Some(id) = self.session.library_score_id() else {
-            self.score_panel.open = false;
-            return;
-        };
         if !self.score_panel.open {
             return;
         }
+        let Some(id) = self.score_panel.score.clone() else {
+            self.score_panel.open = false;
+            return;
+        };
         if self.score_cache.is_none() {
             self.score_cache = self
                 .session
@@ -573,6 +660,8 @@ impl App {
             .session
             .reader_state()
             .and_then(|st| st.get("page").and_then(Value::as_u64));
+        let is_open = self.session.library_score_id().as_deref() == Some(id.as_str());
+        let shown = shown.filter(|_| is_open);
         let reader_page = shown.and_then(|n| {
             score
                 .get("visiblePages")
@@ -677,8 +766,6 @@ impl App {
 
     fn markup_bar(&mut self, ui: &mut Ui, tokens: &Tokens, markup: &Value) {
         let mut run = Vec::new();
-        let mut changed = false;
-        let mut show_ruler = self.settings.show_ruler_button;
         crate::markup_bar::bar(
             ui,
             tokens,
@@ -686,15 +773,10 @@ impl App {
             self.session.library_score_id().as_deref(),
             &mut self.reader.ink,
             crate::markup_bar::BarSettings {
-                show_ruler_button: &mut show_ruler,
-                changed: &mut changed,
+                show_ruler_button: self.settings.show_ruler_button,
             },
             &mut run,
         );
-        if changed {
-            self.settings.show_ruler_button = show_ruler;
-            self.save();
-        }
         for (id, p) in run {
             let r = self.command(id, &p);
             self.report(r);
@@ -755,37 +837,36 @@ impl App {
         r
     }
 
-    /// Exports the open score with its visible layers' ink (EXP-2).
-    fn export(&mut self, mode: &str) {
-        // Named after the score's title (or its file), "(marked)" added.
-        let title = self.session.library_score_id().and_then(|id| {
-            self.session
-                .dispatch("library.score.get", &json!({ "score": id }))
-                .ok()
-                .and_then(|v| {
-                    let t = v.pointer("/metadata/title").and_then(Value::as_str)?;
-                    (!t.trim().is_empty()).then(|| t.to_owned())
-                })
-        });
-        let stem = title.or_else(|| {
-            self.settings
-                .last_score
-                .as_deref()
-                .and_then(|p| std::path::Path::new(p).file_stem())
-                .map(|s| s.to_string_lossy().into_owned())
-        });
-        let clean: String = stem
+    /// Share (owner, 2026-11-01): exports a library score with its visible layers' ink
+    /// (EXP-2) and offers the file.
+    fn share(&mut self, id: &str, mode: &str) {
+        // Named after the score's title, "(marked)" added.
+        let title = self
+            .session
+            .dispatch("library.score.get", &json!({ "score": id }))
+            .ok()
+            .and_then(|v| {
+                let t = v.pointer("/metadata/title").and_then(Value::as_str)?;
+                (!t.trim().is_empty()).then(|| t.to_owned())
+            });
+        let clean: String = title
             .unwrap_or_else(|| "Score".to_owned())
             .chars()
             .map(|c| if "/\\:*?\"<>|".contains(c) { '-' } else { c })
             .collect();
         let name = format!("{clean} (marked).pdf");
         if let Some(path) = self.platform.pick_export_path(&name) {
-            let r = self.command("score.export.pdf", &json!({ "path": path, "mode": mode }));
+            let r = self.command(
+                "score.export.pdf",
+                &json!({ "path": path, "mode": mode, "score": id }),
+            );
             self.report(r);
         } else if cfg!(target_arch = "wasm32") {
             // No save dialog: build the file in memory and let the browser download it.
-            match self.session.export_pdf_bytes(&json!({ "mode": mode })) {
+            match self
+                .session
+                .export_pdf_bytes(&json!({ "mode": mode, "score": id }))
+            {
                 Ok(pdf) => {
                     if !self.platform.save_bytes(&name, &pdf) {
                         self.state.message = Some("This browser couldn't save the file.".into());
@@ -857,6 +938,17 @@ impl App {
                     ui.close();
                 }
             }
+            ui.separator();
+            if ui
+                .button("Use my defaults")
+                .on_hover_text(
+                    "Forget this score's own layout and turns; the defaults are in Settings",
+                )
+                .clicked()
+            {
+                run.push(("view.override.clear", json!({})));
+                ui.close();
+            }
         });
         let _ = tokens;
     }
@@ -882,47 +974,6 @@ impl App {
                 && self.icon_button(ui, tokens, "Library", self.state.library, Icon::Library)
             {
                 run.push(("ui.library.show", json!({})));
-            }
-            if self.session.library_score_id().is_some()
-                && ui
-                    .selectable_label(self.score_panel.open, "Score")
-                    .on_hover_text("Details, pages and bookmarks")
-                    .clicked()
-            {
-                self.score_panel.open = !self.score_panel.open;
-            }
-            if self.session.library().is_some() {
-                ui.menu_button("New", |ui| {
-                    if !cfg!(target_arch = "wasm32") && ui.button("Score from photos…").clicked()
-                    {
-                        if let Some(paths) = self.platform.pick_images() {
-                            run.push(("library.import.images", json!({ "paths": paths })));
-                        }
-                        ui.close();
-                    }
-                    for (paper, label) in [
-                        ("single", "Manuscript paper"),
-                        ("grand", "Piano manuscript paper"),
-                        ("tab", "Tablature paper"),
-                    ] {
-                        if ui.button(label).clicked() {
-                            run.push(("score.newManuscript", json!({ "paper": paper })));
-                            ui.close();
-                        }
-                    }
-                });
-            }
-            if has {
-                ui.menu_button("Export", |ui| {
-                    if ui.button("PDF with ink drawn in…").clicked() {
-                        self.export("flatten");
-                        ui.close();
-                    }
-                    if ui.button("PDF with ink as annotations…").clicked() {
-                        self.export("annotations");
-                        ui.close();
-                    }
-                });
             }
             ui.add_enabled_ui(has, |ui| {
                 if self.icon_button(ui, tokens, "Previous Page", false, Icon::Previous) {
@@ -976,63 +1027,6 @@ impl App {
                         }
                     }
                 });
-                let swipe = self
-                    .session
-                    .dispatch("input.swipe.set", &json!({}))
-                    .ok()
-                    .and_then(|v| v.get("on").and_then(Value::as_bool))
-                    .unwrap_or(true);
-                let defaults = self
-                    .session
-                    .dispatch("view.defaults.set", &json!({}))
-                    .ok()
-                    .and_then(|v| v.get("defaults").cloned())
-                    .unwrap_or(Value::Null);
-                ui.menu_button("Turning", |ui| {
-                    let mut on = swipe;
-                    if ui.checkbox(&mut on, "Swipe to turn pages").changed() {
-                        run.push(("input.swipe.set", json!({ "on": on })));
-                    }
-                    ui.separator();
-                    // The default for every score; the toolbar changes the open score only.
-                    ui.label("For every score:");
-                    let dl = defaults
-                        .get("layout")
-                        .and_then(Value::as_str)
-                        .unwrap_or("auto");
-                    let dm = defaults
-                        .get("mode")
-                        .and_then(Value::as_str)
-                        .unwrap_or("full");
-                    for (id, label, _) in LAYOUTS {
-                        if ui.radio(dl == id, label).clicked() {
-                            run.push(("view.defaults.set", json!({ "layout": id })));
-                        }
-                    }
-                    for (id, label) in [
-                        ("full", "Whole-page turns"),
-                        ("halfPage", "Half-page turns"),
-                        ("alternating", "Alternating turns"),
-                    ] {
-                        if ui.radio(dm == id, label).clicked() {
-                            run.push(("view.defaults.set", json!({ "mode": id })));
-                        }
-                    }
-                    if ui
-                        .button("Use these for this score")
-                        .on_hover_text(
-                            "Forget this score's own layout and turns, chosen from its toolbar",
-                        )
-                        .clicked()
-                    {
-                        run.push(("view.override.clear", json!({})));
-                        ui.close();
-                    }
-                    ui.label(
-                        RichText::new("Tap the left half to go back, the right half to go on.")
-                            .weak(),
-                    );
-                });
                 if st.get("canGoBack").and_then(Value::as_bool) == Some(true)
                     && ui
                         .button("Back")
@@ -1083,13 +1077,6 @@ impl App {
                         .color(tokens.text),
                     );
                     ui.separator();
-                }
-                let dark = self.state.theme == Theme::Dark;
-                if self.icon_button(ui, tokens, "Dark Theme", dark, Icon::Theme) {
-                    run.push((
-                        "ui.theme.set",
-                        json!({ "theme": if dark { "light" } else { "dark" } }),
-                    ));
                 }
                 if self.icon_button(
                     ui,
@@ -1823,14 +1810,18 @@ mod tests {
     }
 
     #[test]
-    fn the_score_panel_shows_the_open_score_and_its_edits() {
+    fn edit_details_shows_the_score_and_its_edits() {
         let (mut app, _) = app_with_score(3);
         let ctx = Context::default();
-        app.score_panel.open = true;
+        let id = app.session.library_score_id().unwrap();
+        // From the score's right-click menu in the library.
+        app.library_actions(vec![crate::library_view::LibraryAction::EditDetails(
+            id.clone(),
+        )]);
+        assert!(app.score_panel.open);
         frames(&mut app, &ctx, 2, Vec::new());
         let cached = app.score_cache.clone().unwrap();
         assert_eq!(cached["pages"].as_array().unwrap().len(), 3);
-        let id = app.session.library_score_id().unwrap();
         app.command("page.setHidden", &json!({ "score": id, "page": 2 }))
             .unwrap();
         assert!(app.score_cache.is_none(), "an edit drops the stale copy");
@@ -1840,6 +1831,60 @@ mod tests {
             true
         );
         assert_eq!(app.session.reader_state().unwrap()["pageCount"], 2);
+    }
+
+    #[test]
+    fn the_library_has_a_sidebar_and_settings_but_no_score_toolbar() {
+        use crate::library_view::Section;
+        let (mut app, _) = app_with_score(2);
+        let ctx = Context::default();
+        app.command("ui.library.show", &json!({ "on": true }))
+            .unwrap();
+        frames(&mut app, &ctx, 2, Vec::new());
+        // Settings is the sidebar's last row, at the bottom.
+        script(&mut app, &ctx, 1.0, click(60.0, 777.0));
+        assert_eq!(app.library.section, Section::Settings);
+        frames(&mut app, &ctx, 1, Vec::new());
+        // The sidebar's first row goes back to the open score.
+        script(&mut app, &ctx, 2.0, click(60.0, 26.0));
+        assert!(!app.state.library);
+        app.library.go(Section::Search);
+        assert_eq!(app.library.section, Section::Search);
+    }
+
+    #[test]
+    fn the_score_menu_adds_to_lists_moves_and_deletes() {
+        use crate::library_view::LibraryAction as A;
+        let (mut app, _) = app_with_score(2);
+        let id = app.session.library_score_id().unwrap();
+        // Add to list > a new list.
+        app.library_actions(vec![A::NewListWith("Gig".into(), vec![id.clone()])]);
+        let lists = app.command("library.info", &json!({})).unwrap()["lists"].clone();
+        assert_eq!(lists[0]["name"], "Gig");
+        assert_eq!(lists[0]["entries"], 1);
+        // Move to a folder.
+        let f = app
+            .command("library.folder.new", &json!({ "name": "Bach" }))
+            .unwrap();
+        let folder = f["folder"].as_str().unwrap().to_owned();
+        app.library_actions(vec![A::Command(
+            "library.score.move",
+            json!({ "score": id, "folder": folder }),
+        )]);
+        let inside = app
+            .command("library.scores", &json!({ "folder": folder }))
+            .unwrap();
+        assert_eq!(inside["scores"].as_array().unwrap().len(), 1);
+        // Delete puts it in Recently Deleted.
+        app.library_actions(vec![A::Command(
+            "library.score.delete",
+            json!({ "score": id }),
+        )]);
+        let trashed = app
+            .command("library.scores", &json!({ "trashed": true }))
+            .unwrap();
+        assert_eq!(trashed["scores"].as_array().unwrap().len(), 1);
+        assert!(app.state.message.is_none(), "{:?}", app.state.message);
     }
 
     #[test]

@@ -1,6 +1,6 @@
 # UI design system
 
-> **Last reviewed:** 2026-10-28 · **Last updated:** 2026-10-28 · **Change:** major (first version) · **Target:** enScore 3.7 (2026)
+> **Last reviewed:** 2026-10-28 · **Last updated:** 2026-11-01 · **Change:** minor (the owner's first hands-on feedback: toolbars, the library's sidebar and floating toolbar, painted icons; earlier: first version) · **Target:** enScore 3.7 (2026)
 
 ScoreCraft's look is its own. We match enScore's *conventions* where a musician's hands expect them
 (tap to turn, pen to mark, the score filling the screen), never its visual identity, icons or copy
@@ -47,17 +47,26 @@ hue kept), Sepia (with intensity), Inverted.
 - **Markup bar.** Appears when the pen touches or the markup button is tapped: pen, highlighter,
   whiteout, erasers, text, stamps, lasso, colours, widths, layer picker, undo/redo, done.
 
+- **What stays off the score view** (owner, 2026-11-01): no Open (scores are imported into the
+  library), no Export (Share is in the library's score menu), no Score panel (Edit Details is in
+  the score menu), no Keep Screen Awake button and no settings of any kind (Settings is a library
+  page). The page layout is a drop-down (Automatic, Single page, Two pages); Clear Ink sits next
+  to Markup. Full screen keeps the toolbars.
+
 ## Library layout
 
-Grid of first-page thumbnails or a dense list; a sidebar of folders, setlists, composers, tags,
-keys and Recently Deleted; search field always visible; multi-select for bulk metadata and moves.
+No full-width toolbar. A compact, resizable left sidebar of rows (Library, Lists, Recordings,
+Practice, Search, Recently Deleted, a gap, Settings); a floating toolbar anchored on the right
+(More, Filter, Sort, New Folder, Import); a grid of folders and covers or a dense list; a
+right-click menu on each score (Edit Details, Add to list, Move to, Select, Share, Print, Delete);
+multi-select for moves, lists and deleting. Spec: `docs/spec/library.md` LIB-14.
 
 ## Widgets
 
 Shared widgets in `ui-egui/src/widgets/` (buttons, icon buttons, sliders with numeric entry,
-segmented controls, colour swatches, list rows with swipe actions). Icons are original or from a
-permissively licensed set (for example Lucide, ISC), with the licence next to them and rows in
-`ATTRIBUTION.md`.
+segmented controls, colour swatches, list rows with swipe actions). Icons are ScoreCraft's own,
+painted with egui shapes in `ui-egui/src/icons.rs` so they never depend on an emoji font (glyphs
+such as 📁 and ↻ showed as empty boxes, owner 2026-11-01); none is copied from another app.
 
 ## Localisation
 
@@ -75,4 +84,5 @@ PNGs of public-domain scores.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-01 | minor | Owner's first hands-on feedback: what stays off the score view, the library's sidebar, floating toolbar and score menu, painted icons |
 | 2026-10-28 | major | First version |
