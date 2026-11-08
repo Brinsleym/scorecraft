@@ -1,6 +1,6 @@
 # Library
 
-> **Last reviewed:** 2026-10-31 · **Last updated:** 2026-11-08 · **Change:** minor (Search leaves the sidebar for the header; earlier: the owner's first hands-on feedback: sidebar, floating toolbar, the score menu, Settings in the library; earlier: Recently Deleted with folders; earlier: the owner's answers on search and sort; earlier: M5 part 2: covers and the window; earlier: first version) · **Target:** enScore 3.7 (2026)
+> **Last reviewed:** 2026-10-31 · **Last updated:** 2026-11-08 · **Change:** minor (selecting folders too, the selection header, Move Folder; earlier: Search leaves the sidebar for the header; earlier: the owner's first hands-on feedback: sidebar, floating toolbar, the score menu, Settings in the library; earlier: Recently Deleted with folders; earlier: the owner's answers on search and sort; earlier: M5 part 2: covers and the window; earlier: first version) · **Target:** enScore 3.7 (2026)
 
 Finding scores in the library: search, sort, the recently opened list, importing a whole folder,
 the library window with covers, and Recently Deleted. Written for milestone M5; Recently Deleted
@@ -102,11 +102,15 @@ follow (observed in the owner's screenshots 2 and 3; nothing copied):
 - **Right-clicking a score** (or a long press) opens its menu, in this order: **Edit Details**
   (the score's details, pages and bookmarks), **Add to list** (any list, or a new one), **Move to**
   (a folder, or the library's top level), **Select** (starts selecting, with this score chosen),
-  **Share** (the score as a PDF with its ink drawn in, or as PDF annotations; EXP-2), **Print**
-  (shown but not built yet, EXP-1) and **Delete** (to Recently Deleted). Right-clicking a folder
-  offers *Delete folder*.
-- **Selecting:** taps choose scores instead of opening them; a bar shows how many, with *Add to
-  list*, *Move to*, *Delete* and *Done*.
+  **Export / Share** (the score as a PDF with its ink drawn in, or as PDF annotations; EXP-2),
+  **Print** (shown but not built yet, EXP-1) and **Delete** (to Recently Deleted). Right-clicking
+  a folder offers **Move to Folder** (`library.folder.move`; never into itself), **Select** and
+  **Delete Folder**.
+- **Selecting** (owner's Stitch concept, 2026-11-08): taps choose scores and folders instead of
+  opening them. The title gives way to "2 items selected" with a button that deselects all and
+  stops selecting, then **Move to Folder** (scores and folders), **Add to List** and **Export /
+  Share** (scores; several are written to a folder the player picks) and **Delete**. Each item
+  chosen is framed, cover and title together, with a check in its cover's corner.
 - **Settings** is a page of the library, never of the score view: appearance (light or dark),
   keeping the screen awake while a score is open (on by default), page turning (swipe to turn,
   the default layout and turns for every score), markup (the ruler button, round highlighter
@@ -192,6 +196,7 @@ Still open: the questions in the [Edit Details note](../observations/library-edi
 | Date | Change | Summary |
 |---|---|---|
 | 2026-11-08 | minor | Search leaves the sidebar; the header's Search button searches the folder shown |
+| 2026-11-08 | minor | Selecting folders as well as scores; the selection header and its actions; `library.folder.move`; a folder's menu gains Move to Folder and Select |
 | 2026-11-01 | minor | Owner's first hands-on feedback: the library's sidebar (Library, Lists, Recordings, Practice, Search, Recently Deleted, Settings), the floating toolbar on the right, the score's right-click menu in the owner's order, selecting, Settings as a library page, folder icons; LIBS-15..17 |
 | 2026-11-01 | minor | LIB-10: folders in Recently Deleted with their scores, read-only, restored together, removed after 30 days; scores left in one are reported with a restore prompt; LIBS-14 |
 | 2026-11-01 | minor | Built: search inside words and every Edit Details field (LIBS-13), articles kept in sort |

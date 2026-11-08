@@ -52,6 +52,12 @@ pub enum Icon {
     Plus,
     ChevronDown,
     Check,
+    /// Move to a folder.
+    MoveTo,
+    AddToList,
+    /// Export or share a copy.
+    Share,
+    Print,
 }
 
 impl Icon {
@@ -98,6 +104,10 @@ impl Icon {
             Icon::Sort => '\u{eb5a}',                     // arrows-sort
             Icon::Plus => '\u{eb0b}',                     // plus
             Icon::Check => '\u{ea5e}',                    // check
+            Icon::MoveTo => '\u{f91b}',                   // folder-symlink
+            Icon::AddToList => '\u{f008}',                // playlist-add
+            Icon::Share => '\u{eb47}',                    // upload
+            Icon::Print => '\u{eb0e}',                    // printer
         }
     }
 }
@@ -303,6 +313,74 @@ mod tests {
                     out.shapes.len()
                 );
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod subset_tests {
+    use super::Icon;
+    use skrifa::MetadataProvider;
+
+    const ALL: [Icon; 45] = [
+        Icon::Previous,
+        Icon::Next,
+        Icon::Single,
+        Icon::Two,
+        Icon::AutoLayout,
+        Icon::Half,
+        Icon::Alternate,
+        Icon::FitWidth,
+        Icon::ZoomIn,
+        Icon::ZoomOut,
+        Icon::FullScreen,
+        Icon::Theme,
+        Icon::Markup,
+        Icon::ClearInk,
+        Icon::Library,
+        Icon::Lists,
+        Icon::Recordings,
+        Icon::Practice,
+        Icon::Search,
+        Icon::Trash,
+        Icon::Settings,
+        Icon::Folder,
+        Icon::NewFolder,
+        Icon::Score,
+        Icon::Up,
+        Icon::Down,
+        Icon::Back,
+        Icon::Close,
+        Icon::Play,
+        Icon::TurnLeft,
+        Icon::TurnRight,
+        Icon::Star,
+        Icon::StarFilled,
+        Icon::Sync,
+        Icon::Info,
+        Icon::More,
+        Icon::Filter,
+        Icon::Sort,
+        Icon::Plus,
+        Icon::ChevronDown,
+        Icon::Check,
+        Icon::MoveTo,
+        Icon::AddToList,
+        Icon::Share,
+        Icon::Print,
+    ];
+
+    /// Every icon's glyph is in the bundled subset: a missing one would draw as a box.
+    #[test]
+    fn every_icon_is_in_the_subset() {
+        let font = skrifa::FontRef::new(include_bytes!("../assets/tabler/tabler-icons.ttf"))
+            .expect("the bundled font parses");
+        let map = font.charmap();
+        for icon in ALL {
+            assert!(
+                map.map(icon.glyph()).is_some(),
+                "{icon:?} is not in the subset"
+            );
         }
     }
 }

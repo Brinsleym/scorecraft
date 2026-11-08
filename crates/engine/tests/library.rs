@@ -660,3 +660,57 @@ fn lib_10_folders_go_to_recently_deleted_for_30_days() {
     assert_eq!(run(&mut s, "library.verify", json!({}))["clean"], true);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A folder moves with everything in it, never inside itself, and back to the top level.
+#[test]
+fn folders_move_but_not_inside_themselves() {
+    let dir = temp("folder-move");
+    let lib_path = dir.join("Music.scorecraft").to_string_lossy().into_owned();
+    let mut s = Session::new();
+    fixed_clock(&mut s);
+    run(&mut s, "library.create", json!({ "path": lib_path }));
+    let folder = |s: &mut Session, name: &str, parent: Option<&str>| {
+        run(
+            s,
+            "library.folder.new",
+            json!({ "name": name, "parent": parent }),
+        )["folder"]
+            .as_str()
+            .unwrap()
+            .to_owned()
+    };
+    let horn = folder(&mut s, "Horn", None);
+    let etudes = folder(&mut s, "Etudes", Some(&horn));
+    let solo = folder(&mut s, "Solo", None);
+    let parent_of = |s: &mut Session, id: &str| {
+        run(s, "library.info", json!({}))["folders"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|f| f["id"] == id)
+            .unwrap()["parent"]
+            .clone()
+    };
+    let r = run(
+        &mut s,
+        "library.folder.move",
+        json!({ "folder": solo, "parent": etudes }),
+    );
+    assert_eq!(r["undo"], "Move Folder", "{r}");
+    assert_eq!(parent_of(&mut s, &solo), etudes.as_str());
+    assert_eq!(
+        fails(
+            &mut s,
+            "library.folder.move",
+            json!({ "folder": horn, "parent": solo })
+        ),
+        "invalid_edit"
+    );
+    run(
+        &mut s,
+        "library.folder.move",
+        json!({ "folder": solo, "parent": null }),
+    );
+    assert_eq!(parent_of(&mut s, &solo), Value::Null);
+    let _ = std::fs::remove_dir_all(&dir);
+}

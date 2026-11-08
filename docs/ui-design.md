@@ -1,6 +1,6 @@
 # UI design system
 
-> **Last reviewed:** 2026-10-28 · **Last updated:** 2026-11-08 · **Change:** minor (styling rules: Tabler icons, Segoe UI, the type scale; Search leaves the sidebar; earlier: the library ported from the owner's Stitch concept) · **Target:** enScore 3.7 (2026)
+> **Last reviewed:** 2026-10-28 · **Last updated:** 2026-11-08 · **Change:** minor (menus and selection styling; earlier: styling rules: Tabler icons, Segoe UI, the type scale; Search leaves the sidebar; earlier: the library ported from the owner's Stitch concept) · **Target:** enScore 3.7 (2026)
 
 ScoreCraft's look is its own. We match enScore's *conventions* where a musician's hands expect them
 (tap to turn, pen to mark, the score filling the screen), never its visual identity, icons or copy
@@ -101,6 +101,18 @@ only the library.
 - **Icon to text:** an icon beside text is 16/13 of the text's size (`theme::icon_for`: 16 beside
   13). Header buttons are 36 high with a 16 icon; reader toolbar buttons are 44 with a 20 icon
   (`TOOLBAR_ICON`); a menu chevron is 12; a folder tile's icon is about 0.39 of the tile's width.
+- **Menus** (context menus and dropdowns) are built from `menu.rs` rows, never bare egui
+  buttons: a 4-point inset panel in `menu_bg` with a hairline edge, 8-point corners and a soft
+  shadow; rows 32 high with a 16 icon, the 13 label, a check on the right for the choice in force
+  and a chevron for a submenu; hover fills `button_hover`; destructive rows (Delete) are in
+  `danger`, with `danger_hover` under the pointer. The concept has no menu screen, so these come
+  from its buttons and cards.
+- **Selection** (the concept's multi-selection screen): an item chosen is framed 8 points
+  outside its cover and caption, 2 points of the accent with a 2-point halo of it at 30 %, and a
+  20-point accent badge with a white check 10 points in from the cover's top-right corner. While
+  selecting, the header is "N items selected" (20 semibold, tight), a 32-point deselect button,
+  and Move to Folder, Add to List, Export / Share and Delete (red under the pointer), then a
+  hairline above the grid.
 - **Colours** come only from `theme::Tokens`; the accent is the brand colour.
 
 ## Localisation
@@ -119,6 +131,7 @@ PNGs of public-domain scores.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-08 | minor | Menus (menu rows, panel, danger rows) and selection (frame, halo, check badge, selection header) |
 | 2026-11-08 | minor | Styling rules: Tabler icons (outline, stroke 2), Segoe UI, type scale, tight titles, icon-to-text sizes; Search leaves the sidebar |
 | 2026-11-08 | minor | Library ported from the owner's Stitch concept: brand accent `#c45821`, title-row buttons, filled card grid with item counts |
 | 2026-11-01 | minor | Owner's first hands-on feedback: what stays off the score view, the library's sidebar, floating toolbar and score menu, painted icons |

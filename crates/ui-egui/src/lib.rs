@@ -18,6 +18,7 @@ pub mod icons;
 pub mod ink;
 pub mod library_view;
 pub mod markup_bar;
+pub mod menu;
 pub mod reader;
 pub mod score_panel;
 pub mod settings;

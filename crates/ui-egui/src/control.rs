@@ -95,7 +95,8 @@ fn coord(params: &Value, k: &str) -> Result<f32, String> {
 }
 
 /// The egui events for `ui.key {key, modifiers}` (a press and a release) or
-/// `ui.pointer {phase: down|move|up, x, y}` (window points).
+/// `ui.pointer {phase: down|move|up, x, y, button?: primary|secondary}` (window points;
+/// `secondary` is a right-click, which opens context menus).
 pub fn input_events(method: &str, params: &Value) -> Result<Vec<Event>, String> {
     match method {
         "ui.key" => {
@@ -119,9 +120,18 @@ pub fn input_events(method: &str, params: &Value) -> Result<Vec<Event>, String> 
         "ui.pointer" => {
             let pos = pos2(coord(params, "x")?, coord(params, "y")?);
             let modifiers = modifiers(params)?;
+            let which = match params.get("button").and_then(Value::as_str) {
+                None | Some("primary") => PointerButton::Primary,
+                Some("secondary") => PointerButton::Secondary,
+                Some(other) => {
+                    return Err(format!(
+                        "`button` must be primary or secondary, not {other:?}"
+                    ));
+                }
+            };
             let button = |pressed| Event::PointerButton {
                 pos,
-                button: PointerButton::Primary,
+                button: which,
                 pressed,
                 modifiers,
             };
@@ -180,6 +190,10 @@ mod tests {
             ("ui.key", json!({ "key": "A", "modifiers": ["hyper"] })),
             ("ui.pointer", json!({ "phase": "down", "x": "1", "y": 2 })),
             ("ui.pointer", json!({ "phase": "hover", "x": 1, "y": 2 })),
+            (
+                "ui.pointer",
+                json!({ "phase": "down", "x": 1, "y": 2, "button": "middle" }),
+            ),
             ("ui.screenshot", json!({})),
         ] {
             assert!(input_events(m, &p).is_err(), "{m} {p}");

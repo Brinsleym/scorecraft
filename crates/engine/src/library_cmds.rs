@@ -141,6 +141,15 @@ pub fn specs() -> Vec<CommandSpec> {
             folder_rename as _,
         ),
         spec(
+            "library.folder.move",
+            "Move Folder",
+            "Library",
+            r#"{"folder":id,"parent":id|null}"#,
+            false,
+            library_open,
+            folder_move as _,
+        ),
+        spec(
             "library.folder.delete",
             "Delete Folder",
             "Library",
@@ -662,6 +671,29 @@ fn folder_delete(session: &mut Session, params: &Value) -> Result<Value, EngineE
         .count();
     l.commit("Delete Folder", tx)?;
     Ok(edited(l, json!({ "trashedScores": scores })))
+}
+
+/// Moves a folder, with everything in it, into `parent` (`null`: the library's top level).
+/// A folder can't move inside itself (the op checks).
+fn folder_move(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
+    const ID: &str = "library.folder.move";
+    let p = params_object(ID, params)?;
+    reject_unknown_keys(ID, p, &["folder", "parent"])?;
+    let id: FolderId = req_id(ID, p, "folder")?;
+    let parent: Option<FolderId> = opt_id(ID, p, "parent")?;
+    let l = session.lib_mut(ID)?;
+    let mut f = l
+        .lib
+        .folders
+        .get(&id)
+        .cloned()
+        .ok_or(scorecraft_ops::OpError::NoFolder(id))?;
+    f.parent = parent;
+    l.commit(
+        "Move Folder",
+        Transaction::single(Op::SetFolder { folder: f }),
+    )?;
+    Ok(edited(l, json!({})))
 }
 
 fn score_move(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
