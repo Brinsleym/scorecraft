@@ -15,6 +15,7 @@ use scorecraft_engine::{CoverJob, Session};
 use serde_json::{Value, json};
 
 use crate::icons::{self, Icon};
+use crate::menu;
 use crate::theme::{self, Tokens};
 
 /// The longest side of a cover, in pixels.
@@ -26,6 +27,9 @@ const GAP: egui::Vec2 = egui::Vec2::new(24.0, 32.0);
 const COVER_RATIO: f32 = 1.25;
 const LABEL_H: f32 = 44.0;
 const RADIUS: u8 = 8;
+/// A selection frame's distance outside its item, and how far it and its halo reach.
+const FRAME_PAD: f32 = 8.0;
+const FRAME_OUT: f32 = FRAME_PAD + 2.0;
 /// A sidebar row's height.
 const NAV_ROW: f32 = 36.0;
 /// Paper is white in every theme, so its edge and hover ring are fixed greys.
@@ -61,8 +65,9 @@ pub enum LibraryAction {
     ImportPhotos,
     /// Show this score's details to edit.
     EditDetails(String),
-    /// Export this score as a PDF (`flatten` or `annotations`) and offer it.
-    Share(String, &'static str),
+    /// Export these scores as PDFs (`flatten` or `annotations`) and offer them: one asks
+    /// where to save it, several ask for a folder.
+    Share(Vec<String>, &'static str),
     /// Make a list with this name and add these scores to it.
     NewListWith(String, Vec<String>),
 }
@@ -199,9 +204,10 @@ pub struct LibraryView {
     trashed: Value,
     /// The section the sidebar shows.
     pub section: Section,
-    /// Taps select scores instead of opening them; the scores selected.
+    /// Taps select scores and folders instead of opening them; the ones selected.
     pub selecting: bool,
     pub selected: BTreeSet<String>,
+    pub selected_folders: BTreeSet<String>,
     /// The name typed for a new folder.
     new_folder: String,
 }
@@ -255,6 +261,7 @@ impl Default for LibraryView {
             section: Section::Library,
             selecting: false,
             selected: BTreeSet::new(),
+            selected_folders: BTreeSet::new(),
             new_folder: String::new(),
         }
     }
@@ -439,13 +446,19 @@ impl LibraryView {
         out
     }
 
+    /// Leaves selecting, with nothing selected.
+    pub fn stop_selecting(&mut self) {
+        self.selecting = false;
+        self.selected.clear();
+        self.selected_folders.clear();
+    }
+
     /// Shows a section of the sidebar.
     pub fn go(&mut self, section: Section) {
         if self.section != section {
             self.section = section;
             self.show_trash = section == Section::Trash;
-            self.selecting = false;
-            self.selected.clear();
+            self.stop_selecting();
             self.dirty = true;
         }
     }
@@ -505,9 +518,43 @@ impl LibraryView {
             .folder
             .as_ref()
             .and_then(|cur| folders.iter().find(|f| &f.0 == cur).cloned());
+        if self.selecting {
+            self.selection_header(ui, tokens, &folders, out);
+        } else {
+            self.title_row(ui, session, tokens, here.as_ref(), out);
+        }
+        self.stranded_prompt(ui, tokens, out);
+        if !self.query.trim().is_empty() {
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new(format!("Filtered by “{}”", self.query.trim()))
+                        .color(tokens.text),
+                );
+                if ui.small_button("Clear").clicked() {
+                    self.query.clear();
+                }
+            });
+        }
+        let subfolders: Vec<(String, String)> = folders
+            .iter()
+            .filter(|f| f.2 == self.folder)
+            .map(|f| (f.0.clone(), f.1.clone()))
+            .collect();
+        self.results_ui(ui, session, tokens, &subfolders, &folders, out);
+    }
+
+    /// The title (the folder shown, with Up beside it) and the header's buttons.
+    fn title_row(
+        &mut self,
+        ui: &mut Ui,
+        session: &mut Session,
+        tokens: &Tokens,
+        here: Option<&(String, String, Option<String>)>,
+        out: &mut Vec<LibraryAction>,
+    ) {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 8.0;
-            if let Some((_, name, parent)) = &here {
+            if let Some((_, name, parent)) = here {
                 if header_button(ui, tokens, Icon::Back, None, Style::Plain)
                     .on_hover_text("Up a folder")
                     .clicked()
@@ -523,29 +570,8 @@ impl LibraryView {
                 self.header_buttons(ui, session, tokens, out);
             });
         });
-        ui.add_space(24.0 - ui.spacing().item_spacing.y);
-        self.stranded_prompt(ui, tokens, out);
-        if self.selecting {
-            self.selection_bar(ui, tokens, &folders, out);
-        }
-        if !self.query.trim().is_empty() {
-            ui.horizontal(|ui| {
-                ui.label(
-                    RichText::new(format!("Filtered by “{}”", self.query.trim()))
-                        .color(tokens.text),
-                );
-                if ui.small_button("Clear").clicked() {
-                    self.query.clear();
-                }
-            });
-        }
-        ui.add_space(4.0);
-        let subfolders: Vec<(String, String)> = folders
-            .iter()
-            .filter(|f| f.2 == self.folder)
-            .map(|f| (f.0.clone(), f.1.clone()))
-            .collect();
-        self.results_ui(ui, session, tokens, &subfolders, &folders, out);
+        // 24 below the header to the covers; the grid adds the selection frames' 10.
+        ui.add_space(14.0 - ui.spacing().item_spacing.y);
     }
 
     /// The header's buttons, right-aligned beside the title (owner's Stitch concept,
@@ -560,28 +586,28 @@ impl LibraryView {
         // Right to left: the last button added shows first.
         let import = header_button(ui, tokens, Icon::Plus, Some("Import"), Style::Primary);
         egui::Popup::menu(&import).show(|ui| {
-            if icons::labelled(ui, Icon::Score, "PDF files…").clicked() {
+            if menu::item(ui, Some(Icon::Score), "PDF files…").clicked() {
                 out.push(LibraryAction::ImportFiles);
                 ui.close();
             }
             if !cfg!(target_arch = "wasm32") {
-                if icons::labelled(ui, Icon::Folder, "A folder of scores…").clicked() {
+                if menu::item(ui, Some(Icon::Folder), "A folder of scores…").clicked() {
                     out.push(LibraryAction::ImportFolder);
                     ui.close();
                 }
-                if ui.button("Photos as one score…").clicked() {
+                if menu::item(ui, Some(Icon::Two), "Photos as one score…").clicked() {
                     out.push(LibraryAction::ImportPhotos);
                     ui.close();
                 }
             }
-            ui.separator();
-            ui.label(RichText::new("New blank score").weak());
+            menu::separator(ui);
+            menu::note(ui, "New blank score");
             for (paper, label) in [
                 ("single", "Manuscript paper"),
                 ("grand", "Piano manuscript paper"),
                 ("tab", "Tablature paper"),
             ] {
-                if ui.button(label).clicked() {
+                if menu::item(ui, Some(Icon::Single), label).clicked() {
                     out.push(LibraryAction::Command(
                         "score.newManuscript",
                         json!({ "paper": paper }),
@@ -649,7 +675,7 @@ impl LibraryView {
         .on_hover_text("Sort");
         egui::Popup::menu(&sr).show(|ui| {
             for (id, label) in sorts {
-                if icons::labelled_selected(ui, Icon::Check, label, by == id).clicked() {
+                if menu::choice(ui, None, label, by == id).clicked() {
                     out.push(LibraryAction::Command(
                         "library.sort.set",
                         json!({ "by": id }),
@@ -657,8 +683,8 @@ impl LibraryView {
                     ui.close();
                 }
             }
-            ui.separator();
-            if ui.selectable_label(desc, "Reverse order").clicked() {
+            menu::separator(ui);
+            if menu::choice(ui, Some(Icon::Sort), "Reverse order", desc).clicked() {
                 out.push(LibraryAction::Command(
                     "library.sort.set",
                     json!({ "descending": !desc }),
@@ -682,27 +708,19 @@ impl LibraryView {
             });
         let more = header_button(ui, tokens, Icon::More, None, Style::Plain).on_hover_text("More");
         egui::Popup::menu(&more).show(|ui| {
-            if ui
-                .button(if self.selecting {
-                    "Done selecting"
-                } else {
-                    "Select"
-                })
-                .clicked()
-            {
-                self.selecting = !self.selecting;
-                self.selected.clear();
+            if menu::item(ui, Some(Icon::Check), "Select").clicked() {
+                self.selecting = true;
                 ui.close();
             }
-            ui.separator();
-            if ui.radio(self.grid, "Show as covers").clicked() {
+            menu::separator(ui);
+            if menu::choice(ui, Some(Icon::Library), "Show as covers", self.grid).clicked() {
                 out.push(LibraryAction::Command(
                     "ui.library.view",
                     json!({ "view": "grid" }),
                 ));
                 ui.close();
             }
-            if ui.radio(!self.grid, "Show as a list").clicked() {
+            if menu::choice(ui, Some(Icon::Lists), "Show as a list", !self.grid).clicked() {
                 out.push(LibraryAction::Command(
                     "ui.library.view",
                     json!({ "view": "list" }),
@@ -710,62 +728,115 @@ impl LibraryView {
                 ui.close();
             }
             if !cfg!(target_arch = "wasm32") {
-                ui.separator();
-                sync_buttons(ui, session, out);
+                menu::separator(ui);
+                sync_buttons(ui, session, true, out);
             }
         });
     }
 
-    /// While selecting: how many, and what to do with them.
-    fn selection_bar(
+    /// While selecting (owner's Stitch concept, 2026-11-08), in place of the title: "2 items
+    /// selected" with a button to stop selecting, then Move to Folder, Add to List,
+    /// Export / Share and Delete for everything selected. A line divides it from the covers.
+    fn selection_header(
         &mut self,
         ui: &mut Ui,
         tokens: &Tokens,
         folders: &[(String, String, Option<String>)],
         out: &mut Vec<LibraryAction>,
     ) {
-        let ids: Vec<String> = self.selected.iter().cloned().collect();
+        let scores: Vec<String> = self.selected.iter().cloned().collect();
+        let picked: Vec<String> = self.selected_folders.iter().cloned().collect();
+        let n = scores.len() + picked.len();
         ui.horizontal(|ui| {
-            ui.label(
-                RichText::new(match ids.len() {
-                    0 => "Tap scores to select them".to_owned(),
-                    1 => "1 selected".to_owned(),
-                    n => format!("{n} selected"),
-                })
-                .color(tokens.text),
+            ui.spacing_mut().item_spacing.x = 12.0;
+            let title = match n {
+                0 => "Select items".to_owned(),
+                1 => "1 item selected".to_owned(),
+                n => format!("{n} items selected"),
+            };
+            ui.add_sized(
+                [0.0, 36.0],
+                egui::Label::new(
+                    RichText::new(title)
+                        .font(egui::FontId::new(theme::SELECTION_TITLE, theme::semibold()))
+                        .extra_letter_spacing(theme::SELECTION_TITLE * theme::TIGHT)
+                        .color(tokens.strong),
+                ),
             );
-            ui.add_enabled_ui(!ids.is_empty(), |ui| {
-                ui.menu_button("Add to list", |ui| {
-                    self.list_menu(ui, &ids, out);
-                });
-                ui.menu_button("Move to", |ui| {
-                    move_menu(ui, folders, &ids, out);
-                });
-                if ui.button("Delete").clicked() {
-                    for id in &ids {
-                        out.push(LibraryAction::Command(
-                            "library.score.delete",
-                            json!({ "score": id }),
-                        ));
-                    }
-                    self.selected.clear();
-                }
-            });
-            if ui.button("Done").clicked() {
-                self.selecting = false;
-                self.selected.clear();
+            if sized_button(ui, tokens, Icon::Close, None, Style::Plain, 32.0)
+                .on_hover_text("Deselect all")
+                .clicked()
+            {
+                self.stop_selecting();
             }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.spacing_mut().item_spacing.x = 8.0;
+                // Right to left: Delete is added first.
+                ui.add_enabled_ui(n > 0, |ui| {
+                    if header_button(ui, tokens, Icon::Trash, Some("Delete"), Style::Danger)
+                        .on_hover_text("Delete the selected items")
+                        .clicked()
+                    {
+                        for id in &scores {
+                            out.push(LibraryAction::Command(
+                                "library.score.delete",
+                                json!({ "score": id }),
+                            ));
+                        }
+                        for id in &picked {
+                            out.push(LibraryAction::Command(
+                                "library.folder.delete",
+                                json!({ "folder": id }),
+                            ));
+                        }
+                        self.stop_selecting();
+                    }
+                });
+                ui.add_enabled_ui(!scores.is_empty(), |ui| {
+                    let share = header_button(
+                        ui,
+                        tokens,
+                        Icon::Share,
+                        Some("Export / Share"),
+                        Style::Plain,
+                    );
+                    egui::Popup::menu(&share).show(|ui| share_menu(ui, &scores, out));
+                    let add =
+                        header_button(ui, tokens, Icon::Plus, Some("Add to List"), Style::Plain);
+                    egui::Popup::menu(&add)
+                        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+                        .show(|ui| self.list_menu(ui, &scores, out));
+                });
+                ui.add_enabled_ui(n > 0, |ui| {
+                    let mv = header_button(
+                        ui,
+                        tokens,
+                        Icon::MoveTo,
+                        Some("Move to Folder"),
+                        Style::Plain,
+                    );
+                    egui::Popup::menu(&mv).show(|ui| move_menu(ui, folders, &scores, &picked, out));
+                });
+            });
         });
+        ui.add_space(16.0 - ui.spacing().item_spacing.y);
+        let (line, _) = ui.allocate_exact_size(vec2(ui.available_width(), 1.0), Sense::hover());
+        ui.painter().hline(
+            line.x_range(),
+            line.center().y,
+            Stroke::new(1.0, tokens.card_border),
+        );
+        ui.add_space(14.0);
     }
 
     /// The lists, to add `scores` to one (or to a new list).
     fn list_menu(&mut self, ui: &mut Ui, scores: &[String], out: &mut Vec<LibraryAction>) {
         let lists = self.list_names();
         if lists.is_empty() {
-            ui.label(RichText::new("No lists yet").weak());
+            menu::note(ui, "No lists yet");
         }
         for (list, name) in lists {
-            if ui.button(name).clicked() {
+            if menu::item(ui, Some(Icon::Lists), &name).clicked() {
                 for id in scores {
                     out.push(LibraryAction::Command(
                         "list.entry.add",
@@ -775,8 +846,9 @@ impl LibraryView {
                 ui.close();
             }
         }
-        ui.separator();
+        menu::separator(ui);
         ui.horizontal(|ui| {
+            ui.add_space(8.0);
             ui.add(
                 egui::TextEdit::singleline(&mut self.new_list)
                     .hint_text("New list")
@@ -864,6 +936,8 @@ impl LibraryView {
             .auto_shrink(false)
             .show(ui, |ui| {
                 if self.grid {
+                    // Room above the first row for a selection frame.
+                    ui.add_space(FRAME_OUT);
                     // As many columns as fit, each card widened to fill the row.
                     let avail = ui.available_width();
                     let cols = ((avail + GAP.x) / (CARD_MIN + GAP.x)).floor().max(1.0) as usize;
@@ -881,7 +955,9 @@ impl LibraryView {
                                 match item {
                                     Ok(k) => {
                                         if let Some((id, name)) = subfolders.get(*k) {
-                                            self.folder_card(ui, tokens, size, id, name, out);
+                                            self.folder_card(
+                                                ui, tokens, size, id, name, folders, out,
+                                            );
                                         }
                                     }
                                     Err(s) => {
@@ -898,12 +974,11 @@ impl LibraryView {
                     return;
                 }
                 for (id, name) in subfolders {
-                    let r = icons::row(ui, Icon::Folder, name, false);
+                    let r = icons::row(ui, Icon::Folder, name, self.selected_folders.contains(id));
                     if r.clicked() {
-                        self.folder = Some(id.clone());
-                        self.dirty = true;
+                        self.tap_folder(id);
                     }
-                    folder_menu(&r, id, out);
+                    self.folder_menu(&r, id, folders, out);
                 }
                 egui::Grid::new("library-list")
                     .striped(true)
@@ -964,6 +1039,18 @@ impl LibraryView {
         }
     }
 
+    /// A tap on a folder: opens it, or while selecting, toggles it.
+    fn tap_folder(&mut self, id: &str) {
+        if self.selecting {
+            if !self.selected_folders.remove(id) {
+                self.selected_folders.insert(id.to_owned());
+            }
+        } else {
+            self.folder = Some(id.to_owned());
+            self.dirty = true;
+        }
+    }
+
     /// A score's right-click menu, in the owner's order (2026-11-01): Edit Details, Add to
     /// list, Move to, Select, Share, Print, Delete.
     fn score_menu(
@@ -974,35 +1061,31 @@ impl LibraryView {
         out: &mut Vec<LibraryAction>,
     ) {
         r.context_menu(|ui| {
-            if icons::labelled(ui, Icon::Info, "Edit Details").clicked() {
+            let one = [id.to_owned()];
+            if menu::item(ui, Some(Icon::Info), "Edit Details").clicked() {
                 out.push(LibraryAction::EditDetails(id.to_owned()));
                 ui.close();
             }
-            ui.menu_button("Add to list", |ui| {
-                self.list_menu(ui, &[id.to_owned()], out);
+            menu::submenu(ui, Some(Icon::AddToList), "Add to List", |ui| {
+                self.list_menu(ui, &one, out);
             });
-            ui.menu_button("Move to", |ui| {
-                move_menu(ui, folders, &[id.to_owned()], out);
+            menu::submenu(ui, Some(Icon::MoveTo), "Move to Folder", |ui| {
+                move_menu(ui, folders, &one, &[], out);
             });
-            if icons::labelled(ui, Icon::Check, "Select").clicked() {
+            if menu::item(ui, Some(Icon::Check), "Select").clicked() {
                 self.selecting = true;
                 self.selected.insert(id.to_owned());
                 ui.close();
             }
-            ui.menu_button("Share", |ui| {
-                if ui.button("PDF with ink drawn in…").clicked() {
-                    out.push(LibraryAction::Share(id.to_owned(), "flatten"));
-                    ui.close();
-                }
-                if ui.button("PDF with ink as annotations…").clicked() {
-                    out.push(LibraryAction::Share(id.to_owned(), "annotations"));
-                    ui.close();
-                }
+            menu::submenu(ui, Some(Icon::Share), "Export / Share", |ui| {
+                share_menu(ui, &one, out);
             });
-            ui.add_enabled(false, egui::Button::new("Print"))
-                .on_disabled_hover_text("Printing is not built yet");
-            ui.separator();
-            if icons::labelled(ui, Icon::Trash, "Delete").clicked() {
+            ui.add_enabled_ui(false, |ui| {
+                menu::item(ui, Some(Icon::Print), "Print")
+                    .on_disabled_hover_text("Printing is not built yet");
+            });
+            menu::separator(ui);
+            if menu::danger(ui, Icon::Trash, "Delete").clicked() {
                 out.push(LibraryAction::Command(
                     "library.score.delete",
                     json!({ "score": id }),
@@ -1012,7 +1095,36 @@ impl LibraryView {
         });
     }
 
+    /// A folder's right-click menu: Move to Folder, Select, Delete.
+    fn folder_menu(
+        &mut self,
+        r: &egui::Response,
+        id: &str,
+        folders: &[(String, String, Option<String>)],
+        out: &mut Vec<LibraryAction>,
+    ) {
+        r.context_menu(|ui| {
+            menu::submenu(ui, Some(Icon::MoveTo), "Move to Folder", |ui| {
+                move_menu(ui, folders, &[], &[id.to_owned()], out);
+            });
+            if menu::item(ui, Some(Icon::Check), "Select").clicked() {
+                self.selecting = true;
+                self.selected_folders.insert(id.to_owned());
+                ui.close();
+            }
+            menu::separator(ui);
+            if menu::danger(ui, Icon::Trash, "Delete Folder").clicked() {
+                out.push(LibraryAction::Command(
+                    "library.folder.delete",
+                    json!({ "folder": id }),
+                ));
+                ui.close();
+            }
+        });
+    }
+
     /// A folder as a card: its icon on a tile, its name, and how much it holds.
+    #[allow(clippy::too_many_arguments)]
     fn folder_card(
         &mut self,
         ui: &mut Ui,
@@ -1020,6 +1132,7 @@ impl LibraryView {
         size: egui::Vec2,
         id: &str,
         name: &str,
+        folders: &[(String, String, Option<String>)],
         out: &mut Vec<LibraryAction>,
     ) {
         let (rect, r) = ui.allocate_exact_size(size, Sense::click());
@@ -1054,6 +1167,8 @@ impl LibraryView {
                 tokens.accent,
                 Icon::Folder,
             );
+            let chosen = self.selected_folders.contains(id);
+            selection_marks(ui, tokens, rect, tile, self.selecting, chosen);
             let below = tile.bottom() + 10.0;
             let h = label.size().y;
             p.galley(egui::pos2(rect.center().x, below), label, tokens.text);
@@ -1064,10 +1179,9 @@ impl LibraryView {
             );
         }
         if r.clicked() {
-            self.folder = Some(id.to_owned());
-            self.dirty = true;
+            self.tap_folder(id);
         }
-        folder_menu(&r, id, out);
+        self.folder_menu(&r, id, folders, out);
     }
 
     /// What a folder holds directly, from `library.info`.
@@ -1140,30 +1254,15 @@ impl LibraryView {
             tokens.text,
         );
         let chosen = self.selected.contains(&id);
-        if r.hovered() || chosen {
-            let ring = if chosen { tokens.accent } else { PAPER_HOVER };
+        if r.hovered() && !chosen {
             p.rect_stroke(
                 cover_rect,
                 RADIUS,
-                Stroke::new(2.0, ring),
+                Stroke::new(2.0, PAPER_HOVER),
                 egui::StrokeKind::Outside,
             );
         }
-        if self.selecting {
-            let tick = egui::Rect::from_min_size(cover_rect.min + vec2(6.0, 6.0), vec2(22.0, 22.0));
-            p.circle_filled(
-                tick.center(),
-                11.0,
-                if chosen {
-                    tokens.accent
-                } else {
-                    Color32::from_white_alpha(200)
-                },
-            );
-            if chosen {
-                icons::paint(p, tick.shrink(3.0), Color32::WHITE, Icon::Check);
-            }
-        }
+        selection_marks(ui, tokens, rect, cover_rect, self.selecting, chosen);
         let r = r.on_hover_text(format!("{title}\n{composer}"));
         if r.clicked() {
             self.tap_score(&id, out);
@@ -1269,6 +1368,8 @@ enum Style {
     On(bool),
     /// Filled with the accent: the header's main action.
     Primary,
+    /// Destroys something: the danger colour under the pointer.
+    Danger,
 }
 
 /// A header button, 36 points high: an icon, then its label if it has one.
@@ -1279,7 +1380,18 @@ fn header_button(
     label: Option<&str>,
     style: Style,
 ) -> egui::Response {
-    const H: f32 = 36.0;
+    sized_button(ui, t, icon, label, style, 36.0)
+}
+
+/// [`header_button`], `h` points high (an icon alone is `h` square). Faded while disabled.
+fn sized_button(
+    ui: &mut Ui,
+    t: &Tokens,
+    icon: Icon,
+    label: Option<&str>,
+    style: Style,
+    h: f32,
+) -> egui::Response {
     let font = egui::FontId::proportional(theme::TEXT);
     let icon_px = theme::icon_for(theme::TEXT);
     let galley = label.map(|l| {
@@ -1289,24 +1401,30 @@ fn header_button(
     let chevron = style == Style::Menu;
     let square = galley.is_none() && !chevron;
     let width = if square {
-        H
+        h
     } else {
         24.0 + icon_px
             + galley.as_ref().map_or(0.0, |g| 8.0 + g.size().x)
             + if chevron { 20.0 } else { 0.0 }
     };
-    let (rect, r) = ui.allocate_exact_size(vec2(width, H), Sense::click());
+    let (rect, r) = ui.allocate_exact_size(vec2(width, h), Sense::click());
     if ui.is_rect_visible(rect) {
         let p = ui.painter();
         let on = style == Style::On(true);
-        let hot = r.hovered() || r.has_focus() || on;
-        let (fill, edge, fg) = if style == Style::Primary {
-            let fill = if hot { t.accent_hover } else { t.accent };
-            (fill, t.accent, t.on_accent)
-        } else {
-            let fill = if hot { t.button_hover } else { t.button_bg };
-            (fill, if on { t.accent } else { t.button_border }, t.text)
+        let enabled = ui.is_enabled();
+        let hot = enabled && (r.hovered() || r.has_focus() || on);
+        let (fill, edge, fg) = match style {
+            Style::Primary => {
+                let fill = if hot { t.accent_hover } else { t.accent };
+                (fill, t.accent, t.on_accent)
+            }
+            Style::Danger if hot => (t.danger_hover, t.danger_border, t.danger),
+            _ => {
+                let fill = if hot { t.button_hover } else { t.button_bg };
+                (fill, if on { t.accent } else { t.button_border }, t.text)
+            }
         };
+        let fg = if enabled { fg } else { fg.gamma_multiply(0.4) };
         p.rect(
             rect,
             4,
@@ -1337,11 +1455,14 @@ fn header_button(
     r
 }
 
-/// The folders to move `scores` to: the library's top level, then every folder by path.
+/// The folders to move `scores` and the folders `moving` to: the library's top level, then
+/// every folder by path, except the folders moving and those inside them (a folder can't move
+/// inside itself).
 fn move_menu(
     ui: &mut Ui,
     folders: &[(String, String, Option<String>)],
     scores: &[String],
+    moving: &[String],
     out: &mut Vec<LibraryAction>,
 ) {
     let mut send = |folder: Value, ui: &mut Ui| {
@@ -1351,15 +1472,107 @@ fn move_menu(
                 json!({ "score": id, "folder": folder }),
             ));
         }
+        for id in moving {
+            out.push(LibraryAction::Command(
+                "library.folder.move",
+                json!({ "folder": id, "parent": folder }),
+            ));
+        }
         ui.close();
     };
-    if icons::labelled(ui, Icon::Library, "Library (no folder)").clicked() {
+    if menu::item(ui, Some(Icon::Library), "Library").clicked() {
         send(Value::Null, ui);
     }
     for (id, _, _) in folders {
-        if icons::labelled(ui, Icon::Folder, &folder_path(folders, id)).clicked() {
+        if inside_any(folders, id, moving) {
+            continue;
+        }
+        if menu::item(ui, Some(Icon::Folder), &folder_path(folders, id)).clicked() {
             send(json!(id), ui);
         }
+    }
+}
+
+/// Whether folder `id` is one of `these` or inside one of them.
+fn inside_any(folders: &[(String, String, Option<String>)], id: &str, these: &[String]) -> bool {
+    let mut cur = Some(id.to_owned());
+    // A cycle in bad data can't loop forever.
+    for _ in 0..=folders.len() {
+        let Some(c) = cur else { return false };
+        if these.contains(&c) {
+            return true;
+        }
+        cur = folders.iter().find(|f| f.0 == c).and_then(|f| f.2.clone());
+    }
+    false
+}
+
+/// How to export `scores`: with the ink drawn into the pages, or kept as PDF annotations.
+fn share_menu(ui: &mut Ui, scores: &[String], out: &mut Vec<LibraryAction>) {
+    for (mode, label) in [
+        ("flatten", "PDF with ink drawn in…"),
+        ("annotations", "PDF with ink as annotations…"),
+    ] {
+        if menu::item(ui, Some(Icon::Score), label).clicked() {
+            out.push(LibraryAction::Share(scores.to_vec(), mode));
+            ui.close();
+        }
+    }
+}
+
+/// The selection marks on a grid item (owner's Stitch concept, 2026-11-08). Selected: a frame
+/// [`FRAME_PAD`] outside the item (`cell`, its cover and its caption), two points of the accent
+/// with a two-point halo of it at 30 %, and the accent check badge in the cover's top-right
+/// corner. While selecting, an item not selected shows an empty badge to tap.
+fn selection_marks(
+    ui: &Ui,
+    t: &Tokens,
+    cell: egui::Rect,
+    cover: egui::Rect,
+    selecting: bool,
+    chosen: bool,
+) {
+    // The frame reaches into the gutters, past the scroll area's edge for the first column.
+    let p = ui
+        .painter()
+        .with_clip_rect(ui.clip_rect().expand2(vec2(FRAME_OUT, 0.0)));
+    if chosen {
+        let frame = cell.expand(FRAME_PAD);
+        let r = CornerRadius::same(RADIUS);
+        p.rect_stroke(
+            frame,
+            r,
+            Stroke::new(2.0, t.accent),
+            egui::StrokeKind::Inside,
+        );
+        p.rect_stroke(
+            frame,
+            r,
+            Stroke::new(2.0, t.accent.gamma_multiply(0.3)),
+            egui::StrokeKind::Outside,
+        );
+    }
+    if !selecting && !chosen {
+        return;
+    }
+    let c = egui::pos2(cover.right() - 10.0 - 10.0, cover.top() + 10.0 + 10.0);
+    p.circle_filled(c + vec2(0.0, 1.0), 10.5, Color32::from_black_alpha(50));
+    if chosen {
+        p.circle_filled(c, 10.0, t.accent);
+        icons::paint_centered(
+            &p,
+            egui::Rect::from_center_size(c, vec2(20.0, 20.0)),
+            13.0,
+            Color32::WHITE,
+            Icon::Check,
+        );
+    } else {
+        p.circle(
+            c,
+            9.25,
+            Color32::from_black_alpha(60),
+            Stroke::new(1.5, Color32::from_white_alpha(230)),
+        );
     }
 }
 
@@ -1378,19 +1591,6 @@ fn folder_path(folders: &[(String, String, Option<String>)], id: &str) -> String
     }
     parts.reverse();
     parts.join(" / ")
-}
-
-/// A folder's right-click menu.
-fn folder_menu(r: &egui::Response, id: &str, out: &mut Vec<LibraryAction>) {
-    r.context_menu(|ui| {
-        if icons::labelled(ui, Icon::Trash, "Delete folder").clicked() {
-            out.push(LibraryAction::Command(
-                "library.folder.delete",
-                json!({ "folder": id }),
-            ));
-            ui.close();
-        }
-    });
 }
 
 impl LibraryView {
@@ -1668,7 +1868,20 @@ pub fn day(ms: u64) -> String {
 }
 
 /// Sync through a shared folder: choose one, or sync now with what happened last on hover.
-pub(crate) fn sync_buttons(ui: &mut Ui, session: &mut Session, out: &mut Vec<LibraryAction>) {
+pub(crate) fn sync_buttons(
+    ui: &mut Ui,
+    session: &mut Session,
+    in_menu: bool,
+    out: &mut Vec<LibraryAction>,
+) {
+    // Menu rows in the library's More menu; buttons on the Settings page.
+    let button = |ui: &mut Ui, icon: Icon, text: &str| {
+        if in_menu {
+            menu::item(ui, Some(icon), text)
+        } else {
+            icons::labelled(ui, icon, text)
+        }
+    };
     let status = session
         .dispatch("sync.status", &json!({}))
         .unwrap_or(Value::Null);
@@ -1691,19 +1904,18 @@ pub(crate) fn sync_buttons(ui: &mut Ui, session: &mut Session, out: &mut Vec<Lib
             {
                 tip.push_str(&format!("\nLast problem: {}", p.as_str().unwrap_or("")));
             }
-            if icons::labelled(ui, Icon::Sync, "Sync now")
+            if button(ui, Icon::Sync, "Sync now")
                 .on_hover_text(tip)
                 .clicked()
             {
                 out.push(LibraryAction::SyncNow);
             }
-            if ui.button("Sync through another folder…").clicked() {
+            if button(ui, Icon::Folder, "Sync through another folder…").clicked() {
                 out.push(LibraryAction::ChooseSyncFolder);
             }
         }
         None => {
-            if ui
-                .button("Sync…")
+            if button(ui, Icon::Sync, "Sync…")
                 .on_hover_text(
                     "Sync this library with your other devices through a folder they all \
                      reach: one Google Drive, OneDrive, Dropbox or iCloud Drive keeps in sync",

@@ -46,6 +46,12 @@ pub struct Tokens {
     /// The accent under the pointer, and text drawn on the accent.
     pub accent_hover: Color32,
     pub on_accent: Color32,
+    /// Menus and popups: their panel. Destructive actions: their text, and their fill and
+    /// edge under the pointer.
+    pub menu_bg: Color32,
+    pub danger: Color32,
+    pub danger_hover: Color32,
+    pub danger_border: Color32,
     /// Toolbar height and touch-target side, in points (≥ 44 for fingers on a tablet).
     pub toolbar_height: f32,
     pub button: f32,
@@ -80,6 +86,10 @@ impl Tokens {
                 nav_selected: Color32::from_rgb(0xe2, 0xe2, 0xe2),
                 accent_hover: BRAND_HOVER,
                 on_accent: Color32::WHITE,
+                menu_bg: Color32::WHITE,
+                danger: Color32::from_rgb(0xc0, 0x2b, 0x2b),
+                danger_hover: Color32::from_rgb(0xfd, 0xec, 0xec),
+                danger_border: Color32::from_rgba_unmultiplied(0xdc, 0x26, 0x26, 77),
                 toolbar_height: 52.0,
                 button: 44.0,
                 radius: 8,
@@ -109,6 +119,11 @@ impl Tokens {
                 nav_selected: Color32::from_rgb(0x2d, 0x2d, 0x2d),
                 accent_hover: BRAND_HOVER,
                 on_accent: Color32::WHITE,
+                // The concept's card (#2c2c2c); red-400, red-950 at 40 %, red-500 at 30 %.
+                menu_bg: Color32::from_rgb(0x2c, 0x2c, 0x2c),
+                danger: Color32::from_rgb(0xf8, 0x71, 0x71),
+                danger_hover: Color32::from_rgba_unmultiplied(0x45, 0x0a, 0x0a, 102),
+                danger_border: Color32::from_rgba_unmultiplied(0xef, 0x44, 0x44, 77),
                 toolbar_height: 52.0,
                 button: 44.0,
                 radius: 8,
@@ -132,6 +147,18 @@ impl Tokens {
         }
     }
 
+    /// The tokens last applied to `ctx`, for widgets drawn without them in hand (menu rows).
+    pub fn current(ctx: &egui::Context) -> Tokens {
+        ctx.data(|d| d.get_temp(egui::Id::unique(TOKENS_KEY)))
+            .unwrap_or_else(|| {
+                Tokens::for_theme(if ctx.global_style().visuals.dark_mode {
+                    Theme::Dark
+                } else {
+                    Theme::Light
+                })
+            })
+    }
+
     /// Applies the tokens to egui's visuals.
     pub fn apply(&self, theme: Theme, ctx: &egui::Context) {
         let mut visuals = match theme {
@@ -152,8 +179,24 @@ impl Tokens {
             CornerRadius::same(self.radius),
             Stroke::new(1.0, self.text),
         );
+        // Menus and popups (`docs/ui-design.md`, Styling rules): the card colour, a hairline
+        // edge, 8-point corners and a soft drop shadow.
+        visuals.window_fill = self.menu_bg;
+        visuals.window_stroke = Stroke::new(1.0, self.button_border);
+        visuals.menu_corner_radius = CornerRadius::same(8);
+        visuals.popup_shadow = egui::Shadow {
+            offset: [0, 8],
+            blur: 24,
+            spread: 0,
+            color: Color32::from_black_alpha(match theme {
+                Theme::Light => 40,
+                Theme::Dark => 115,
+            }),
+        };
         ctx.set_visuals(visuals);
+        ctx.data_mut(|d| d.insert_temp(egui::Id::unique(TOKENS_KEY), *self));
         ctx.all_styles_mut(|style| {
+            style.spacing.menu_margin = egui::Margin::same(4);
             use egui::{FontFamily, FontId, TextStyle};
             style.text_styles = [
                 (TextStyle::Small, FontId::proportional(CAPTION)),
@@ -170,12 +213,16 @@ impl Tokens {
     }
 }
 
+const TOKENS_KEY: &str = "scorecraft.tokens";
+
 /// The type scale (owner's Stitch concept, 2026-11-08; `docs/ui-design.md`, Styling rules), in
 /// points: body and buttons, card titles, counts and hints, page titles.
 pub const TEXT: f32 = 13.0;
 pub const SMALL: f32 = 12.0;
 pub const CAPTION: f32 = 11.0;
 pub const TITLE: f32 = 30.0;
+/// The selection header's "2 items selected" (the concept's `text-xl`, semibold, tight).
+pub const SELECTION_TITLE: f32 = 20.0;
 /// Icons in the reader's 44-point toolbar buttons.
 pub const TOOLBAR_ICON: f32 = 20.0;
 /// "Tight" letter spacing for titles and card captions, as a fraction of the text size.

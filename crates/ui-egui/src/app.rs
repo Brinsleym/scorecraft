@@ -599,7 +599,7 @@ impl App {
                     self.score_panel.open = true;
                     self.score_cache = None;
                 }
-                A::Share(id, mode) => self.share(&id, mode),
+                A::Share(ids, mode) => self.share(&ids, mode),
                 A::ImportFiles => {
                     if let Some(path) = self.platform.pick_score() {
                         let mut p = json!({ "paths": [path] });
@@ -856,8 +856,52 @@ impl App {
 
     /// Share (owner, 2026-11-01): exports a library score with its visible layers' ink
     /// (EXP-2) and offers the file.
-    fn share(&mut self, id: &str, mode: &str) {
-        // Named after the score's title, "(marked)" added.
+    /// Exports `ids` as PDFs: one asks where to save it, several ask for a folder and are
+    /// written there, each named after its score.
+    fn share(&mut self, ids: &[String], mode: &str) {
+        match ids {
+            [] => {}
+            [id] => self.share_one(id, mode),
+            _ if cfg!(target_arch = "wasm32") => {
+                for id in ids {
+                    self.share_one(id, mode);
+                }
+            }
+            _ => {
+                let Some(dir) = self.platform.pick_folder() else {
+                    return;
+                };
+                let mut used = std::collections::BTreeSet::new();
+                let mut written = 0;
+                for id in ids {
+                    let name = self.share_name(id);
+                    let stem = name.trim_end_matches(".pdf").to_owned();
+                    let mut path = std::path::Path::new(&dir).join(&name);
+                    let mut n = 2;
+                    while used.contains(&path) || path.exists() {
+                        path = std::path::Path::new(&dir).join(format!("{stem} {n}.pdf"));
+                        n += 1;
+                    }
+                    used.insert(path.clone());
+                    let r = self.command(
+                        "score.export.pdf",
+                        &json!({ "path": path.to_string_lossy(), "mode": mode, "score": id }),
+                    );
+                    match r {
+                        Ok(_) => written += 1,
+                        Err(e) => {
+                            self.state.message = Some(e.to_string());
+                            return;
+                        }
+                    }
+                }
+                self.state.message = Some(format!("Exported {written} scores to {dir}"));
+            }
+        }
+    }
+
+    /// A shared copy's file name: the score's title, "(marked)" added.
+    fn share_name(&mut self, id: &str) -> String {
         let title = self
             .session
             .dispatch("library.score.get", &json!({ "score": id }))
@@ -871,7 +915,11 @@ impl App {
             .chars()
             .map(|c| if "/\\:*?\"<>|".contains(c) { '-' } else { c })
             .collect();
-        let name = format!("{clean} (marked).pdf");
+        format!("{clean} (marked).pdf")
+    }
+
+    fn share_one(&mut self, id: &str, mode: &str) {
+        let name = self.share_name(id);
         if let Some(path) = self.platform.pick_export_path(&name) {
             let r = self.command(
                 "score.export.pdf",
@@ -950,14 +998,13 @@ impl App {
         let r = crate::icons::labelled(ui, icon, label).on_hover_text("Page layout");
         egui::Popup::menu(&r).show(|ui| {
             for (id, label, icon) in LAYOUTS {
-                if crate::icons::labelled_selected(ui, icon, label, id == choice).clicked() {
+                if crate::menu::choice(ui, Some(icon), label, id == choice).clicked() {
                     run.push((layout_command(id), json!({})));
                     ui.close();
                 }
             }
-            ui.separator();
-            if ui
-                .button("Use my defaults")
+            crate::menu::separator(ui);
+            if crate::menu::item(ui, Some(Icon::Settings), "Use my defaults")
                 .on_hover_text(
                     "Forget this score's own layout and turns; the defaults are in Settings",
                 )
@@ -1123,16 +1170,16 @@ fn clear_ink_button(ui: &mut Ui, tokens: &Tokens, run: &mut Vec<(&'static str, V
         })
         .on_hover_text("Clear Ink");
     egui::Popup::menu(&r).show(|ui| {
-        ui.label("Remove the pen, highlighter, text and stamps?");
-        if ui.button("Clear the pages on screen").clicked() {
+        crate::menu::note(ui, "Remove the pen, highlighter, text and stamps?");
+        if crate::menu::danger(ui, Icon::ClearInk, "Clear the pages on screen").clicked() {
             run.push(("annotate.clear", json!({ "pages": "shown" })));
             ui.close();
         }
-        if ui.button("Clear the whole score").clicked() {
+        if crate::menu::danger(ui, Icon::ClearInk, "Clear the whole score").clicked() {
             run.push(("annotate.clear", json!({ "pages": "all" })));
             ui.close();
         }
-        ui.label(RichText::new("Undo brings it back.").weak());
+        crate::menu::note(ui, "Undo brings it back.");
     });
 }
 

@@ -1,6 +1,6 @@
 # Control protocol
 
-> **Last reviewed:** 2026-10-31 · **Last updated:** 2026-10-31 · **Change:** minor (M3: first methods live in the desktop app) · **Target:** enScore 3.7 (2026)
+> **Last reviewed:** 2026-10-31 · **Last updated:** 2026-11-08 · **Change:** minor (`ui.pointer` takes a `button`, to right-click; earlier: M3, first methods live in the desktop app) · **Target:** enScore 3.7 (2026)
 
 How agents and scripts drive the running ScoreCraft app. Same design as PhotoCraft's control
 channel: JSON lines over an authenticated loopback TCP socket, with the engine's commands as the
@@ -50,7 +50,7 @@ in `scorecraft-automation::control`). The rest of the table is the plan.
 | `command_list` | `{"filter":"annotate."}` | ids, labels, params docs, enabled state |
 | `ui.state` | `{}` | the serde UI state (`ui-egui/src/state.rs`): open reader, page, layout, tool, panels |
 | `ui.set` | `{"path":"theme","value":"dark"}` | new state |
-| `ui.pointer` | `{"phase":"down|move|up","x":…,"y":…}` (pen `kind`, `pressure`, `tilt` later) | state after the frame |
+| `ui.pointer` | `{"phase":"down|move|up","x":…,"y":…,"button":"primary|secondary"}` (`button` defaults to primary; secondary right-clicks, opening context menus; pen `kind`, `pressure`, `tilt` later) | state after the frame |
 | `ui.key` | `{"key":"ArrowRight","modifiers":[]}` | state after the frame |
 | `ui.pedal` | `{"profile":"default","button":"right"}` | ok (simulates a mapped pedal) |
 | `ui.midi` | `{"bytes":[176,64,127]}` | ok (simulates incoming MIDI) |
@@ -91,5 +91,6 @@ Commands that touch the filesystem take paths only inside the configured workspa
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-08 | minor | `ui.pointer` takes `button` (`secondary` right-clicks) |
 | 2026-10-31 | minor | M3: command, command_batch, command_list, ui.state, ui.set, ui.key, ui.pointer, ui.screenshot live; `--control-port`, `--control-file`, auth timeout |
 | 2026-10-28 | major | First version, adapted from PhotoCraft's control protocol |

@@ -164,6 +164,7 @@ impl App {
                                 crate::library_view::sync_buttons(
                                     ui,
                                     &mut self.session,
+                                    false,
                                     &mut actions,
                                 );
                             });
