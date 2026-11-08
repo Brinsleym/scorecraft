@@ -74,6 +74,20 @@ fn load_settings() -> Settings {
 /// scorecraft-ui-egui).
 const FRAMELESS: bool = !cfg!(target_os = "macos");
 
+/// winit gives a frameless Windows window a drop shadow by leaving a 1-pixel strip of system
+/// frame across its top, which shows as a line over the title bar's transparent rounded corners.
+/// This turns that shadow off as the window is made.
+#[cfg(windows)]
+struct NoTopStrip;
+
+#[cfg(windows)]
+impl eframe::ViewportHooks for NoTopStrip {
+    fn window_created(&self, _viewport: eframe::egui::ViewportId, window: &winit::window::Window) {
+        use winit::platform::windows::WindowExtWindows as _;
+        window.set_undecorated_shadow(false);
+    }
+}
+
 struct Desktop {
     keep_awake: KeepAwake,
     /// The metronome's click, opened the first time it is wanted.
@@ -210,6 +224,12 @@ struct Shell {
 }
 
 impl eframe::App for Shell {
+    /// Clear to transparent so a frameless window's rounded corners are see-through; the panels
+    /// cover everything else.
+    fn clear_color(&self, _visuals: &eframe::egui::Visuals) -> [f32; 4] {
+        [0.0; 4]
+    }
+
     fn raw_input_hook(&mut self, ctx: &eframe::egui::Context, raw: &mut eframe::egui::RawInput) {
         if let Some(c) = &mut self.control {
             c.before_frame(&mut self.app, ctx, raw);
@@ -301,7 +321,11 @@ fn main() -> std::process::ExitCode {
             .with_min_inner_size([480.0, 360.0])
             .with_drag_and_drop(true)
             .with_decorations(!FRAMELESS)
+            // So the title bar's rounded top corners show the desktop behind them.
+            .with_transparent(FRAMELESS)
             .with_resizable(true),
+        #[cfg(windows)]
+        viewport_hooks: FRAMELESS.then(|| Arc::new(NoTopStrip) as Arc<dyn eframe::ViewportHooks>),
         ..Default::default()
     };
     match eframe::run_native(

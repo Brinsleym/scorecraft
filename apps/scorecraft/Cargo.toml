@@ -23,6 +23,10 @@ rfd = { version = "0.17", default-features = false }
 # The metronome's click: audio output on Windows and macOS (Linux needs ALSA headers).
 scorecraft-devices = { workspace = true, features = ["audio"] }
 
+# Turns off winit's drop shadow on the frameless window (see `NoTopStrip` in main.rs).
+[target.'cfg(windows)'.dependencies]
+winit = { workspace = true }
+
 [dev-dependencies]
 base64 = { workspace = true }
 scorecraft-testkit = { workspace = true }

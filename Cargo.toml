@@ -58,6 +58,7 @@ pdfcraft-organize = { git = "https://github.com/storytold/pdfcraft", rev = "65ff
 craft-ui = { git = "https://github.com/storytold/craft-libs", rev = "c39e435cc34417843793df240a0b38bac970179b" }
 egui = { version = "0.37", default-features = false }
 eframe = { version = "0.37", default-features = false }
+winit = { version = "0.30", default-features = false }
 
 # Third-party
 base64 = "0.22"
