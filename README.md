@@ -1,4 +1,9 @@
-<h1 align="center">ScoreCraft</h1>
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/scorecraft-lockup-dark.svg">
+    <img alt="ScoreCraft: sheet music reader" src="assets/brand/scorecraft-lockup-light.svg" width="420">
+  </picture>
+</h1>
 
 <p align="center">
   <b>Sheet music reading; an open-source, clean-room reimplementation of enScore, rebuilt in pure Rust.</b><br>

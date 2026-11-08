@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The note from assets/app-icon/scorecraft.svg on the same 512-unit grid, spread over the
+     108 dp adaptive canvas; it stays inside the 66 dp safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M176 312a52 52 0 1 1 104 0a52 52 0 1 1-104 0ZM254 312V156q0-8 8-8h66q8 0 8 8v24q0 8-8 8h-48v124Z" />
+</vector>

@@ -7,6 +7,7 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false
+build = "build.rs"
 
 [dependencies]
 eframe = { workspace = true, features = ["wgpu", "default_fonts", "accesskit", "clipboard", "wayland", "x11"] }
@@ -25,6 +26,10 @@ scorecraft-devices = { workspace = true, features = ["audio"] }
 [dev-dependencies]
 base64 = { workspace = true }
 scorecraft-testkit = { workspace = true }
+
+[build-dependencies]
+# Icon + VERSIONINFO for scorecraft.exe; build.rs only uses it when targeting Windows.
+winresource = "0.1"
 
 [lints]
 workspace = true
