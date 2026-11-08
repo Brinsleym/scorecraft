@@ -10,6 +10,10 @@ use crate::state::Theme;
 pub const BRAND: Color32 = Color32::from_rgb(0xc4, 0x58, 0x21);
 /// [`BRAND`] under the pointer.
 pub const BRAND_HOVER: Color32 = Color32::from_rgb(0xd2, 0x66, 0x2e);
+/// The brand palette's dark surfaces (`assets/brand/README.md`): ink behind the pages, and the
+/// raised surface of the reader's toolbars, in the dark theme.
+pub const BRAND_INK: Color32 = Color32::from_rgb(0x18, 0x18, 0x1b);
+pub const BRAND_SURFACE: Color32 = Color32::from_rgb(0x27, 0x27, 0x2a);
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Tokens {
@@ -95,13 +99,14 @@ impl Tokens {
                 radius: 8,
             },
             Theme::Dark => Tokens {
-                reader_bg: Color32::from_rgb(0x12, 0x13, 0x15),
-                placeholder: Color32::from_rgb(0x2a, 0x2c, 0x30),
-                toolbar_bg: Color32::from_rgb(0x1e, 0x20, 0x23),
+                reader_bg: BRAND_INK,
+                placeholder: BRAND_SURFACE,
+                toolbar_bg: BRAND_SURFACE,
                 text: Color32::from_rgb(0xe8, 0xea, 0xed),
                 icon: Color32::from_rgb(0xdc, 0xdf, 0xe3),
                 accent: BRAND,
-                hover: Color32::from_rgb(0x34, 0x37, 0x3c),
+                // zinc-700, a step up from the toolbar.
+                hover: Color32::from_rgb(0x3f, 0x3f, 0x46),
                 error: Color32::from_rgb(0xff, 0x7b, 0x72),
                 sidebar_bg: Color32::from_rgb(0x1e, 0x1e, 0x1e),
                 main_bg: Color32::from_rgb(0x24, 0x24, 0x24),

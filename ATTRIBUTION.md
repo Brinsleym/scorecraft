@@ -10,12 +10,14 @@ to them ([`docs/contributing.md`](docs/contributing.md#adding-an-asset)).
 
 | Path | Title | Author | Source | License |
 |---|---|---|---|---|
+| `assets/app-icon/*`, `apps/scorecraft-web/favicon.svg`, `apps/scorecraft-web/icons/*`, `apps/scorecraft-android/res/*` | ScoreCraft app icon (eighth note on an orange tile) and its renders | The owner's design (2026-11-08), drawn as vectors by ScoreCraft contributors | Original | MIT OR Apache-2.0 |
 | `crates/ui-egui/assets/tabler/tabler-icons.ttf` | Tabler Icons webfont 3.31.0, cut to the shell's glyphs | Paweł Kuna | <https://github.com/tabler/tabler-icons> (`@tabler/icons-webfont@3.31.0`) | MIT (`crates/ui-egui/assets/tabler/LICENSE`) |
 
 ## Used by tests and docs only
 
 | Path | Title | Author | Source | License |
 |---|---|---|---|---|
+| `assets/brand/*.svg` | ScoreCraft logo lockups and palette card | The owner's design (2026-11-08), drawn by ScoreCraft contributors; the text is outlined from Space Grotesk Bold (Florian Karsten) and JetBrains Mono (JetBrains) | Original; fonts from <https://github.com/google/fonts> | MIT OR Apache-2.0; the outlined glyphs SIL OFL 1.1 (`assets/brand/fonts/`) |
 | `docs/images/*.png` | README screenshots of ScoreCraft | ScoreCraft contributors; the pages and covers shown are public-domain scores from `corpus/public-domain` (Mutopia Project, Wikimedia Commons) | Captured from the desktop app over the control channel | MIT OR Apache-2.0; the scores shown are Public Domain (provenance in `corpus/public-domain/corpus.toml`) |
 
 ## Reused code (dependencies, not copied files)

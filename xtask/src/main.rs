@@ -11,6 +11,7 @@
 mod ci;
 mod corpus;
 mod graph;
+mod ico;
 mod layers;
 mod parity;
 mod perf;
@@ -27,6 +28,7 @@ tasks:
   corpus   the pinned public-domain score corpus: --all downloads and verifies it,
            --references renders PDFium references (needs Python 3 with pypdfium2 and pillow);
            takes --library and --max-pages like test-corpus
+  ico      pack assets/app-icon/hicolor's PNGs into assets/app-icon/scorecraft.ico
   layers   check crate layering, lints and crate-root attributes (docs/architecture.md §3)
   parity   regenerate the feature catalog and docs/parity-checklist.md (--check: fail if stale)
   scorecard regenerate docs/scorecard.md (--check: fail if stale)
@@ -50,6 +52,7 @@ fn main() -> ExitCode {
     let result = match args.first().map(String::as_str) {
         Some("ci") => ci::run(&root),
         Some("corpus") => corpus::run(&root, &args),
+        Some("ico") => ico::run(&root),
         Some("layers") => layers::run(&root),
         Some("perf") => perf::run(&root, args.iter().any(|a| a == "--update-baseline")),
         Some("test-corpus") => corpus::test(&root, &args),

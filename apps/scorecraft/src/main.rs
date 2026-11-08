@@ -18,6 +18,7 @@
 // Release builds on Windows have no console window.
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
+mod app_icon;
 mod control;
 
 use std::path::PathBuf;
@@ -284,6 +285,8 @@ fn main() -> std::process::ExitCode {
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_title("ScoreCraft")
+            .with_app_id("app.scorecraft")
+            .with_icon(app_icon::window_icon())
             .with_inner_size([1280.0, 860.0])
             .with_min_inner_size([480.0, 360.0])
             .with_drag_and_drop(true),

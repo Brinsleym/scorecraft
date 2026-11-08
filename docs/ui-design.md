@@ -24,7 +24,9 @@ ScoreCraft's look is its own. We match enScore's *conventions* where a musician'
 
 All colours, radii, spacings and font sizes come from `theme::Tokens` (`ui-egui/src/theme.rs`),
 never hard-coded. The accent in every theme is ScoreCraft's brand colour, `#c45821` (owner,
-2026-11-08; see [decisions](decisions.md)). Themes:
+2026-11-08; see [decisions](decisions.md)). The dark reader sits on the brand palette's ink
+`#18181B` with its toolbars on surface `#27272A` ([`assets/brand/`](../assets/brand/README.md)).
+Themes:
 
 | Theme | Use |
 |---|---|
@@ -131,6 +133,7 @@ PNGs of public-domain scores.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-08 | minor | Brand palette: the dark reader's backdrop and toolbars use ink `#18181B` and surface `#27272A`; app icon and logo in `assets/` |
 | 2026-11-08 | minor | Menus (menu rows, panel, danger rows) and selection (frame, halo, check badge, selection header) |
 | 2026-11-08 | minor | Styling rules: Tabler icons (outline, stroke 2), Segoe UI, type scale, tight titles, icon-to-text sizes; Search leaves the sidebar |
 | 2026-11-08 | minor | Library ported from the owner's Stitch concept: brand accent `#c45821`, title-row buttons, filled card grid with item counts |
