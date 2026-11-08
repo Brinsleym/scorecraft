@@ -647,8 +647,8 @@ impl App {
         let actions = egui::Frame::NONE
             .fill(tokens.main_bg)
             .inner_margin(egui::Margin {
-                left: 32,
-                right: 32,
+                left: crate::library_view::PAGE_MARGIN as i8,
+                right: crate::library_view::PAGE_MARGIN as i8,
                 top: 24,
                 bottom: 8,
             })

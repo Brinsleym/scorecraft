@@ -136,6 +136,12 @@ only the library.
   and Move to Folder, Add to List, Export / Share and Delete (red under the pointer), then a
   hairline above the grid.
 - **Colours** come only from `theme::Tokens`; the accent is the brand colour.
+- **Scrolling** (owner, 2026-11-08): every vertical list scrolls through `scroll::SmoothScroll`.
+  A mouse wheel's notch is eased in over about a quarter of a second; touch drags coast and
+  rubber-band (the suite's egui), and trackpads follow the finger. Where the page has a margin,
+  the scroll bar sits centred in the right margin, not over the content, so the content's left
+  and right margins match (the library window's are 32 points, `library_view::PAGE_MARGIN`).
+  The bar is a muted 8-point pill on no track, brighter under the pointer.
 
 ## Localisation
 
@@ -153,6 +159,7 @@ PNGs of public-domain scores.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-08 | minor | Scrolling: eased mouse wheel in every list; the scroll bar sits in the page's right margin |
 | 2026-11-08 | minor | Window title bar drawn by ScoreCraft: Back, sidebar toggle, app icon and name, caption buttons; drag, snap, double-click and edge resize |
 | 2026-11-08 | minor | Brand palette: the dark reader's backdrop and toolbars use ink `#18181B` and surface `#27272A`; app icon and logo in `assets/` |
 | 2026-11-08 | minor | Menus (menu rows, panel, danger rows) and selection (frame, halo, check badge, selection header) |
