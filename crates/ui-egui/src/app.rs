@@ -9,7 +9,7 @@ use crate::icons::Icon;
 use crate::reader::ReaderCanvas;
 use crate::settings::Settings;
 use crate::state::{Theme, UiState};
-use crate::theme::Tokens;
+use crate::theme::{TOOLBAR_ICON, Tokens};
 
 /// What the shell needs from the platform.
 pub trait Platform {
@@ -55,6 +55,10 @@ pub trait Platform {
     fn set_click(&mut self, _click: Option<(f64, u8, u8, bool)>) -> Result<(), String> {
         Err("this build has no audio output".into())
     }
+    /// The system's interface fonts (Segoe UI on Windows). Asked once, at the first frame.
+    fn ui_fonts(&self) -> crate::theme::UiFonts {
+        crate::theme::UiFonts::default()
+    }
 }
 
 /// A platform that does nothing (tests, snapshots).
@@ -96,6 +100,7 @@ pub struct App {
     sent_full_screen: Option<bool>,
     /// The theme last applied to egui.
     applied_theme: Option<Theme>,
+    fonts_installed: bool,
     /// The library window (LIB-14).
     library: crate::library_view::LibraryView,
     /// The Score panel: details, pages, bookmarks.
@@ -164,6 +169,7 @@ impl App {
             platform,
             sent_full_screen: None,
             applied_theme: None,
+            fonts_installed: false,
             library: crate::library_view::LibraryView::new(),
             score_panel: crate::score_panel::ScorePanel::new(),
             score_cache: None,
@@ -403,6 +409,10 @@ impl App {
     pub fn ui(&mut self, ui: &mut Ui) {
         let ctx = ui.ctx().clone();
         let tokens = Tokens::for_theme(self.state.theme);
+        if !self.fonts_installed {
+            crate::theme::install_fonts(&ctx, &self.platform.ui_fonts());
+            self.fonts_installed = true;
+        }
         if self.applied_theme != Some(self.state.theme) {
             tokens.apply(self.state.theme, &ctx);
             self.applied_theme = Some(self.state.theme);
@@ -918,7 +928,7 @@ impl App {
         let r = craft_ui::buttons::IconButton::new(label, size, &style)
             .selected(selected)
             .show(ui, |ui, rect, colour| {
-                crate::icons::paint(ui.painter(), rect, colour, icon)
+                crate::icons::paint_centered(ui.painter(), rect, TOOLBAR_ICON, colour, icon)
             })
             .on_hover_text(label);
         r.clicked()
@@ -1109,7 +1119,7 @@ fn clear_ink_button(ui: &mut Ui, tokens: &Tokens, run: &mut Vec<(&'static str, V
     let style = tokens.icon_button();
     let r = craft_ui::buttons::IconButton::new("Clear Ink", Vec2::splat(tokens.button), &style)
         .show(ui, |ui, rect, colour| {
-            crate::icons::paint(ui.painter(), rect, colour, Icon::ClearInk)
+            crate::icons::paint_centered(ui.painter(), rect, TOOLBAR_ICON, colour, Icon::ClearInk)
         })
         .on_hover_text("Clear Ink");
     egui::Popup::menu(&r).show(|ui| {
@@ -1855,8 +1865,8 @@ mod tests {
         // The sidebar's first row goes back to the open score.
         script(&mut app, &ctx, 2.0, click(60.0, 26.0));
         assert!(!app.state.library);
-        app.library.go(Section::Search);
-        assert_eq!(app.library.section, Section::Search);
+        // Search is the library's header button, not a sidebar row (owner, 2026-11-08).
+        assert!(Section::MAIN.iter().all(|(_, label, _)| *label != "Search"));
     }
 
     #[test]

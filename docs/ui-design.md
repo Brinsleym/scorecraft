@@ -1,6 +1,6 @@
 # UI design system
 
-> **Last reviewed:** 2026-10-28 · **Last updated:** 2026-11-08 · **Change:** minor (the library ported from the owner's Stitch concept: brand accent, header buttons, card grid; earlier: the owner's first hands-on feedback) · **Target:** enScore 3.7 (2026)
+> **Last reviewed:** 2026-10-28 · **Last updated:** 2026-11-08 · **Change:** minor (styling rules: Tabler icons, Segoe UI, the type scale; Search leaves the sidebar; earlier: the library ported from the owner's Stitch concept) · **Target:** enScore 3.7 (2026)
 
 ScoreCraft's look is its own. We match enScore's *conventions* where a musician's hands expect them
 (tap to turn, pen to mark, the score filling the screen), never its visual identity, icons or copy
@@ -57,9 +57,10 @@ hue kept), Sepia (with intensity), Inverted.
 ## Library layout
 
 No full-width toolbar. A compact, resizable left sidebar of rows (Library, Lists, Recordings,
-Practice, Search, Recently Deleted, a divider, Settings); the section shown is filled, with the
+Practice, Recently Deleted, a divider, Settings); the section shown is filled, with the
 accent on its left edge and icon. Beside it, a large page title with its buttons on the right
-(More, Search this folder, Sort with a chevron, New Folder, and Import filled with the accent);
+(More, Search, Sort with a chevron, New Folder, and Import filled with the accent; Search is
+the header's button, not a sidebar row, owner 2026-11-08);
 a grid of folders and covers or a dense list; a right-click menu on each score (Edit Details, Add
 to list, Move to, Select, Share, Print, Delete); multi-select for moves, lists and deleting. Spec:
 `docs/spec/library.md` LIB-14.
@@ -73,9 +74,34 @@ sidebar rows are 36 pt high (desktop sizes; tablets still need the 44 pt targets
 ## Widgets
 
 Shared widgets in `ui-egui/src/widgets/` (buttons, icon buttons, sliders with numeric entry,
-segmented controls, colour swatches, list rows with swipe actions). Icons are ScoreCraft's own,
-painted with egui shapes in `ui-egui/src/icons.rs` so they never depend on an emoji font (glyphs
-such as 📁 and ↻ showed as empty boxes, owner 2026-11-01); none is copied from another app.
+segmented controls, colour swatches, list rows with swipe actions). Icons follow the styling rules
+below; never draw an icon with an emoji or symbol character in a label (glyphs such as 📁 and ↻
+show as empty boxes, owner 2026-11-01).
+
+## Styling rules (every screen)
+
+The owner's rules (2026-11-08), taken from the Stitch concept. They apply to every element, not
+only the library.
+
+- **Icons: [Tabler Icons](https://tabler.io/icons), outline, stroke 2.** Use the most typical
+  Tabler name for the meaning (`search`, `trash`, `settings`, `x`, `plus`, `chevron-down`…). Fixed
+  choices: Library `books`, Lists `menu-2`, Recordings `microphone`, Practice `chart-line`.
+  Filled variants (`star-filled`) only for an on state. Icons are glyphs of a subset of Tabler's
+  icon font in `crates/ui-egui/assets/tabler/`, one `Icon` variant per glyph in `icons.rs`; to
+  add one, add its codepoint there and re-cut the subset (the README beside the font).
+- **Font: Segoe UI.** Regular for everything, Semibold (`theme::semibold()`) for page titles and
+  group headings. The concept's *medium* (500) has no Segoe UI face and renders Regular, as in a
+  browser. Segoe UI is Microsoft's and may not be bundled: Windows loads it from the system
+  (`Platform::ui_fonts`); elsewhere egui's own fonts stand in.
+- **Type scale (points):** 13 body, buttons and sidebar rows (`theme::TEXT`); 12 card titles
+  (`SMALL`); 11 counts and hints (`CAPTION`); 30 page titles (`TITLE`). Egui's `TextStyle`s carry
+  these, so plain labels follow without extra code.
+- **Letter spacing:** page titles and card titles are *tight*, −0.025 em (`theme::TIGHT` × size);
+  everything else is normal.
+- **Icon to text:** an icon beside text is 16/13 of the text's size (`theme::icon_for`: 16 beside
+  13). Header buttons are 36 high with a 16 icon; reader toolbar buttons are 44 with a 20 icon
+  (`TOOLBAR_ICON`); a menu chevron is 12; a folder tile's icon is about 0.39 of the tile's width.
+- **Colours** come only from `theme::Tokens`; the accent is the brand colour.
 
 ## Localisation
 
@@ -93,6 +119,7 @@ PNGs of public-domain scores.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-08 | minor | Styling rules: Tabler icons (outline, stroke 2), Segoe UI, type scale, tight titles, icon-to-text sizes; Search leaves the sidebar |
 | 2026-11-08 | minor | Library ported from the owner's Stitch concept: brand accent `#c45821`, title-row buttons, filled card grid with item counts |
 | 2026-11-01 | minor | Owner's first hands-on feedback: what stays off the score view, the library's sidebar, floating toolbar and score menu, painted icons |
 | 2026-10-28 | major | First version |

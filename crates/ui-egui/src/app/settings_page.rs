@@ -7,11 +7,15 @@ use serde_json::{Value, json};
 
 use super::{App, LAYOUTS};
 use crate::state::Theme;
-use crate::theme::Tokens;
+use crate::theme::{self, Tokens};
 
 fn group(ui: &mut Ui, tokens: &Tokens, title: &str) {
     ui.add_space(14.0);
-    ui.label(RichText::new(title).size(16.0).strong().color(tokens.text));
+    ui.label(
+        RichText::new(title)
+            .font(egui::FontId::new(16.0, theme::semibold()))
+            .color(tokens.strong),
+    );
     ui.add_space(2.0);
 }
 
@@ -46,9 +50,9 @@ impl App {
                     .show(ui, |ui| {
                         ui.label(
                             RichText::new("Settings")
-                                .size(22.0)
-                                .strong()
-                                .color(tokens.text),
+                                .font(egui::FontId::new(theme::TITLE, theme::semibold()))
+                                .extra_letter_spacing(theme::TITLE * theme::TIGHT)
+                                .color(tokens.strong),
                         );
 
                         group(ui, tokens, "Appearance");

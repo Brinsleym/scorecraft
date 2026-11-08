@@ -122,7 +122,9 @@ a full disk must produce an error the user or agent can act on, never a panic. T
    synthetic-generator, oracle and fuzz tests. Keep corpus floors and the parity floor from
    regressing.
 5. **The UI is thin and data-driven.** UI state lives in `ui-egui/src/state.rs` (serde) so the
-   control channel can read and drive it. Colours and sizes come from `theme::Tokens`.
+   control channel can read and drive it. Colours and sizes come from `theme::Tokens`. Every
+   screen follows the [styling rules](docs/ui-design.md#styling-rules-every-screen): Tabler
+   icons (outline, stroke 2), Segoe UI, the type scale and its icon-to-text sizes.
 6. **Verify UI changes visually.** Render offscreen (`cargo run -p scorecraft-ui-egui --example snapshot`)
    or launch with `--control` and take `ui.screenshot`. Look at the PNG. Demo scores must be
    public domain (IMSLP / Mutopia files marked public domain), never personal files. When fetching

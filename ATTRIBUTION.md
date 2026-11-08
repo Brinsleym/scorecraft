@@ -10,7 +10,7 @@ to them ([`docs/contributing.md`](docs/contributing.md#adding-an-asset)).
 
 | Path | Title | Author | Source | License |
 |---|---|---|---|---|
-| _none yet_ | | | | |
+| `crates/ui-egui/assets/tabler/tabler-icons.ttf` | Tabler Icons webfont 3.31.0, cut to the shell's glyphs | Paweł Kuna | <https://github.com/tabler/tabler-icons> (`@tabler/icons-webfont@3.31.0`) | MIT (`crates/ui-egui/assets/tabler/LICENSE`) |
 
 ## Used by tests and docs only
 
