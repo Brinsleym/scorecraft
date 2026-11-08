@@ -22,6 +22,9 @@ pub struct PageSpec {
     pub rotate: i32,
     /// Five-line staves drawn top to bottom.
     pub staves: u32,
+    /// The page is a scan: one grey-scale image filling the page (white, with a black band
+    /// across its second quarter from the top), drawn under the staves.
+    pub scan: bool,
 }
 
 impl Default for PageSpec {
@@ -31,6 +34,7 @@ impl Default for PageSpec {
             height: LETTER.1,
             rotate: 0,
             staves: 10,
+            scan: false,
         }
     }
 }
@@ -55,6 +59,14 @@ impl PageSpec {
     }
     pub fn with_staves(self, staves: u32) -> Self {
         PageSpec { staves, ..self }
+    }
+    /// A scanned page: an image of the page and nothing else drawn (no staves, no number).
+    pub fn scanned(self) -> Self {
+        PageSpec {
+            scan: true,
+            staves: 0,
+            ..self
+        }
     }
 }
 
@@ -98,7 +110,7 @@ impl PdfBuilder {
     /// Writes the file. A builder with no pages writes a valid document with an empty page tree.
     pub fn build(&self) -> Vec<u8> {
         // Object numbers: 1 catalog, 2 page tree, 3 font, 4 info, then a (page, content) pair
-        // per page.
+        // per page, then the scans' image.
         let mut objects: Vec<Vec<u8>> = Vec::new();
         let page_obj = |i: usize| 5 + 2 * i;
         let kids: Vec<String> = (0..self.pages.len())
@@ -123,12 +135,18 @@ impl PdfBuilder {
         }
         info.push_str(" >>");
         objects.push(info.into_bytes());
+        let image_obj = page_obj(self.pages.len());
         for (i, spec) in self.pages.iter().enumerate() {
             let content = page_content(spec, i + 1);
+            let image = if spec.scan {
+                format!(" /XObject << /Scan {image_obj} 0 R >>")
+            } else {
+                String::new()
+            };
             objects.push(
                 format!(
                     "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {} {}] /Rotate {} \
-                     /Resources << /Font << /F1 3 0 R >> >> /Contents {} 0 R >>",
+                     /Resources << /Font << /F1 3 0 R >>{image} >> /Contents {} 0 R >>",
                     num(spec.width),
                     num(spec.height),
                     spec.rotate,
@@ -140,6 +158,18 @@ impl PdfBuilder {
             stream.extend_from_slice(content.as_bytes());
             stream.extend_from_slice(b"\nendstream");
             objects.push(stream);
+        }
+        if self.pages.iter().any(|p| p.scan) {
+            // 4 × 4 DeviceGray (ISO 32000-1 §8.9.5): white, the second row black.
+            let data = "FFFFFFFF 00000000 FFFFFFFF FFFFFFFF>";
+            objects.push(
+                format!(
+                    "<< /Type /XObject /Subtype /Image /Width 4 /Height 4 /ColorSpace /DeviceGray \
+                     /BitsPerComponent 8 /Filter /ASCIIHexDecode /Length {} >>\nstream\n{data}\nendstream",
+                    data.len()
+                )
+                .into_bytes(),
+            );
         }
         assemble(&objects, Some(4))
     }
@@ -176,6 +206,15 @@ fn page_content(spec: &PageSpec, number: usize) -> String {
     let top = spec.height * 0.92;
     let usable = spec.height * 0.82;
     let mut s = String::from("0 G 0.6 w\n");
+    if spec.scan {
+        let _ = writeln!(
+            s,
+            "q {} 0 0 {} 0 0 cm /Scan Do Q",
+            num(spec.width),
+            num(spec.height)
+        );
+        return s;
+    }
     if spec.staves > 0 && spec.width.is_finite() && spec.height.is_finite() {
         let pitch = usable / f64::from(spec.staves);
         let gap = (pitch / 10.0).max(0.5);
@@ -347,6 +386,7 @@ pub mod hostile {
                 height: 792.0,
                 rotate: 0,
                 staves: 3,
+                scan: false,
             })
             .build()
     }

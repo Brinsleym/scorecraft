@@ -10,8 +10,6 @@ use crate::state::Theme;
 pub const BRAND: Color32 = Color32::from_rgb(0xc4, 0x58, 0x21);
 /// [`BRAND`] under the pointer.
 pub const BRAND_HOVER: Color32 = Color32::from_rgb(0xd2, 0x66, 0x2e);
-/// [`BRAND`] lightened, for text on a tint of it (Settings' *Active* tag).
-pub const BRAND_LIGHT: Color32 = Color32::from_rgb(0xf2, 0x7e, 0x3d);
 /// The brand palette's dark surfaces (`assets/brand/README.md`): ink behind the pages, and the
 /// raised surface of the reader's toolbars, in the dark theme.
 pub const BRAND_INK: Color32 = Color32::from_rgb(0x18, 0x18, 0x1b);
@@ -60,10 +58,9 @@ pub struct Tokens {
     pub danger: Color32,
     pub danger_hover: Color32,
     pub danger_border: Color32,
-    /// The Settings page (owner's Stitch concept, 2026-11-08): the page behind its cards; the
-    /// cards and their edge; wells inside a card (a row's icon, a segmented control); a
+    /// The Settings page (owner's Stitch concept, 2026-11-08; it sits on the Library's `main_bg`):
+    /// the cards and their edge; wells inside a card (a row's icon, a segmented control); a
     /// section's icon badge and its edge; the lines between a card's rows and between sections.
-    pub page_bg: Color32,
     pub panel: Color32,
     pub panel_edge: Color32,
     pub inset: Color32,
@@ -121,7 +118,6 @@ impl Tokens {
                 danger: Color32::from_rgb(0xc0, 0x2b, 0x2b),
                 danger_hover: Color32::from_rgb(0xfd, 0xec, 0xec),
                 danger_border: Color32::from_rgba_unmultiplied(0xdc, 0x26, 0x26, 77),
-                page_bg: Color32::from_rgb(0xf3, 0xf2, 0xef),
                 panel: Color32::WHITE,
                 panel_edge: Color32::from_rgb(0xe0, 0xde, 0xd9),
                 inset: Color32::from_rgb(0xf4, 0xf3, 0xf0),
@@ -175,7 +171,6 @@ impl Tokens {
                 // The concept's canvas, cards (#242424, edge #333), wells (#1c1c1c), badges
                 // (#252525, edge #383838), rules (#2d2d2d, #292929); emerald-400 on
                 // emerald-950 at 40 % with emerald-700 at 40 %.
-                page_bg: Color32::from_rgb(0x15, 0x13, 0x10),
                 panel: Color32::from_rgb(0x24, 0x24, 0x24),
                 panel_edge: Color32::from_rgb(0x33, 0x33, 0x33),
                 inset: Color32::from_rgb(0x1c, 0x1c, 0x1c),

@@ -1,6 +1,6 @@
 # ScoreCraft architecture
 
-> **Last reviewed:** 2026-10-28 · **Last updated:** 2026-10-31 · **Change:** patch (current state: M1 foundation crates, the library store and its commands; earlier: first engine commands; earlier: page cache and pre-rendering; earlier: PDF adapter on PDFCraft 0.15.0 with the vello_cpu patch; earlier: §16 one egui on craft-ui, §17 web runtime, sync redesigned around Google Drive and device-to-device, iPad pen host; earlier: PDF backend reuses PDFCraft's crates, §15; first version) · **Target:** enScore 3.7 (2026)
+> **Last reviewed:** 2026-10-28 · **Last updated:** 2026-11-08 · **Change:** patch (dark and sepia recolour scans too; earlier: current state: M1 foundation crates, the library store and its commands; earlier: first engine commands; earlier: page cache and pre-rendering; earlier: PDF adapter on PDFCraft 0.15.0 with the vello_cpu patch; earlier: §16 one egui on craft-ui, §17 web runtime, sync redesigned around Google Drive and device-to-device, iPad pen host; earlier: PDF backend reuses PDFCraft's crates, §15; first version) · **Target:** enScore 3.7 (2026)
 
 ## Current state (2026-10-31)
 
@@ -13,8 +13,9 @@
   byte-budget LRU keyed by page, zoom bucket (eighth-octave steps), filter and region.
   `ScoreView` renders on a miss and pre-renders the current, next and previous pages on a
   background thread with its own document handle; the web build runs the same queue on its one
-  thread. Dark and sepia use PDFCraft's reading colours, so text and line art change colour and
-  images keep theirs.
+  thread. Dark and sepia recolour the rendered page by lightness (black to the ink colour, white
+  to the paper colour), so scanned scores change colour like engraved ones (2026-11-08; before,
+  PDFCraft's reading colours left images, and so scans, unchanged).
 - **Engine and CLI.** `score.open` and `view.render` are the first feature commands (READ-1).
   The session holds one open score until the library lands (M5). `view.render` renders through
   the page cache, can write a PNG through `scorecraft-codecs`, and queues the neighbouring pages
@@ -528,6 +529,7 @@ framework, so it looks and behaves like a Craft app.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-08 | patch | Current state: dark and sepia recolour the rendered page by lightness, so scanned scores change colour too |
 | 2026-10-31 | patch | Current state: M1 foundation crates (geom, raster, doc, ops, format) and the library commands |
 | 2026-10-31 | patch | Current state: `score.open` and `view.render` in the engine, CLI `info` and `render` |
 | 2026-10-31 | patch | Current state: `scorecraft-render` page cache, pre-rendering and dark/sepia filters |

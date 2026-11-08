@@ -1,7 +1,9 @@
-//! Display filters (architecture §7). Dark and sepia remap text and line-art paints through the
-//! PDF backend, so engraved music changes colour while photos and scans keep theirs.
+//! Display filters (architecture §7). Dark and sepia recolour the rendered page by lightness:
+//! black becomes the ink colour, white the paper colour, and the greys between them in step. Done
+//! on the pixels rather than on the PDF's paints, so a scanned score (one picture per page)
+//! changes colour like an engraved one (owner, 2026-11-08: they did nothing on scans).
 
-use scorecraft_pdf::PaperColors;
+use scorecraft_pdf::{Bitmap, PaperColors};
 
 /// How a page is coloured on screen. Display only; the score's file never changes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -46,11 +48,52 @@ impl Filter {
     pub fn from_id(id: &str) -> Option<Filter> {
         Filter::ALL.into_iter().find(|f| f.id() == id)
     }
+
+    /// Recolours `bm`, a page rendered in the file's own colours: each pixel's lightness picks
+    /// its colour between [`PaperColors::ink`] (black) and [`PaperColors::paper`] (white).
+    /// Colour in the file becomes a shade of the two. Nothing to do for [`Filter::Normal`].
+    pub fn recolour(self, bm: &mut Bitmap) {
+        let Some(c) = self.colors() else {
+            return;
+        };
+        let ramp = ramp(c);
+        for w in &mut bm.words {
+            let [r, g, b, a] = w.to_ne_bytes();
+            if a == 0 {
+                continue;
+            }
+            // Rec. 709 lightness of the premultiplied colour, in 0..=255·a.
+            let l = (u32::from(r) * 54 + u32::from(g) * 183 + u32::from(b) * 19) >> 8;
+            let [r, g, b] = if a == 255 {
+                ramp.get(l as usize).copied().unwrap_or(c.paper)
+            } else {
+                // Undo the premultiplication for the lookup, then premultiply the result.
+                let straight = (l * 255 / u32::from(a)).min(255) as usize;
+                let [r, g, b] = ramp.get(straight).copied().unwrap_or(c.paper);
+                let m = |v: u8| ((u16::from(v) * u16::from(a) + 127) / 255) as u8;
+                [m(r), m(g), m(b)]
+            };
+            *w = u32::from_ne_bytes([r, g, b, a]);
+        }
+    }
+}
+
+/// The colour for each lightness, 0 (black: the ink) to 255 (white: the paper).
+fn ramp(c: PaperColors) -> [[u8; 3]; 256] {
+    let mut out = [[0u8; 3]; 256];
+    for (l, slot) in out.iter_mut().enumerate() {
+        let t = l as u32;
+        for ((o, ink), paper) in slot.iter_mut().zip(c.ink).zip(c.paper) {
+            let v = (u32::from(ink) * (255 - t) + u32::from(paper) * t + 127) / 255;
+            *o = v.min(255) as u8;
+        }
+    }
+    out
 }
 
 #[cfg(test)]
 mod tests {
-    use super::Filter;
+    use super::{Bitmap, Filter};
 
     #[test]
     fn ids_round_trip() {
@@ -59,5 +102,38 @@ mod tests {
         }
         assert_eq!(Filter::from_id("neon"), None);
         assert_eq!(Filter::default().colors(), None);
+    }
+
+    fn bitmap(pixels: &[[u8; 4]]) -> Bitmap {
+        Bitmap {
+            width: pixels.len() as u32,
+            height: 1,
+            words: pixels.iter().map(|p| u32::from_ne_bytes(*p)).collect(),
+        }
+    }
+
+    #[test]
+    fn recolour_maps_black_to_ink_and_white_to_paper() {
+        let mut bm = bitmap(&[
+            [0, 0, 0, 255],
+            [255, 255, 255, 255],
+            [128, 128, 128, 255],
+            [0, 0, 0, 0],
+            // Half-covered white, premultiplied.
+            [128, 128, 128, 128],
+        ]);
+        let normal = bm.clone();
+        Filter::Normal.recolour(&mut bm);
+        assert_eq!(bm, normal);
+        Filter::Dark.recolour(&mut bm);
+        let c = Filter::Dark.colors().unwrap();
+        let px = |i: u32| bm.pixel(i, 0).unwrap();
+        assert_eq!(px(0)[..3], c.ink);
+        assert_eq!(px(1)[..3], c.paper);
+        // Mid grey lands between the two.
+        assert!(px(2)[0] > c.paper[0] && px(2)[0] < c.ink[0]);
+        assert_eq!(px(3), [0, 0, 0, 0]);
+        // Premultiplied paper at half cover.
+        assert_eq!(px(4), [14, 14, 14, 128]);
     }
 }

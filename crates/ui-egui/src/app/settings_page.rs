@@ -3,9 +3,10 @@
 //! saved like the rest of the preferences and an agent can make the same change.
 //!
 //! Laid out from the owner's Stitch concept (*ScoreCraft - Settings* and its *Alt*, 2026-11-08):
-//! titled sections of cards on a dark canvas, switches, segmented controls and theme previews.
-//! The concept's parts with nothing behind them yet (MIDI and pedal pairing, Wi-Fi pairing, the
-//! cache meter) are left out until they exist.
+//! titled sections of cards, switches, segmented controls and theme previews. The Library page
+//! is its benchmark (owner, 2026-11-08): the same background, the same page heading, and
+//! subheadings in Title Case rather than capitals. The concept's parts with nothing behind them
+//! yet (MIDI and pedal pairing, Wi-Fi pairing, the cache meter) are left out until they exist.
 
 use egui::{
     Align2, Color32, CornerRadius, FontFamily, FontId, Rect, Response, RichText, Sense, Stroke,
@@ -17,18 +18,19 @@ use super::{App, LAYOUTS};
 use crate::icons::{self, Icon};
 use crate::library_view::LibraryAction;
 use crate::state::Theme;
-use crate::theme::{self, BRAND, BRAND_LIGHT, Tokens};
+use crate::theme::{self, BRAND, Tokens};
 
 /// The concept's spacing, in points: the page's least side margin (owner, 2026-11-08: wider than
-/// the concept's 40 and a narrower column, centred), top and bottom margin, widest column, between
-/// sections, and inside a card.
+/// the concept's 40 and a narrower column, centred), top margin (the Library's), widest column,
+/// between sections, and inside a card.
 const MARGIN_X: f32 = 96.0;
-const MARGIN_Y: f32 = 32.0;
+const MARGIN_Y: f32 = 24.0;
 const MAX_WIDTH: f32 = 760.0;
 const SECTION_GAP: f32 = 28.0;
 const CARD_PAD: i8 = 16;
-/// The 14-point section titles and row labels (the concept's `text-sm`).
+/// The 14-point row labels (the concept's `text-sm`), and the section titles a step up.
 const LABEL: f32 = 14.0;
+const SUBHEADING: f32 = 16.0;
 
 /// Which theme card is chosen.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -77,7 +79,7 @@ impl App {
             ThemeChoice::Light
         };
 
-        egui::Frame::NONE.fill(tokens.page_bg).show(ui, |ui| {
+        egui::Frame::NONE.fill(tokens.main_bg).show(ui, |ui| {
             ui.set_min_size(ui.available_size());
             // The scroll bar sits over the right margin, clear of the centred column.
             crate::scroll::SmoothScroll::vertical("settings")
@@ -261,10 +263,9 @@ impl App {
                                     ("highlighter", "Highlighter"),
                                     ("pen", "Pen"),
                                     ("text", "Text"),
-                                    ("select", "Select"),
                                 ];
                                 let current = markup.get("penButton").and_then(Value::as_str);
-                                caption(ui, tokens, Icon::Bolt, "Pen button action");
+                                caption(ui, tokens, Icon::Bolt, "Pen Button Action");
                                 ui.add_space(8.0);
                                 let labels: Vec<&str> = tools.iter().map(|t| t.1).collect();
                                 let at = tools.iter().position(|t| Some(t.0) == current);
@@ -332,40 +333,26 @@ fn badge(
     icons::paint_centered(p, rect, icon.1, icon.2, icon.0);
 }
 
-/// The page title: the settings icon in a brand-tinted badge, *Settings*, and a rule.
+/// The page title, styled as the Library's: *Settings* in the title size, semibold.
 fn title(ui: &mut Ui, c: &Tokens) {
-    ui.horizontal(|ui| {
-        badge(
-            ui,
-            32.0,
-            8,
-            BRAND.gamma_multiply(0.1),
-            BRAND.gamma_multiply(0.2),
-            (Icon::Settings, 20.0, BRAND),
-        );
-        ui.add_space(10.0);
-        ui.label(
-            RichText::new("Settings")
-                .font(semibold(theme::SELECTION_TITLE))
-                .extra_letter_spacing(theme::SELECTION_TITLE * theme::TIGHT)
-                .color(c.strong),
-        );
-    });
-    ui.add_space(16.0);
-    hline(ui, c.rule);
+    ui.label(
+        RichText::new("Settings")
+            .font(semibold(theme::TITLE))
+            .extra_letter_spacing(theme::TITLE * theme::TIGHT)
+            .color(c.strong),
+    );
 }
 
-/// A section's heading: its icon badge and its title in capitals.
+/// A section's heading: its icon badge and its title, in Title Case as written.
 fn section(ui: &mut Ui, c: &Tokens, icon: Icon, title: &str) {
     ui.add_space(SECTION_GAP);
     ui.horizontal(|ui| {
         badge(ui, 28.0, 8, c.badge, c.badge_edge, (icon, 16.0, BRAND));
         ui.add_space(10.0);
         ui.label(
-            RichText::new(title.to_uppercase())
-                .font(semibold(LABEL))
-                .extra_letter_spacing(LABEL * 0.05)
-                .color(c.text),
+            RichText::new(title)
+                .font(semibold(SUBHEADING))
+                .color(c.strong),
         );
     });
     ui.add_space(12.0);
@@ -607,23 +594,22 @@ fn segmented_grid(
     clicked
 }
 
-/// A small capitalised caption with a brand icon: *Pen button action*.
+/// A small caption with a brand icon, in Title Case as written: *Pen Button Action*.
 fn caption(ui: &mut Ui, c: &Tokens, icon: Icon, text: &str) {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 8.0;
         let (rect, _) = ui.allocate_exact_size(Vec2::splat(14.0), Sense::hover());
         icons::paint(ui.painter(), rect, BRAND, icon);
         ui.label(
-            RichText::new(text.to_uppercase())
+            RichText::new(text)
                 .font(semibold(theme::SMALL))
-                .extra_letter_spacing(theme::SMALL * 0.05)
                 .color(c.muted),
         );
     });
 }
 
 /// One of the three theme cards: a small picture of the theme, its icon and name, and a radio
-/// mark. The chosen card has a brand edge and an *Active* tag.
+/// mark. The chosen card has a brand edge and a filled mark.
 fn theme_card(
     ui: &mut Ui,
     c: &Tokens,
@@ -676,22 +662,13 @@ fn theme_card(
     } else {
         (font(LABEL), c.text)
     };
-    let text = p.text(
+    p.text(
         pos2(icon_rect.right() + 8.0, y),
         Align2::LEFT_CENTER,
         label,
         f,
         color,
     );
-    if selected {
-        let g = p.layout_no_wrap("Active".into(), font(theme::CAPTION), BRAND_LIGHT);
-        let tag = Rect::from_min_size(
-            pos2(text.right() + 8.0, y - g.size().y / 2.0 - 2.0),
-            g.size() + vec2(12.0, 4.0),
-        );
-        p.rect_filled(tag, CornerRadius::same(4), BRAND.gamma_multiply(0.2));
-        p.galley(tag.min + vec2(6.0, 2.0), g, BRAND_LIGHT);
-    }
     let mark = pos2(inner.right() - 8.0, y);
     if selected {
         p.circle_filled(mark, 8.0, BRAND);
