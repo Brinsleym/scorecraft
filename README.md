@@ -58,7 +58,7 @@
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: light)" srcset="docs/images/library-light.png">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/library-dark.png">
     <img alt="The ScoreCraft library: folders and score covers in a grid, with the sidebar on the left" src="docs/images/library-dark.png" width="100%">
   </picture>
 </p>
