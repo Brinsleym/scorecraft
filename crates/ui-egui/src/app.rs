@@ -946,6 +946,7 @@ impl App {
 
     /// Shell shortcuts; turn keys go to the reader's pedal map instead.
     fn shortcuts(&mut self, ctx: &Context) {
+        let typing = ctx.egui_wants_keyboard_input();
         let (open, full, esc) = ctx.input(|i| {
             (
                 i.modifiers.command && i.key_pressed(egui::Key::O),
@@ -953,6 +954,37 @@ impl App {
                 i.key_pressed(egui::Key::Escape),
             )
         });
+        // Ctrl+Z undoes; Ctrl+Shift+Z or Ctrl+Y redoes (Cmd on macOS). A text box keeps its own.
+        let (mut undo, mut redo) = (false, false);
+        if !typing {
+            ctx.input(|i| {
+                for e in &i.events {
+                    if let egui::Event::Key {
+                        key,
+                        pressed: true,
+                        modifiers: m,
+                        ..
+                    } = e
+                        && m.command
+                        && !m.alt
+                    {
+                        match (key, m.shift) {
+                            (egui::Key::Z, false) => undo = true,
+                            (egui::Key::Z, true) | (egui::Key::Y, false) => redo = true,
+                            _ => {}
+                        }
+                    }
+                }
+            });
+        }
+        if (undo || redo) && !self.state.library {
+            // The reader's undo, as its buttons: the open library score's own steps.
+            if let Some(id) = self.session.library_score_id() {
+                let cmd = if undo { "edit.undo" } else { "edit.redo" };
+                let r = self.command(cmd, &json!({ "score": id }));
+                self.report(r);
+            }
+        }
         if open {
             self.pick_and_open();
         }
@@ -1140,16 +1172,6 @@ impl App {
                     ui.close();
                 }
             }
-            crate::menu::separator(ui);
-            if crate::menu::item(ui, Some(Icon::Settings), "Use my defaults")
-                .on_hover_text(
-                    "Forget this score's own layout and turns; the defaults are in Settings",
-                )
-                .clicked()
-            {
-                run.push(("view.override.clear", json!({})));
-                ui.close();
-            }
         });
         let _ = tokens;
     }
@@ -1194,24 +1216,28 @@ impl App {
                 self.layout_menu(ui, tokens, &choice, &mut run);
                 ui.separator();
                 let half = mode == "halfPage";
-                if self.icon_button(ui, tokens, "Half-Page Turns", half, Icon::Half) {
+                if crate::icons::captioned(ui, tokens, Icon::Half, "Half Page", half, tokens.button)
+                    .on_hover_text("Half-Page Turns")
+                    .clicked()
+                {
                     // Turning it on snaps the split to the gap between systems (G2).
                     run.push(("view.turn.halfPage", json!({ "on": !half, "snap": !half })));
                 }
                 let alt = mode == "alternating";
-                if self.icon_button(ui, tokens, "Alternating Turns", alt, Icon::Alternate) {
+                if crate::icons::captioned(
+                    ui,
+                    tokens,
+                    Icon::Alternate,
+                    "Alternating",
+                    alt,
+                    tokens.button,
+                )
+                .on_hover_text("Alternating Turns")
+                .clicked()
+                {
                     run.push(("view.turn.alternating", json!({ "on": !alt })));
                 }
                 ui.separator();
-                if self.icon_button(
-                    ui,
-                    tokens,
-                    "Landscape Page Zoom",
-                    fit == "width",
-                    Icon::FitWidth,
-                ) {
-                    run.push(("view.zoom.landscapeFit", json!({ "on": fit != "width" })));
-                }
                 if self.icon_button(ui, tokens, "Zoom Out", false, Icon::ZoomOut) {
                     run.push(("view.zoom.set", json!({ "zoom": (zoom / 1.25).max(1.0) })));
                 }
@@ -1252,6 +1278,10 @@ impl App {
                 }
             });
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                // The overflow menu, anchored at the far right (owner, 2026-11-08).
+                ui.add_enabled_ui(has, |ui| {
+                    more_menu(ui, tokens, fit == "width", &mut run);
+                });
                 let playing = self
                     .session
                     .dispatch("list.state", &json!({}))
@@ -1295,6 +1325,26 @@ impl App {
             self.report(r);
         }
     }
+}
+
+/// The toolbar's far-right "..." menu: the view options used too rarely for a button of their
+/// own (owner, 2026-11-08). Landscape Page Zoom is checked while it is on.
+fn more_menu(ui: &mut Ui, tokens: &Tokens, fit_width: bool, run: &mut Vec<(&'static str, Value)>) {
+    let style = tokens.icon_button();
+    let r = craft_ui::buttons::IconButton::new("More", Vec2::splat(tokens.button), &style)
+        .show(ui, |ui, rect, colour| {
+            crate::icons::paint_centered(ui.painter(), rect, TOOLBAR_ICON, colour, Icon::More)
+        })
+        .on_hover_text("More");
+    egui::Popup::menu(&r).show(|ui| {
+        if crate::menu::choice(ui, Some(Icon::FitWidth), "Landscape Page Zoom", fit_width)
+            .on_hover_text("Fill the width with the page and scroll down it")
+            .clicked()
+        {
+            run.push(("view.zoom.landscapeFit", json!({ "on": !fit_width })));
+            ui.close();
+        }
+    });
 }
 
 /// Clear Ink (owner, 2026-11-01): removes the markings from the pages on screen, or the whole
@@ -2178,6 +2228,51 @@ mod tests {
             .unwrap();
         assert_eq!(trashed["scores"].as_array().unwrap().len(), 1);
         assert!(app.state.message.is_none(), "{:?}", app.state.message);
+    }
+
+    /// Ctrl+Z undoes and Ctrl+Y or Ctrl+Shift+Z redoes the open score's markup (owner,
+    /// 2026-11-08), each one step, as the markup toolbar's icons do.
+    #[test]
+    fn ctrl_z_undoes_and_ctrl_y_redoes_markup() {
+        let (mut app, _) = app_with_score(1);
+        let ctx = Context::default();
+        frames(&mut app, &ctx, 1, Vec::new());
+        let id = app.session.library_score_id().unwrap();
+        app.command("annotate.tool.stamp", &json!({})).unwrap();
+        app.command(
+            "annotate.stamp.place",
+            &json!({ "x": 200.0, "y": 300.0, "space": "page", "page": 1 }),
+        )
+        .unwrap();
+        let key = |key, shift| egui::Event::Key {
+            key,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers {
+                shift,
+                ..egui::Modifiers::COMMAND
+            },
+        };
+        let direct = |app: &mut App, cmd: &str| {
+            let r = app.session.dispatch(cmd, &json!({ "score": id })).unwrap();
+            r.get("undid")
+                .or_else(|| r.get("redid"))
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_owned()
+        };
+        // Ctrl+Z took the stamp away: the next redo puts it back.
+        frames(&mut app, &ctx, 1, vec![key(egui::Key::Z, false)]);
+        assert_eq!(app.state.message, None);
+        assert_eq!(direct(&mut app, "edit.redo"), "Place Stamp");
+        // Undo it directly, then Ctrl+Y redoes it: the next undo takes it away again.
+        assert_eq!(direct(&mut app, "edit.undo"), "Place Stamp");
+        frames(&mut app, &ctx, 1, vec![key(egui::Key::Y, false)]);
+        assert_eq!(direct(&mut app, "edit.undo"), "Place Stamp");
+        // Ctrl+Shift+Z redoes too.
+        frames(&mut app, &ctx, 1, vec![key(egui::Key::Z, true)]);
+        assert_eq!(direct(&mut app, "edit.undo"), "Place Stamp");
     }
 
     #[test]

@@ -1,11 +1,12 @@
 //! The markup toolbar (spec `docs/spec/ink.md`, "The markup toolbar"): *Draw with Touch*, touch
-//! lock, the tools, the eraser's modes, the stamps, eight swatches, the palette, the width
+//! lock, the tools (icons over captions), the eraser's modes, the stamps, eight swatches, the palette, the width
 //! slider, the selection's actions, and undo. Its settings are on the library's Settings page. It reads `annotate.state` and
 //! returns the commands to run; it changes nothing itself.
 
 use egui::{Color32, Rect, Sense, Stroke, Ui, vec2};
 use serde_json::{Value, json};
 
+use crate::icons::{self, Icon};
 use crate::ink::{InkCanvas, parse_color};
 use crate::theme::Tokens;
 
@@ -133,15 +134,21 @@ pub fn bar(
             run.push(("input.touch.lock", json!({ "on": !lock })));
         }
         ui.separator();
-        for (id, label, cmd) in [
-            ("pen", "Pen", "annotate.tool.pen"),
-            ("highlighter", "Highlighter", "annotate.tool.highlighter"),
-            ("eraser", "Eraser", eraser_cmd(state)),
-            ("text", "Text", "annotate.tool.text"),
-            ("stamp", "Stamp", "annotate.tool.stamp"),
-            ("select", "Select", "annotate.tool.select"),
+        let h = tokens.button;
+        for (id, label, icon, cmd) in [
+            ("pen", "Pen", Icon::Pen, "annotate.tool.pen"),
+            (
+                "highlighter",
+                "Highlighter",
+                Icon::Highlighter,
+                "annotate.tool.highlighter",
+            ),
+            ("eraser", "Eraser", Icon::Eraser, eraser_cmd(state)),
+            ("text", "Text", Icon::Text, "annotate.tool.text"),
+            ("stamp", "Stamp", Icon::Stamp, "annotate.tool.stamp"),
+            ("select", "Select", Icon::Select, "annotate.tool.select"),
         ] {
-            if ui.selectable_label(tool == id, label).clicked() {
+            if icons::captioned(ui, tokens, icon, label, tool == id, h).clicked() {
                 run.push((cmd, json!({})));
             }
             if id == "eraser" && tool == "eraser" {
@@ -156,7 +163,7 @@ pub fn bar(
         }
         if settings.show_ruler_button {
             let on = state.get("ruler").is_some_and(|r| !r.is_null());
-            if ui.selectable_label(on, "Ruler").clicked() {
+            if icons::captioned(ui, tokens, Icon::Ruler, "Ruler", on, h).clicked() {
                 run.push(("annotate.ruler.show", json!({ "on": !on })));
             }
         }
@@ -187,7 +194,8 @@ pub fn bar(
                 }
             }
             if let Some(palette) = state.get("palette").and_then(Value::as_array) {
-                ui.menu_button("Palette", |ui| {
+                let r = icons::small_button_sized(ui, Icon::Palette, "Palette", size, false);
+                egui::Popup::menu(&r).show(|ui| {
                     ui.label("Replaces the selected swatch");
                     egui::Grid::new("palette")
                         .spacing([2.0, 2.0])
@@ -284,10 +292,12 @@ pub fn bar(
         }
         ui.separator();
         if let Some(id) = score {
-            if ui.button("Undo").clicked() {
+            if icons::small_button_sized(ui, Icon::Undo, "Undo (Ctrl+Z)", size, false).clicked() {
                 run.push(("edit.undo", json!({ "score": id })));
             }
-            if ui.button("Redo").clicked() {
+            if icons::small_button_sized(ui, Icon::Redo, "Redo (Ctrl+Shift+Z)", size, false)
+                .clicked()
+            {
                 run.push(("edit.redo", json!({ "score": id })));
             }
         }
