@@ -56,6 +56,13 @@
   </tr>
 </table>
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="docs/images/library-light.png">
+    <img alt="The ScoreCraft library: folders and score covers in a grid, with the sidebar on the left" src="docs/images/library-dark.png" width="100%">
+  </picture>
+</p>
+
 ## Where it stands
 
 Milestones are defined in [`docs/roadmap.md`](docs/roadmap.md#milestones). **67 of the 124
@@ -83,6 +90,32 @@ its milestone. The owner's latest answers on how things should behave are record
 
 The features ScoreCraft is being built to match, from enScore's public descriptions. Each one has a
 row, a command id and an estimate in the [feature map](docs/feature-map.md).
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img alt="A two-page spread of a Joplin rag with a highlighted tempo marking, a red circle round two bars, a typed note, a tick, and p and crescendo stamps" src="docs/images/reader-ink.png"><br>
+      <b>Mark it up.</b> Pen, highlighter, typed notes and dynamics stamps, drawn over the page without touching the PDF.
+    </td>
+    <td width="50%" valign="top">
+      <img alt="A half-page turn: the top of page 2 already showing above the bottom half of page 1, split by an orange line" src="docs/images/reader-halfpage.png"><br>
+      <b>Half-page turns.</b> The top of the next page arrives while you play the bottom of this one.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img alt="The library in selection mode: four items framed in orange with check badges, and Move to Folder, Add to List, Export / Share and Delete in the header" src="docs/images/selection.png"><br>
+      <b>Select many.</b> Move, add to a setlist, export or delete scores and folders together.
+    </td>
+    <td width="50%" valign="top">
+      <img alt="A score's right-click menu with its Move to Folder submenu open, listing the library's folders" src="docs/images/context-menu.png"><br>
+      <b>Right-click menus.</b> Every score and folder action is one click away.
+    </td>
+  </tr>
+</table>
+
+<sub>Screenshots from the Windows desktop app. The scores are public-domain editions from
+<a href="corpus/public-domain">the test corpus</a>.</sub>
 
 **Read anything.** Open any PDF, scanned or engraved, crisp at every zoom. Single-page, two-page and
 full-screen layouts; dark, sepia and inverted filters for dim stages; an Enhance filter for tired
