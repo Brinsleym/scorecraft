@@ -130,3 +130,13 @@ an account requirement would contradict offline-first.
 The Crafting Apps' shared standards live in a private repository. ScoreCraft keeps its own copies,
 in its own words, in [`standards/`](standards/README.md), so outside contributors can read every
 rule they are held to.
+
+## 2026-11-08: Brand colour and the library's look
+
+ScoreCraft's brand colour is `#c45821`, the accent in every theme (`theme::BRAND`). The library
+window follows the owner's own concept, drawn in Google Stitch: a sidebar of sections, a title row
+with its buttons, and a grid of folder tiles and covers. Reason: the owner chose the colour as
+ScoreCraft's own, distinct from enScore's; the arrangement (sidebar, grid of covers) is the
+convention a musician expects, while colours, icons and button layout are ScoreCraft's
+([clean-room §1](clean-room.md#1-what-we-copy-and-what-we-never-copy)). The concept's screens are
+a reference only; nothing of their HTML ships.
