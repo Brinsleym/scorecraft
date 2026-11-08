@@ -60,6 +60,9 @@ pub struct UiState {
     pub full_screen: bool,
     pub keep_awake: KeepAwake,
     pub theme: Theme,
+    /// The theme follows the system's light or dark setting (`ui.theme.set` `system`); `theme`
+    /// is then the one the system asks for.
+    pub theme_system: bool,
     /// The last error, shown until the next action.
     pub message: Option<String>,
     /// The library window is shown over the reader (LIB-14).

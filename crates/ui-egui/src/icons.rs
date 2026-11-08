@@ -58,6 +58,23 @@ pub enum Icon {
     /// Export or share a copy.
     Share,
     Print,
+    // The Settings page (owner's Stitch concept, 2026-11-08).
+    Palette,
+    Sun,
+    Moon,
+    SystemTheme,
+    Screen,
+    Book,
+    Swipe,
+    PageLayout,
+    Turns,
+    Ruler,
+    Circle,
+    Square,
+    Bolt,
+    CloudUpload,
+    Cloud,
+    Database,
     /// The title bar's sidebar toggle (hamburger).
     Menu,
 }
@@ -110,6 +127,22 @@ impl Icon {
             Icon::AddToList => '\u{f008}',                // playlist-add
             Icon::Share => '\u{eb47}',                    // upload
             Icon::Print => '\u{eb0e}',                    // printer
+            Icon::Palette => '\u{eb01}',                  // palette
+            Icon::Sun => '\u{eb30}',                      // sun
+            Icon::Moon => '\u{eaf8}',                     // moon
+            Icon::SystemTheme => '\u{eff3}',              // circle-half-2
+            Icon::Screen => '\u{ea89}',                   // device-desktop
+            Icon::Book => '\u{ea39}',                     // book
+            Icon::Swipe => '\u{f1f4}',                    // arrows-exchange
+            Icon::PageLayout => '\u{ead4}',               // layout-columns
+            Icon::Turns => '\u{ea65}',                    // chevrons-right
+            Icon::Ruler => '\u{eb1a}',                    // ruler
+            Icon::Circle => '\u{ea6b}',                   // circle
+            Icon::Square => '\u{eb2c}',                   // square
+            Icon::Bolt => '\u{ea38}',                     // bolt
+            Icon::CloudUpload => '\u{ea75}',              // cloud-upload
+            Icon::Cloud => '\u{ea76}',                    // cloud
+            Icon::Database => '\u{ea88}',                 // database
         }
     }
 }
@@ -324,7 +357,7 @@ mod subset_tests {
     use super::Icon;
     use skrifa::MetadataProvider;
 
-    const ALL: [Icon; 46] = [
+    const ALL: [Icon; 62] = [
         Icon::Previous,
         Icon::Next,
         Icon::Single,
@@ -370,6 +403,22 @@ mod subset_tests {
         Icon::AddToList,
         Icon::Share,
         Icon::Print,
+        Icon::Palette,
+        Icon::Sun,
+        Icon::Moon,
+        Icon::SystemTheme,
+        Icon::Screen,
+        Icon::Book,
+        Icon::Swipe,
+        Icon::PageLayout,
+        Icon::Turns,
+        Icon::Ruler,
+        Icon::Circle,
+        Icon::Square,
+        Icon::Bolt,
+        Icon::CloudUpload,
+        Icon::Cloud,
+        Icon::Database,
         Icon::Menu,
     ];
 

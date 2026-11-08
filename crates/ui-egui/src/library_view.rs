@@ -748,7 +748,7 @@ impl LibraryView {
             }
             if !cfg!(target_arch = "wasm32") {
                 menu::separator(ui);
-                sync_buttons(ui, session, true, out);
+                sync_buttons(ui, session, out);
             }
         });
     }
@@ -1887,21 +1887,10 @@ pub fn day(ms: u64) -> String {
     format!("{y:04}-{m:02}-{d:02}")
 }
 
-/// Sync through a shared folder: choose one, or sync now with what happened last on hover.
-pub(crate) fn sync_buttons(
-    ui: &mut Ui,
-    session: &mut Session,
-    in_menu: bool,
-    out: &mut Vec<LibraryAction>,
-) {
-    // Menu rows in the library's More menu; buttons on the Settings page.
-    let button = |ui: &mut Ui, icon: Icon, text: &str| {
-        if in_menu {
-            menu::item(ui, Some(icon), text)
-        } else {
-            icons::labelled(ui, icon, text)
-        }
-    };
+/// Sync through a shared folder, as rows of the library's More menu: choose one, or sync now
+/// with what happened last on hover. Settings draws its own card (`app/settings_page.rs`).
+fn sync_buttons(ui: &mut Ui, session: &mut Session, out: &mut Vec<LibraryAction>) {
+    let button = |ui: &mut Ui, icon: Icon, text: &str| menu::item(ui, Some(icon), text);
     let status = session
         .dispatch("sync.status", &json!({}))
         .unwrap_or(Value::Null);

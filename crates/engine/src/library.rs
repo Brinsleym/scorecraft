@@ -145,7 +145,8 @@ impl Session {
         self.clock = clock;
     }
 
-    pub(crate) fn now_ms(&self) -> u64 {
+    /// The session clock's time, in Unix milliseconds.
+    pub fn now_ms(&self) -> u64 {
         (self.clock)()
     }
 

@@ -20,6 +20,8 @@ pub struct Settings {
     /// `input.pedal.map`'s `map`: `{"PageDown":"next"}`.
     pub pedal_map: Value,
     pub theme: Theme,
+    /// The theme follows the system's (Settings, *System*).
+    pub theme_system: bool,
     pub keep_awake: bool,
     /// The score opened last, reopened at launch.
     pub last_score: Option<String>,
@@ -47,6 +49,7 @@ impl Default for Settings {
             fit_width: false,
             pedal_map: Value::Null,
             theme: Theme::Light,
+            theme_system: false,
             keep_awake: true,
             last_score: None,
             markup: Value::Null,
@@ -108,6 +111,7 @@ impl Settings {
             self.swipe_turns = v.get("on").and_then(Value::as_bool).unwrap_or(true);
         }
         self.theme = ui.theme;
+        self.theme_system = ui.theme_system;
         self.library_grid = ui.library_grid;
         self.keep_awake = ui.keep_awake.wanted;
         if let Ok(v) = session.dispatch("library.sort.set", &json!({})) {
