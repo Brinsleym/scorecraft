@@ -7,7 +7,8 @@
 //! ```
 //!
 //! Options: `--width W --height H` (points), `--ppp X`, `--pages N` (a synthetic score of N
-//! pages, opened in the reader; 0 for none), `--theme light|dark`, `--steps` (`;`-separated:
+//! pages, opened in the reader; 0 for none), `--theme light|dark`, `--frame` (draw the desktop's
+//! own title bar), `--steps` (`;`-separated:
 //! `cmd <id> <json>`, `click x,y`, `rclick x,y`, `drag x0,y0 x1,y1`, `pen x0,y0 x1,y1`,
 //! `type <text>`, `key <Name>`, `frames N`).
 
@@ -166,6 +167,18 @@ fn point(s: &str) -> Result<Pos2, String> {
     ))
 }
 
+/// The desktop's frameless window (`--frame`): the shell draws its own title bar.
+struct Framed;
+
+impl scorecraft_ui_egui::Platform for Framed {
+    fn set_keep_awake(&mut self, _on: bool) -> Result<(), String> {
+        Ok(())
+    }
+    fn draws_title_bar(&self) -> bool {
+        true
+    }
+}
+
 fn run() -> Result<(), String> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let out = arg(&args, "--out").unwrap_or("shell.png").to_owned();
@@ -180,7 +193,11 @@ fn run() -> Result<(), String> {
     if arg(&args, "--theme") == Some("dark") {
         settings.theme = scorecraft_ui_egui::Theme::Dark;
     }
-    let mut app = App::new(Box::new(NoPlatform), settings);
+    let mut app = if args.iter().any(|a| a == "--frame") {
+        App::new(Box::new(Framed), settings)
+    } else {
+        App::new(Box::new(NoPlatform), settings)
+    };
     let dir = std::env::temp_dir().join(format!("scorecraft-shell-{}", std::process::id()));
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     if pages > 0 {

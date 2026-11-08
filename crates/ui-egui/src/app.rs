@@ -59,6 +59,11 @@ pub trait Platform {
     fn ui_fonts(&self) -> crate::theme::UiFonts {
         crate::theme::UiFonts::default()
     }
+    /// The window has no system frame, so the shell draws its own title bar, resize borders and
+    /// edge ([`crate::title_bar`]). Desktop builds whose window is made without decorations.
+    fn draws_title_bar(&self) -> bool {
+        false
+    }
 }
 
 /// A platform that does nothing (tests, snapshots).
@@ -86,6 +91,19 @@ pub const SHELL_COMMANDS: &[(&str, &str, &str)] = &[
     ),
     ("ui.library.show", "Library", r#"{"on":bool?}"#),
     ("ui.library.view", "Library View", r#"{"view":"grid|list"}"#),
+    ("ui.back", "Back", "{}"),
+    (
+        "ui.sidebar.toggle",
+        "Show or Hide the Sidebar",
+        r#"{"on":bool?}"#,
+    ),
+    ("ui.window.minimize", "Minimise Window", "{}"),
+    (
+        "ui.window.maximize",
+        "Maximise or Restore Window",
+        r#"{"on":bool?}"#,
+    ),
+    ("ui.window.close", "Close Window", "{}"),
 ];
 
 mod settings_page;
@@ -115,6 +133,11 @@ pub struct App {
     next_sync: Option<f64>,
     /// Whether the screen was in portrait the last frame (`None` before the platform says).
     portrait: Option<bool>,
+    /// Window commands from `ui.window.*`, sent at the next frame (the shell commands have no
+    /// egui context in hand).
+    window_cmds: Vec<egui::ViewportCommand>,
+    /// The window was maximised at the last frame.
+    maximized: bool,
 }
 
 fn bool_param(params: &Value, key: &str) -> Result<Option<bool>, EngineError> {
@@ -177,6 +200,8 @@ impl App {
             click_error: None,
             next_sync: None,
             portrait: None,
+            window_cmds: Vec::new(),
+            maximized: false,
         }
     }
 
@@ -308,6 +333,33 @@ impl App {
             "ui.library.show" => {
                 self.state.library = bool_param(params, "on")?.unwrap_or(!self.state.library);
             }
+            "ui.back" => {
+                if !self.go_back() {
+                    return Err(EngineError::Disabled(
+                        "ui.back: there is nothing to go back to".into(),
+                    ));
+                }
+            }
+            "ui.sidebar.toggle" => {
+                // From the reader, the toggle opens the library with its sidebar.
+                let in_library = self.state.library || !self.session.has_score();
+                let on = bool_param(params, "on")?.unwrap_or(!(self.state.sidebar && in_library));
+                self.state.sidebar = on;
+                if on && !in_library {
+                    self.state.library = true;
+                }
+            }
+            "ui.window.minimize" => {
+                self.window_cmds
+                    .push(egui::ViewportCommand::Minimized(true));
+            }
+            "ui.window.maximize" => {
+                let on = bool_param(params, "on")?.unwrap_or(!self.maximized);
+                self.window_cmds.push(egui::ViewportCommand::Maximized(on));
+            }
+            "ui.window.close" => {
+                self.window_cmds.push(egui::ViewportCommand::Close);
+            }
             "ui.library.view" => {
                 self.state.library_grid = match params.get("view").and_then(Value::as_str) {
                     Some("grid") => true,
@@ -323,6 +375,68 @@ impl App {
             _ => return Err(EngineError::UnknownCommand(id.chars().take(128).collect())),
         }
         serde_json::to_value(&self.state).map_err(|e| EngineError::Io(e.to_string()))
+    }
+
+    /// Whether Back has somewhere to go: up a folder, to the library's first section, back to the
+    /// open score from the library, or from the score to the library.
+    fn can_go_back(&self) -> bool {
+        if self.state.library || !self.session.has_score() {
+            self.library.folder.is_some()
+                || self.library.section != crate::library_view::Section::Library
+                || self.session.has_score()
+        } else {
+            self.session.library().is_some()
+        }
+    }
+
+    /// `ui.back`: one step back (see [`App::can_go_back`]). `false` if there was none.
+    fn go_back(&mut self) -> bool {
+        if !self.can_go_back() {
+            return false;
+        }
+        if self.state.library || !self.session.has_score() {
+            let moved = self.library.up();
+            if !moved && self.library.section != crate::library_view::Section::Library {
+                self.library.go(crate::library_view::Section::Library);
+            } else if !moved {
+                self.state.library = false;
+            }
+        } else {
+            self.state.library = true;
+        }
+        true
+    }
+
+    /// The title bar (desktop windows without a system frame): drawn first so it spans the
+    /// window, with resize borders and a hairline edge while the window is neither maximised
+    /// nor full screen.
+    fn title_bar(&mut self, ui: &mut Ui, ctx: &egui::Context, tokens: &Tokens) {
+        self.maximized = ctx.input(|i| i.viewport().maximized.unwrap_or(false));
+        if !self.platform.draws_title_bar() || self.state.full_screen {
+            return;
+        }
+        let bar = crate::title_bar::TitleBar {
+            can_go_back: self.can_go_back(),
+            sidebar: self.state.sidebar
+                && (self.state.library || !self.session.has_score())
+                && self.session.library().is_some(),
+            maximized: self.maximized,
+        };
+        let action = egui::Panel::top("title-bar")
+            .exact_size(crate::title_bar::HEIGHT)
+            .resizable(false)
+            .show_separator_line(false)
+            .frame(egui::Frame::NONE.fill(tokens.title_bar_bg))
+            .show(ui, |ui| crate::title_bar::show(ui, tokens, bar))
+            .inner;
+        if let Some(a) = action {
+            let r = self.command(a.command(), &json!({}));
+            self.report(r);
+        }
+        if !self.maximized {
+            crate::title_bar::resize_edges(ctx);
+            crate::title_bar::paint_border(ctx, tokens);
+        }
     }
 
     /// Keeps the platform's click in step with the metronome (PRAC-1).
@@ -427,6 +541,10 @@ impl App {
         self.auto_sync(&ctx);
         self.shortcuts(&ctx);
         self.dropped_files(&ctx);
+        self.title_bar(ui, &ctx, &tokens);
+        for c in std::mem::take(&mut self.window_cmds) {
+            ctx.send_viewport_cmd(c);
+        }
 
         // The library has its own sidebar and floating toolbar instead (owner, 2026-11-01).
         let in_library =
@@ -479,7 +597,7 @@ impl App {
                 });
         }
         self.score_window(&ctx, &tokens);
-        if in_library {
+        if in_library && self.state.sidebar {
             let open = self.open_title();
             let panel = egui::Panel::left("library-sidebar")
                 .resizable(true)
@@ -1914,6 +2032,85 @@ mod tests {
         assert!(!app.state.library);
         // Search is the library's header button, not a sidebar row (owner, 2026-11-08).
         assert!(Section::MAIN.iter().all(|(_, label, _)| *label != "Search"));
+    }
+
+    #[test]
+    fn back_and_the_sidebar_toggle_step_through_the_library() {
+        use crate::library_view::Section;
+        let (mut app, _) = app_with_score(2);
+        // From the score, Back and the toggle both open the library.
+        app.command("ui.back", &json!({})).unwrap();
+        assert!(app.state.library);
+        app.state.library = false;
+        app.state.sidebar = false;
+        app.command("ui.sidebar.toggle", &json!({})).unwrap();
+        assert!(app.state.library && app.state.sidebar);
+        app.command("ui.sidebar.toggle", &json!({})).unwrap();
+        assert!(
+            app.state.library && !app.state.sidebar,
+            "hides it in the library"
+        );
+        app.command("ui.sidebar.toggle", &json!({ "on": true }))
+            .unwrap();
+        assert!(app.state.sidebar);
+        // In the library: up a folder, then back to the Library section, then to the score.
+        let f = app
+            .command("library.folder.new", &json!({ "name": "Bach" }))
+            .unwrap();
+        let folder = f["folder"].as_str().unwrap().to_owned();
+        let ctx = Context::default();
+        frames(&mut app, &ctx, 1, Vec::new());
+        app.library.folder = Some(folder);
+        app.library.go(Section::Lists);
+        app.command("ui.back", &json!({})).unwrap();
+        assert_eq!(app.library.folder, None);
+        assert_eq!(app.library.section, Section::Lists);
+        app.command("ui.back", &json!({})).unwrap();
+        assert_eq!(app.library.section, Section::Library);
+        app.command("ui.back", &json!({})).unwrap();
+        assert!(!app.state.library);
+        // With no score and nothing open, there is nowhere to go.
+        let mut empty = App::new(Box::new(NoPlatform), Settings::default());
+        assert!(empty.command("ui.back", &json!({})).is_err());
+        assert!(
+            empty
+                .command("ui.sidebar.toggle", &json!({ "on": 3 }))
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn window_commands_reach_the_window_at_the_next_frame() {
+        struct Framed;
+        impl Platform for Framed {
+            fn set_keep_awake(&mut self, _on: bool) -> Result<(), String> {
+                Ok(())
+            }
+            fn draws_title_bar(&self) -> bool {
+                true
+            }
+        }
+        let mut app = App::new(Box::new(Framed), Settings::default());
+        for id in [
+            "ui.window.minimize",
+            "ui.window.maximize",
+            "ui.window.close",
+        ] {
+            app.command(id, &json!({})).unwrap();
+        }
+        assert!(
+            app.command("ui.window.maximize", &json!({ "on": "x" }))
+                .is_err()
+        );
+        assert_eq!(app.window_cmds.len(), 3);
+        let ctx = Context::default();
+        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| app.ui(ui));
+        out.textures_delta.clear();
+        assert!(app.window_cmds.is_empty());
+        let sent = &out.viewport_output[&egui::ViewportId::ROOT].commands;
+        assert!(sent.contains(&egui::ViewportCommand::Minimized(true)));
+        assert!(sent.contains(&egui::ViewportCommand::Maximized(true)));
+        assert!(sent.contains(&egui::ViewportCommand::Close));
     }
 
     #[test]

@@ -25,6 +25,7 @@ pub mod scroll;
 pub mod settings;
 pub mod state;
 pub mod theme;
+pub mod title_bar;
 
 pub use app::{App, NoPlatform, Platform, SHELL_COMMANDS};
 pub use settings::Settings;

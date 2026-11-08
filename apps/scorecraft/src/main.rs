@@ -70,6 +70,10 @@ fn load_settings() -> Settings {
         .unwrap_or_default()
 }
 
+/// The window has no system frame; the shell draws the title bar (`title_bar.rs` in
+/// scorecraft-ui-egui).
+const FRAMELESS: bool = !cfg!(target_os = "macos");
+
 struct Desktop {
     keep_awake: KeepAwake,
     /// The metronome's click, opened the first time it is wanted.
@@ -104,6 +108,12 @@ impl Platform for Desktop {
 
     fn set_keep_awake(&mut self, on: bool) -> Result<(), String> {
         self.keep_awake.set(on).map_err(|e| e.to_string())
+    }
+
+    /// Windows and Linux windows are made without the system frame and ScoreCraft draws its own
+    /// title bar (owner, 2026-11-08); macOS keeps its native one and its traffic lights.
+    fn draws_title_bar(&self) -> bool {
+        FRAMELESS
     }
 
     fn pick_export_path(&mut self, name: &str) -> Option<String> {
@@ -289,7 +299,9 @@ fn main() -> std::process::ExitCode {
             .with_icon(app_icon::window_icon())
             .with_inner_size([1280.0, 860.0])
             .with_min_inner_size([480.0, 360.0])
-            .with_drag_and_drop(true),
+            .with_drag_and_drop(true)
+            .with_decorations(!FRAMELESS)
+            .with_resizable(true),
         ..Default::default()
     };
     match eframe::run_native(

@@ -73,6 +73,26 @@ corners and a soft shadow, titled underneath in up to two lines; folders are til
 folder icon, their name and an item count (`library.info` `folders[].items`). Header buttons and
 sidebar rows are 36 pt high (desktop sizes; tablets still need the 44 pt targets of principle 3).
 
+## Window title bar
+
+On Windows and Linux the window has no system frame; ScoreCraft draws its own 36-point title bar
+(owner's mockup, 2026-11-08; `ui-egui/src/title_bar.rs`). macOS keeps its native title bar.
+
+- **Left:** Back (`ui.back`: up a folder, then to the Library section, then between the library
+  and the open score; greyed when there is nowhere to go), the sidebar toggle (`ui.sidebar.toggle`,
+  Tabler `menu-2`; from the reader it opens the library with its sidebar), the app icon painted
+  from `assets/app-icon/scorecraft.svg` at 16 points, and "ScoreCraft".
+- **Right:** Minimise, Maximise or Restore, Close as Windows-style 46-point caption buttons with
+  thin glyphs; Close fills red under the pointer (`ui.window.minimize`, `.maximize`, `.close`).
+- **Behaviour:** the empty middle drags the window with the system's own move, so Windows snap
+  (drag to an edge or corner, Win+arrows) and Aero Shake keep working; a double-click maximises
+  or restores. Invisible 5-point borders (14 at the corners) resize the window, and a hairline
+  `window_border` edges it, both only while it is neither maximised nor full screen. Full screen
+  hides the bar. Windows 11's Snap Layouts flyout over Maximise is not available without a
+  system frame.
+- **Colours:** `title_bar_bg` (the sidebar's grey, so the two read as one surface), a `divider`
+  hairline under the bar, `close_hover` for Close.
+
 ## Widgets
 
 Shared widgets in `ui-egui/src/widgets/` (buttons, icon buttons, sliders with numeric entry,
@@ -140,6 +160,7 @@ PNGs of public-domain scores.
 | Date | Change | Summary |
 |---|---|---|
 | 2026-11-08 | minor | Scrolling: eased mouse wheel in every list; the scroll bar sits in the page's right margin |
+| 2026-11-08 | minor | Window title bar drawn by ScoreCraft: Back, sidebar toggle, app icon and name, caption buttons; drag, snap, double-click and edge resize |
 | 2026-11-08 | minor | Brand palette: the dark reader's backdrop and toolbars use ink `#18181B` and surface `#27272A`; app icon and logo in `assets/` |
 | 2026-11-08 | minor | Menus (menu rows, panel, danger rows) and selection (frame, halo, check badge, selection header) |
 | 2026-11-08 | minor | Styling rules: Tabler icons (outline, stroke 2), Segoe UI, type scale, tight titles, icon-to-text sizes; Search leaves the sidebar |

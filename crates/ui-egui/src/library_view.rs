@@ -450,6 +450,21 @@ impl LibraryView {
         out
     }
 
+    /// Goes up from the folder shown to its parent. `false` at the library's top.
+    pub fn up(&mut self) -> bool {
+        let Some(here) = self.folder.take() else {
+            return false;
+        };
+        self.folder = self
+            .folder_list()
+            .into_iter()
+            .find(|f| f.0 == here)
+            .and_then(|f| f.2);
+        self.stop_selecting();
+        self.dirty = true;
+        true
+    }
+
     /// Leaves selecting, with nothing selected.
     pub fn stop_selecting(&mut self) {
         self.selecting = false;
