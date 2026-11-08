@@ -14,6 +14,8 @@ pub const BRAND_HOVER: Color32 = Color32::from_rgb(0xd2, 0x66, 0x2e);
 /// raised surface of the reader's toolbars, in the dark theme.
 pub const BRAND_INK: Color32 = Color32::from_rgb(0x18, 0x18, 0x1b);
 pub const BRAND_SURFACE: Color32 = Color32::from_rgb(0x27, 0x27, 0x2a);
+/// The title bar's Close button under the pointer: the red every Windows title bar uses.
+pub const CLOSE_HOVER: Color32 = Color32::from_rgb(0xc4, 0x2b, 0x1c);
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Tokens {
@@ -56,6 +58,11 @@ pub struct Tokens {
     pub danger: Color32,
     pub danger_hover: Color32,
     pub danger_border: Color32,
+    /// The window's own title bar (desktop, drawn by ScoreCraft): its fill, the hairline under it
+    /// and round the window, and the Close button's fill under the pointer.
+    pub title_bar_bg: Color32,
+    pub window_border: Color32,
+    pub close_hover: Color32,
     /// Toolbar height and touch-target side, in points (≥ 44 for fingers on a tablet).
     pub toolbar_height: f32,
     pub button: f32,
@@ -94,6 +101,9 @@ impl Tokens {
                 danger: Color32::from_rgb(0xc0, 0x2b, 0x2b),
                 danger_hover: Color32::from_rgb(0xfd, 0xec, 0xec),
                 danger_border: Color32::from_rgba_unmultiplied(0xdc, 0x26, 0x26, 77),
+                title_bar_bg: Color32::from_rgb(0xf2, 0xf2, 0xf2),
+                window_border: Color32::from_rgb(0xc8, 0xc8, 0xc8),
+                close_hover: CLOSE_HOVER,
                 toolbar_height: 52.0,
                 button: 44.0,
                 radius: 8,
@@ -129,6 +139,10 @@ impl Tokens {
                 danger: Color32::from_rgb(0xf8, 0x71, 0x71),
                 danger_hover: Color32::from_rgba_unmultiplied(0x45, 0x0a, 0x0a, 102),
                 danger_border: Color32::from_rgba_unmultiplied(0xef, 0x44, 0x44, 77),
+                // The owner's mockup (2026-11-08): the sidebar's grey runs up into the title bar.
+                title_bar_bg: Color32::from_rgb(0x1e, 0x1e, 0x1e),
+                window_border: Color32::from_rgb(0x3a, 0x3a, 0x3a),
+                close_hover: CLOSE_HOVER,
                 toolbar_height: 52.0,
                 button: 44.0,
                 radius: 8,
