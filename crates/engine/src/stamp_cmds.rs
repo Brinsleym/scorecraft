@@ -4,13 +4,13 @@
 
 use serde_json::{Map, Value, json};
 
-use scorecraft_doc::{Annotation, AnnotationId, AnnotationKind, Hairpin, Stamp};
+use scorecraft_doc::{Annotation, AnnotationId, AnnotationKind, Color, Hairpin, Stamp};
 use scorecraft_geom::{Point, Rect, Vec2};
 use scorecraft_input::PointerKind;
 use scorecraft_ops::{Op, OpError, Transaction};
 use scorecraft_text::{Face, FaceKind, fit_inside};
 
-use crate::annotate_cmds::{markup_ready, opt_color, state_json, writable};
+use crate::annotate_cmds::{markup_ready, state_json, writable};
 use crate::commands::{
     CommandSpec, always, bad, opt_f64, opt_str, params_object, reject_unknown_keys, req_id,
     truncate,
@@ -49,7 +49,7 @@ pub fn specs() -> Vec<CommandSpec> {
             label: "Edit Stamp",
             menu: "",
             shortcut: None,
-            params: r##"{"annotation":id,"handle":"start|end|middle"="middle","x":number?,"y":number?,"space":"view|page"="view","size":8..96?,"color":"#rrggbb"?}"##,
+            params: r##"{"annotation":id,"handle":"start|end|middle"="middle","x":number?,"y":number?,"space":"view|page"="view","size":8..96?}"##,
             ours: true,
             enabled: markup_ready,
             run: stamp_edit,
@@ -143,7 +143,8 @@ fn stamp_place(session: &mut Session, params: &Value) -> Result<Value, EngineErr
     if !device.is_pen() && m.pen_only {
         return Ok(json!({ "added": false, "reason": "penOnly" }));
     }
-    let (choice, size, color) = (m.stamp, f64::from(m.stamp_size), m.pen.color);
+    // Stamps are always black, whatever colour another tool has (owner, 2026-11-01).
+    let (choice, size, color) = (m.stamp, f64::from(m.stamp_size), Color::BLACK);
     let (page, file_page, at) = locate(session, ID, p, x, y)?;
     let bounds = page_rect(session, file_page)?;
     let kind = match choice {
@@ -228,11 +229,7 @@ fn stamp_place(session: &mut Session, params: &Value) -> Result<Value, EngineErr
 fn stamp_edit(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
     const ID: &str = "annotate.stamp.edit";
     let p = params_object(ID, params)?;
-    reject_unknown_keys(
-        ID,
-        p,
-        &["annotation", "handle", "x", "y", "space", "size", "color"],
-    )?;
+    reject_unknown_keys(ID, p, &["annotation", "handle", "x", "y", "space", "size"])?;
     let id: AnnotationId = req_id(ID, p, "annotation")?;
     let handle = opt_str(ID, p, "handle")?.unwrap_or("middle");
     if !matches!(handle, "start" | "end" | "middle") {
@@ -245,7 +242,6 @@ fn stamp_edit(session: &mut Session, params: &Value) -> Result<Value, EngineErro
         ));
     }
     let size = stamp_size(ID, p)?;
-    let color = opt_color(ID, p, "color")?;
     let score_id = session
         .score
         .as_ref()
@@ -282,8 +278,8 @@ fn stamp_edit(session: &mut Session, params: &Value) -> Result<Value, EngineErro
         (None, None) => None,
         _ => return Err(bad(ID, "give both `x` and `y`".into())),
     };
-    if to.is_none() && size.is_none() && color.is_none() {
-        return Err(bad(ID, "give a handle position, `size` or `color`".into()));
+    if to.is_none() && size.is_none() {
+        return Err(bad(ID, "give a handle position or `size`".into()));
     }
     match &mut annotation.kind {
         AnnotationKind::Stamp(st) => {
@@ -294,9 +290,6 @@ fn stamp_edit(session: &mut Session, params: &Value) -> Result<Value, EngineErro
             let centre = to.unwrap_or(st.rect.center());
             st.size = size as f32;
             st.rect = fit_inside(dynamic_rect(&st.text, size, centre)?, bounds);
-            if let Some(c) = color {
-                st.color = c;
-            }
         }
         AnnotationKind::Hairpin(h) => {
             if let Some(to) = to.map(|q| clamp_point(q, bounds)) {
@@ -316,9 +309,6 @@ fn stamp_edit(session: &mut Session, params: &Value) -> Result<Value, EngineErro
             }
             if let Some(s) = size {
                 (h.opening, h.width) = hairpin_shape(f64::from(s));
-            }
-            if let Some(c) = color {
-                h.color = c;
             }
         }
         _ => return Err(bad(ID, "that marking is not a stamp".into())),

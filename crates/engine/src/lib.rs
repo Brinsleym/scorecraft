@@ -50,6 +50,7 @@ pub use commands::{CommandInfo, CommandSpec, registry};
 pub use cover_cmds::CoverJob;
 pub use error::EngineError;
 pub use library::{AnyStorage, Clock, library_open};
+pub use markup::NoteOnScreen;
 pub use reader::{FrameSlot, ShownPage};
 pub use session::Session;
 pub use snapshot::{compose, unturn};

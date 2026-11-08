@@ -113,8 +113,8 @@ impl ReaderCanvas {
             &response,
             rect,
             session,
-            keys,
-            ink.block_reader,
+            keys && self.ink.text.is_none(),
+            ink.block_reader || self.ink.busy(),
             &mut out,
         );
         self.paint(ui, &ctx, rect, session, tokens);
@@ -131,46 +131,95 @@ impl ReaderCanvas {
         out
     }
 
-    /// The box a new text note is typed into (ANNO-8).
+    /// The note being typed, right in its red box on the page (ANNO-8): no dialog. Enter keeps
+    /// it (Shift+Enter starts a new line), Escape drops the change, a tap elsewhere keeps it.
     fn text_entry(&mut self, ctx: &Context, rect: Rect, session: &mut Session, out: &mut Outcome) {
+        let Some(entry) = self.ink.text.as_ref() else {
+            return;
+        };
+        if ctx.input(|i| i.key_pressed(Key::Escape)) {
+            // A new note is dropped; a note being changed keeps its old text and stays selected.
+            self.ink.note = entry.note.clone();
+            self.ink.text = None;
+            return;
+        }
+        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, Key::Enter)) {
+            self.ink.commit_text(session, &mut out.error);
+            return;
+        }
+        let px = session
+            .points_per_pixel(f64::from(entry.at.x), f64::from(entry.at.y))
+            .map_or(1.0, |d| (1.0 / d) as f32);
+        let font = egui::FontId::proportional((entry.size * px).max(6.0));
+        let color = entry.color;
+        let paper = match session
+            .reader_state()
+            .and_then(|s| s.get("filter").and_then(Value::as_str).map(str::to_owned))
+            .as_deref()
+        {
+            Some("dark") => Color32::from_gray(0x1c),
+            Some("sepia") => Color32::from_rgb(0xf4, 0xec, 0xd8),
+            _ => Color32::WHITE,
+        };
+        // A note being changed is still on the page: cover it while its new text is typed.
+        let old = self.ink.note_rect_of(session, entry.note.as_deref());
+        // The box fits the text as laid out (four characters wide at least), so it never wraps.
+        let shown = if entry.text.is_empty() {
+            "Text".to_owned()
+        } else {
+            format!("{}W", entry.text)
+        };
+        let text_size = ctx
+            .fonts_mut(|f| f.layout_no_wrap(shown, font.clone(), color))
+            .size();
+        let measured = text_size + egui::vec2(8.0, 6.0);
+        let text_width = text_size.x + 2.0;
+        if let Some(e) = self.ink.text.as_mut() {
+            e.measured = Some(measured);
+        }
+        let Some(entry) = self.ink.text.as_ref() else {
+            return;
+        };
+        let boxed = crate::ink::entry_rect(entry, session).translate(rect.min.to_vec2());
+        let cover = old.map_or(boxed, |r| r.translate(rect.min.to_vec2()).union(boxed));
+        let painter = ctx.layer_painter(egui::LayerId::new(
+            egui::Order::Middle,
+            egui::Id::unique("note-entry-paper"),
+        ));
+        painter.rect_filled(cover, 0.0, paper);
+        crate::ink::note_box(&painter, boxed);
         let Some(entry) = self.ink.text.as_mut() else {
             return;
         };
-        let (mut add, mut cancel) = (false, false);
-        egui::Window::new("Text Note")
-            .collapsible(false)
-            .resizable(false)
-            .fixed_pos(rect.min + entry.at.to_vec2() + egui::vec2(0.0, 28.0))
+        egui::Area::new(egui::Id::unique("note-entry"))
+            .order(egui::Order::Foreground)
+            .fixed_pos(boxed.min + egui::vec2(3.0, 2.0))
             .show(ctx, |ui| {
+                // Lines never wrap: the box grows with them.
+                let line_font = font.clone();
+                let mut layouter = |ui: &Ui, text: &dyn egui::TextBuffer, _wrap: f32| {
+                    let job = egui::text::LayoutJob::simple(
+                        text.as_str().to_owned(),
+                        line_font.clone(),
+                        color,
+                        f32::INFINITY,
+                    );
+                    ui.fonts_mut(|f| f.layout_job(job))
+                };
                 let r = ui.add(
                     egui::TextEdit::multiline(&mut entry.text)
-                        .desired_rows(3)
-                        .desired_width(260.0),
+                        .layouter(&mut layouter)
+                        .frame(egui::Frame::NONE)
+                        .font(font)
+                        .text_color(color)
+                        .background_color(Color32::TRANSPARENT)
+                        .desired_rows(1)
+                        .desired_width(text_width)
+                        .clip_text(false)
+                        .margin(egui::Margin::ZERO),
                 );
                 r.request_focus();
-                ui.horizontal(|ui| {
-                    add = ui.button("Add").clicked();
-                    cancel = ui.button("Cancel").clicked();
-                });
             });
-        if ctx.input(|i| i.key_pressed(Key::Escape)) {
-            cancel = true;
-        }
-        if add && !entry.text.trim().is_empty() {
-            let r = session.dispatch(
-                "annotate.text.add",
-                &json!({
-                    "text": entry.text,
-                    "x": entry.at.x,
-                    "y": entry.at.y,
-                    "device": entry.device.id(),
-                }),
-            );
-            note(out, r);
-            self.ink.text = None;
-        } else if add || cancel {
-            self.ink.text = None;
-        }
     }
 
     fn sync_viewport(

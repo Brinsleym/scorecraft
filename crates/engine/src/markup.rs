@@ -10,7 +10,9 @@ use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
-use scorecraft_doc::{AnnotationKind, Color, LayerId, Library, Nib, PageKey, Score, ScoreId, Tool};
+use scorecraft_doc::{
+    Annotation, AnnotationKind, Color, LayerId, Library, Nib, PageKey, Score, ScoreId, Tool,
+};
 use scorecraft_geom::{PageBox, Point, Rect, Rotation};
 use scorecraft_ink::{
     ERASER_WIDTHS, HIGHLIGHTER_PALETTE, HIGHLIGHTER_SWATCHES, PALETTE, PressureCurve, Ruler,
@@ -515,19 +517,39 @@ impl crate::Session {
         let d = h.to_page(x, y)?.distance(h.to_page(x + 1.0, y)?);
         (d.is_finite() && d > 0.0).then_some(d)
     }
+
+    /// Where a viewport point lands: its score page (1-based) and page-space position, for a
+    /// shell that must place something there after the view has moved. `None` off the pages.
+    pub fn view_to_page(&self, x: f64, y: f64) -> Option<(usize, f64, f64)> {
+        let open = self.score.as_ref()?;
+        let h = hit(&open.reader, open.view.document(), x, y)?;
+        let p = h.to_page(x, y)?;
+        Some((h.page + 1, p.x, p.y))
+    }
+}
+
+/// A text note on screen (ANNO-8), for the shell to hit-test, select and edit in place.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NoteOnScreen {
+    pub id: String,
+    /// Viewport rectangle `[x0, y0, x1, y1]`.
+    pub rect: [f64; 4],
+    pub text: String,
+    /// Size in points.
+    pub size: f32,
+    /// `#rrggbbaa`.
+    pub color: String,
 }
 
 impl crate::Session {
-    /// The Score Shortcuts on the pages on screen (NAV-1), as viewport rectangles
-    /// `[x0, y0, x1, y1]` with the score page each jumps to (1-based; `None` if that page isn't
-    /// shown): what the reader outlines in markup mode.
-    pub fn shortcut_rects(&self) -> Vec<([f64; 4], Option<usize>)> {
-        let mut out = Vec::new();
+    /// Calls `f` with each marking on the pages on screen whose layer is visible, and the map
+    /// from its page's PDF space to the viewport.
+    fn each_on_screen(&self, mut f: impl FnMut(&scorecraft_geom::Affine, &Annotation)) {
         let Some(open) = self.score.as_ref() else {
-            return out;
+            return;
         };
         let Some(score) = library_score(self.library(), open.library_score) else {
-            return out;
+            return;
         };
         let doc = open.view.document();
         let frame = open.reader.frame();
@@ -570,22 +592,53 @@ impl crate::Session {
                 continue;
             };
             for a in score.annotations_on(PageKey(key)) {
-                let AnnotationKind::Shortcut(sc) = &a.kind else {
-                    continue;
-                };
-                if !score.layer(a.layer).is_some_and(|l| l.visible) {
-                    continue;
+                if score.layer(a.layer).is_some_and(|l| l.visible) {
+                    f(&to_view, a);
                 }
-                let r = to_view.apply_rect(sc.at.rect);
-                let target = open
-                    .reader
-                    .shown
-                    .iter()
-                    .position(|s| u32::try_from(s.file_page).is_ok_and(|f| PageKey(f) == sc.target))
-                    .map(|i| i + 1);
-                out.push(([r.x0, r.y0, r.x1, r.y1], target));
             }
         }
+    }
+
+    /// The Score Shortcuts on the pages on screen (NAV-1), as viewport rectangles
+    /// `[x0, y0, x1, y1]` with the score page each jumps to (1-based; `None` if that page isn't
+    /// shown): what the reader outlines in markup mode.
+    pub fn shortcut_rects(&self) -> Vec<([f64; 4], Option<usize>)> {
+        let mut out = Vec::new();
+        let Some(open) = self.score.as_ref() else {
+            return out;
+        };
+        self.each_on_screen(|to_view, a| {
+            let AnnotationKind::Shortcut(sc) = &a.kind else {
+                return;
+            };
+            let r = to_view.apply_rect(sc.at.rect);
+            let target = open
+                .reader
+                .shown
+                .iter()
+                .position(|s| u32::try_from(s.file_page).is_ok_and(|f| PageKey(f) == sc.target))
+                .map(|i| i + 1);
+            out.push(([r.x0, r.y0, r.x1, r.y1], target));
+        });
+        out
+    }
+
+    /// The text notes on the pages on screen, with their viewport rectangles.
+    pub fn notes_on_screen(&self) -> Vec<NoteOnScreen> {
+        let mut out = Vec::new();
+        self.each_on_screen(|to_view, a| {
+            let AnnotationKind::Text(note) = &a.kind else {
+                return;
+            };
+            let r = to_view.apply_rect(note.rect);
+            out.push(NoteOnScreen {
+                id: a.id.to_string(),
+                rect: [r.x0, r.y0, r.x1, r.y1],
+                text: note.text.clone(),
+                size: note.style.size,
+                color: note.style.color.to_string(),
+            });
+        });
         out
     }
 }

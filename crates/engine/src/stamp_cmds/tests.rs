@@ -191,3 +191,25 @@ fn stamps_show_in_the_reader_and_bad_params() {
         "penOnly"
     );
 }
+
+#[test]
+fn stamps_are_black_whatever_the_pen_colour() {
+    let (mut s, id) = setup("black");
+    run(&mut s, "annotate.tool.pen", json!({ "color": "#e53935" }));
+    run(&mut s, "annotate.tool.stamp", json!({ "stamp": "mf" }));
+    run(&mut s, "annotate.stamp.place", at(200.0, 300.0));
+    run(
+        &mut s,
+        "annotate.tool.stamp",
+        json!({ "stamp": "crescendo" }),
+    );
+    run(&mut s, "annotate.stamp.place", at(200.0, 400.0));
+    for m in marks(&s, &id) {
+        let c = match m {
+            AnnotationKind::Stamp(st) => st.color,
+            AnnotationKind::Hairpin(h) => h.color,
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(c, scorecraft_doc::Color::BLACK);
+    }
+}
