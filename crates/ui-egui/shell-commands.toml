@@ -10,4 +10,9 @@ commands = [
     "ui.chrome.toggle",
     "ui.library.show",
     "ui.library.view",
+    "ui.back",
+    "ui.sidebar.toggle",
+    "ui.window.minimize",
+    "ui.window.maximize",
+    "ui.window.close",
 ]
