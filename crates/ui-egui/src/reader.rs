@@ -107,7 +107,9 @@ impl ReaderCanvas {
         let markup = session
             .dispatch("annotate.state", &json!({}))
             .unwrap_or(Value::Null);
-        let ink = self.ink.input(&ctx, rect, session, &markup, &mut out.error);
+        let ink = self
+            .ink
+            .input(&ctx, rect, ui.layer_id(), session, &markup, &mut out.error);
         self.input(
             &ctx,
             &response,
@@ -117,11 +119,17 @@ impl ReaderCanvas {
             ink.block_reader || self.ink.busy(),
             &mut out,
         );
-        self.paint(ui, &ctx, rect, session, tokens);
+        // Before the pages are drawn: a stroke committed this frame notes its page's texture
+        // from before the stroke, so it goes the moment the page shows it.
         let now = ctx.input(|i| i.time);
         let textures = &self.textures;
-        self.ink
-            .settle(now, &|page| textures.get(&page).map(|(a, _)| *a));
+        if self
+            .ink
+            .settle(now, &|page| textures.get(&page).map(|(a, _)| *a))
+        {
+            ctx.request_repaint_after(std::time::Duration::from_millis(30));
+        }
+        self.paint(ui, &ctx, rect, session, tokens);
         // The markup state may have changed with this frame's gestures.
         let markup = session
             .dispatch("annotate.state", &json!({}))
