@@ -78,7 +78,7 @@ pub const SHELL_COMMANDS: &[(&str, &str, &str)] = &[
         "Keep Screen Awake",
         r#"{"on":bool=true}"#,
     ),
-    ("ui.theme.set", "Theme", r#"{"theme":"light|dark"}"#),
+    ("ui.theme.set", "Theme", r#"{"theme":"light|dark|system"}"#),
     (
         "ui.chrome.toggle",
         "Show or Hide Controls",
@@ -159,6 +159,7 @@ impl App {
         settings.apply_to_session(&mut session);
         settings.apply_markup(&mut session);
         state.theme = settings.theme;
+        state.theme_system = settings.theme_system;
         state.keep_awake.wanted = settings.keep_awake;
         state.library_grid = settings.library_grid;
         App {
@@ -292,15 +293,20 @@ impl App {
                 self.state.keep_awake.wanted = bool_param(params, "on")?.unwrap_or(true);
             }
             "ui.theme.set" => {
-                let t = params
-                    .get("theme")
-                    .and_then(Value::as_str)
-                    .and_then(Theme::from_id)
-                    .ok_or_else(|| EngineError::BadParams {
-                        command: id.into(),
-                        message: "`theme` must be light or dark".into(),
+                let id_param = params.get("theme").and_then(Value::as_str);
+                if id_param == Some("system") {
+                    // The next frame takes the system's theme (`App::follow_system_theme`).
+                    self.state.theme_system = true;
+                } else {
+                    let t = id_param.and_then(Theme::from_id).ok_or_else(|| {
+                        EngineError::BadParams {
+                            command: id.into(),
+                            message: "`theme` must be light, dark or system".into(),
+                        }
                     })?;
-                self.state.theme = t;
+                    self.state.theme = t;
+                    self.state.theme_system = false;
+                }
             }
             "ui.chrome.toggle" => {
                 self.state.chrome = bool_param(params, "on")?.unwrap_or(!self.state.chrome);
@@ -405,9 +411,22 @@ impl App {
         }
     }
 
+    /// With the *System* theme, takes the light or dark the system asks for. A platform that
+    /// doesn't say keeps the theme shown.
+    fn follow_system_theme(&mut self, ctx: &egui::Context) {
+        if self.state.theme_system {
+            match ctx.system_theme() {
+                Some(egui::Theme::Dark) => self.state.theme = Theme::Dark,
+                Some(egui::Theme::Light) => self.state.theme = Theme::Light,
+                None => {}
+            }
+        }
+    }
+
     /// One frame of the whole shell, in the window's root `ui`.
     pub fn ui(&mut self, ui: &mut Ui) {
         let ctx = ui.ctx().clone();
+        self.follow_system_theme(&ctx);
         let tokens = Tokens::for_theme(self.state.theme);
         if !self.fonts_installed {
             crate::theme::install_fonts(&ctx, &self.platform.ui_fonts());
@@ -1376,6 +1395,19 @@ mod tests {
             .command("ui.theme.set", &json!({ "theme": "dark" }))
             .unwrap();
         assert_eq!(r["theme"], "dark");
+        // *System* follows the platform; choosing light or dark stops following it.
+        let r = app
+            .command("ui.theme.set", &json!({ "theme": "system" }))
+            .unwrap();
+        assert_eq!(r["themeSystem"], true);
+        assert!(app.settings.theme_system, "saved for the next launch");
+        let r = app
+            .command("ui.theme.set", &json!({ "theme": "light" }))
+            .unwrap();
+        assert_eq!(
+            (r["theme"].as_str(), r["themeSystem"].as_bool()),
+            (Some("light"), Some(false))
+        );
         let r = app
             .command("ui.power.keepAwake", &json!({ "on": false }))
             .unwrap();

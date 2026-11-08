@@ -31,7 +31,7 @@ scorecraft-cli serve            # headless JSON server (no window)
 in `scorecraft-automation::control`). The rest of the table is the plan.
 
 - `ui.state` returns `{"ui": <shell state>, "reader": <view.state, or null with no score>}`.
-- `ui.set` paths today: `theme` (`"light"|"dark"`), `fullScreen`, `chrome`, `keepAwake` (bools).
+- `ui.set` paths today: `theme` (`"light"|"dark"|"system"`), `fullScreen`, `chrome`, `keepAwake` (bools).
 - `ui.key` and `ui.pointer` inject real input events into the next frame, so they take the same
   path as a keyboard, pedal or finger, and answer with `ui.state` after that frame.
   `modifiers` is a list of `ctrl`, `alt`, `shift`, `cmd`. Pointer coordinates are window points.
