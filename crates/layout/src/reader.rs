@@ -9,16 +9,16 @@
 pub enum Layout {
     /// One page at a time (READ-2).
     Single,
-    /// Two facing pages (READ-3). With `first_alone`, page 1 stands by itself like a book's
-    /// cover or a title page, and the facing pairs are 2–3, 4–5, …; without it they are 1–2, 3–4.
-    TwoPage { first_alone: bool },
+    /// Two facing pages (READ-3): 1–2, 3–4, … (The owner removed "first page alone" on
+    /// 2026-11-01.)
+    TwoPage,
 }
 
 impl Layout {
     pub fn id(self) -> &'static str {
         match self {
             Layout::Single => "single",
-            Layout::TwoPage { .. } => "twoPage",
+            Layout::TwoPage => "twoPage",
         }
     }
 
@@ -27,8 +27,7 @@ impl Layout {
         match self {
             _ if count == 0 => 0,
             Layout::Single => count,
-            Layout::TwoPage { first_alone: false } => count.div_ceil(2),
-            Layout::TwoPage { first_alone: true } => 1 + (count - 1).div_ceil(2),
+            Layout::TwoPage => count.div_ceil(2),
         }
     }
 
@@ -36,13 +35,8 @@ impl Layout {
     fn spread(self, i: usize, count: usize) -> Vec<usize> {
         let (a, b) = match self {
             Layout::Single => (Some(i), None),
-            Layout::TwoPage { first_alone: false } => {
+            Layout::TwoPage => {
                 let a = i.saturating_mul(2);
-                (Some(a), a.checked_add(1))
-            }
-            Layout::TwoPage { first_alone: true } if i == 0 => (Some(0), None),
-            Layout::TwoPage { first_alone: true } => {
-                let a = i.saturating_mul(2) - 1;
                 (Some(a), a.checked_add(1))
             }
         };
@@ -57,8 +51,7 @@ impl Layout {
     fn spread_of(self, page: usize) -> usize {
         match self {
             Layout::Single => page,
-            Layout::TwoPage { first_alone: false } => page / 2,
-            Layout::TwoPage { first_alone: true } => page.div_ceil(2),
+            Layout::TwoPage => page / 2,
         }
     }
 }
@@ -148,16 +141,13 @@ struct Sequence {
 impl Sequence {
     /// Alternation applies to facing pages only.
     fn alternating(&self) -> bool {
-        self.mode == TurnMode::Alternating && matches!(self.layout, Layout::TwoPage { .. })
+        self.mode == TurnMode::Alternating && self.layout == Layout::TwoPage
     }
 
-    /// With alternating turns: the number of views before alternation starts (1 when page 1
-    /// stands alone) and the page alternation starts from.
+    /// With alternating turns: the number of views before alternation starts and the page
+    /// alternation starts from (both 0 now every spread is a pair).
     fn alternation_start(&self) -> (usize, usize) {
-        match self.layout {
-            Layout::TwoPage { first_alone: true } => (1, 1),
-            _ => (0, 0),
-        }
+        (0, 0)
     }
 
     fn len(&self) -> usize {
@@ -378,8 +368,7 @@ mod tests {
         pages.iter().map(|p| (p.to_vec(), p.to_vec())).collect()
     }
 
-    const TWO: Layout = Layout::TwoPage { first_alone: false };
-    const BOOK: Layout = Layout::TwoPage { first_alone: true };
+    const TWO: Layout = Layout::TwoPage;
 
     #[test]
     fn single_and_two_page_spreads() {
@@ -391,12 +380,6 @@ mod tests {
             tops(5, TWO, TurnMode::Full),
             full(&[&[0, 1], &[2, 3], &[4]])
         );
-        assert_eq!(
-            tops(5, BOOK, TurnMode::Full),
-            full(&[&[0], &[1, 2], &[3, 4]])
-        );
-        assert_eq!(tops(4, BOOK, TurnMode::Full), full(&[&[0], &[1, 2], &[3]]));
-        assert_eq!(tops(1, BOOK, TurnMode::Full), full(&[&[0]]));
     }
 
     #[test]
@@ -429,12 +412,8 @@ mod tests {
             tops(5, TWO, TurnMode::Alternating),
             full(&[&[0, 1], &[2, 1], &[2, 3], &[4, 3]])
         );
-        assert_eq!(
-            tops(5, BOOK, TurnMode::Alternating),
-            full(&[&[0], &[1, 2], &[3, 2], &[3, 4]])
-        );
         assert_eq!(tops(1, TWO, TurnMode::Alternating), full(&[&[0]]));
-        assert_eq!(tops(2, BOOK, TurnMode::Alternating), full(&[&[0], &[1]]));
+        assert_eq!(tops(2, TWO, TurnMode::Alternating), full(&[&[0, 1]]));
         // Single layout: alternating turns like full turns.
         assert_eq!(
             tops(2, Layout::Single, TurnMode::Alternating),
@@ -444,7 +423,7 @@ mod tests {
 
     #[test]
     fn empty_scores_have_no_views() {
-        for layout in [Layout::Single, TWO, BOOK] {
+        for layout in [Layout::Single, TWO] {
             for mode in [TurnMode::Full, TurnMode::HalfPage, TurnMode::Alternating] {
                 assert!(views(0, layout, mode).is_empty());
                 let mut r = Reader::new(0);
@@ -460,7 +439,7 @@ mod tests {
     #[test]
     fn every_page_is_reachable_and_goto_lands_on_a_full_view() {
         for count in 1..12 {
-            for layout in [Layout::Single, TWO, BOOK] {
+            for layout in [Layout::Single, TWO] {
                 for mode in [TurnMode::Full, TurnMode::HalfPage, TurnMode::Alternating] {
                     let all = views(count, layout, mode);
                     assert_eq!(all.len(), Reader::new(count).seq_len(layout, mode));
@@ -506,16 +485,14 @@ mod tests {
         r.goto(5);
         r.set_layout(TWO);
         assert_eq!(r.view().unwrap().top, vec![4, 5]);
-        // The lowest page on screen is the one kept.
-        r.set_layout(BOOK);
-        assert_eq!(r.view().unwrap().top, vec![3, 4]);
         r.set_mode(TurnMode::HalfPage);
         r.turn_next();
         assert!(r.view().unwrap().is_half());
         r.set_mode(TurnMode::Full);
-        assert_eq!(r.view().unwrap().top, vec![3, 4]);
+        assert_eq!(r.view().unwrap().top, vec![4, 5]);
+        // The lowest page on screen is the one kept.
         r.set_layout(Layout::Single);
-        assert_eq!(r.page(), 3);
+        assert_eq!(r.page(), 4);
     }
 
     #[test]
@@ -532,7 +509,7 @@ mod tests {
     #[test]
     fn huge_scores_cost_nothing() {
         let mut r = Reader::new(usize::MAX / 4);
-        r.set_layout(BOOK);
+        r.set_layout(TWO);
         r.set_mode(TurnMode::HalfPage);
         r.goto(usize::MAX);
         assert!(!r.turn_next());

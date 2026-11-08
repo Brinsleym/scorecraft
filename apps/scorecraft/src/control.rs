@@ -157,7 +157,12 @@ mod tests {
             PdfBuilder::new().pages(3, PageSpec::default()).build(),
         )
         .unwrap();
-        let mut app = App::new(Box::new(NoPlatform), Settings::default());
+        // One page at a time, so each turn moves one page (the default is automatic).
+        let settings = Settings {
+            layout: "single".into(),
+            ..Settings::default()
+        };
+        let mut app = App::new(Box::new(NoPlatform), settings);
         app.open_path(&path.to_string_lossy()).unwrap();
 
         let ctx = Context::default();

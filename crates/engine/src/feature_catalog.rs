@@ -22,9 +22,9 @@ pub const FEATURES: &[Feature] = &[
     },
     Feature {
         id: "READ-2",
-        title: "Single-page layout",
+        title: "Single-page layout, and the automatic layout (one page or two from the window's shape; the default)",
         priority: "P0",
-        commands: &["view.layout.single"],
+        commands: &["view.layout.single", "view.layout.auto"],
     },
     Feature {
         id: "READ-3",
@@ -184,9 +184,9 @@ pub const FEATURES: &[Feature] = &[
     },
     Feature {
         id: "ANNO-6",
-        title: "Stroke eraser (removes whole strokes)",
+        title: "Stroke eraser (removes whole strokes), and Clear Ink for the pages on screen or the whole score",
         priority: "P0",
-        commands: &["annotate.tool.strokeEraser"],
+        commands: &["annotate.tool.strokeEraser", "annotate.clear"],
     },
     Feature {
         id: "ANNO-7",

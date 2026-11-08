@@ -49,6 +49,9 @@ pub struct ReaderState {
     pub(crate) viewport: Size,
     /// Device pixels per frontend pixel (2 on a 2× display).
     pub(crate) pixels_per_point: f64,
+    /// The automatic layout (owner, 2026-11-01): one page or two, chosen from the viewport's
+    /// shape each time it changes ([`ReaderState::resolve_layout`]).
+    pub(crate) auto_layout: bool,
 }
 
 impl ReaderState {
@@ -59,7 +62,33 @@ impl ReaderState {
             zoom: Zoom::default(),
             viewport: DEFAULT_VIEWPORT,
             pixels_per_point: 1.0,
+            auto_layout: false,
         }
+    }
+
+    /// With the automatic layout, shows two pages side by side when the viewport is wide enough
+    /// for them to be drawn at least [`AUTO_TWO_PAGE`] as large as one page alone would be, and
+    /// one page otherwise (a portrait screen always shows one). Does nothing with a fixed layout.
+    pub(crate) fn resolve_layout(&mut self) {
+        if !self.auto_layout {
+            return;
+        }
+        let want = auto_layout_for(self.viewport, self.page_size(), self.shown.len());
+        if self.reader.layout() != want {
+            self.reader.set_layout(want);
+        }
+    }
+
+    /// The size of the page being read (A4 portrait with nothing shown).
+    fn page_size(&self) -> Size {
+        self.shown
+            .get(self.reader.page())
+            .map(|p| p.size)
+            .filter(|s| s.width > 0.0 && s.height > 0.0)
+            .unwrap_or(Size {
+                width: 595.0,
+                height: 842.0,
+            })
     }
 
     /// Replaces the page list (after a page edit), staying on the same file page when it is still
@@ -85,6 +114,7 @@ impl ReaderState {
         reader.goto(target);
         self.reader = reader;
         self.shown = shown;
+        self.resolve_layout();
     }
 
     /// The file page being read; 0 when nothing is shown.
@@ -176,10 +206,6 @@ impl ReaderState {
                 })
             })
             .collect();
-        let first_alone = matches!(
-            self.reader.layout(),
-            scorecraft_layout::Layout::TwoPage { first_alone: true }
-        );
         json!({
             "pageCount": self.shown.len(),
             "page": if self.shown.is_empty() { Value::Null } else { json!(self.reader.page() + 1) },
@@ -192,7 +218,7 @@ impl ReaderState {
             "turn": self.reader.index() + 1,
             "turns": self.reader.len(),
             "layout": self.reader.layout().id(),
-            "firstAlone": first_alone,
+            "layoutChoice": if self.auto_layout { "auto" } else { self.reader.layout().id() },
             "mode": self.reader.mode().id(),
             "split": self.reader.split(),
             "zoom": {
@@ -208,6 +234,27 @@ impl ReaderState {
             "overflow": [frame.overflow.0, frame.overflow.1],
             "slots": slots,
         })
+    }
+}
+
+/// How much of a single page's size each of two side-by-side pages must keep for the automatic
+/// layout to show two.
+pub const AUTO_TWO_PAGE: f64 = 0.9;
+
+/// The automatic layout's choice for a viewport, the page being read and the page count.
+pub fn auto_layout_for(viewport: Size, page: Size, count: usize) -> scorecraft_layout::Layout {
+    use scorecraft_layout::Layout;
+    let (w, h) = (viewport.width, viewport.height);
+    let (pw, ph) = (page.width, page.height);
+    if count < 2 || !(w > 0.0 && h > 0.0 && pw > 0.0 && ph > 0.0) || h >= w {
+        return Layout::Single;
+    }
+    let one = (w / pw).min(h / ph);
+    let two = (w / (2.0 * pw)).min(h / ph);
+    if two >= one * AUTO_TWO_PAGE {
+        Layout::TwoPage
+    } else {
+        Layout::Single
     }
 }
 

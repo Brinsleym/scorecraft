@@ -14,6 +14,7 @@
 
 pub mod app;
 pub mod control;
+pub mod icons;
 pub mod ink;
 pub mod library_view;
 pub mod markup_bar;

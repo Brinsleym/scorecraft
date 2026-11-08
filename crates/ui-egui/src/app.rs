@@ -1,10 +1,11 @@
 //! The ScoreCraft shell: toolbar, reader and shell commands. Platform-free; the desktop and web
 //! apps supply a [`Platform`] and call [`App::ui`] every frame.
 
-use egui::{Align, Color32, Context, Layout, Rect, RichText, Sense, Stroke, Ui, Vec2, pos2, vec2};
+use egui::{Align, Color32, Context, Layout, Rect, RichText, Ui, Vec2, vec2};
 use scorecraft_engine::{EngineError, Session};
 use serde_json::{Value, json};
 
+use crate::icons::Icon;
 use crate::reader::ReaderCanvas;
 use crate::settings::Settings;
 use crate::state::{Theme, UiState};
@@ -105,6 +106,8 @@ pub struct App {
     click_error: Option<String>,
     /// When to sync next on its own, in egui seconds (`None`: at the first frame).
     next_sync: Option<f64>,
+    /// Whether the screen was in portrait the last frame (`None` before the platform says).
+    portrait: Option<bool>,
 }
 
 fn bool_param(params: &Value, key: &str) -> Result<Option<bool>, EngineError> {
@@ -165,6 +168,7 @@ impl App {
             sent_click: None,
             click_error: None,
             next_sync: None,
+            portrait: None,
         }
     }
 
@@ -271,9 +275,10 @@ impl App {
         }
         match id {
             "ui.view.fullScreen" => {
+                // The toolbars stay in full screen (owner, 2026-11-01); a tap in the top band
+                // still hides and shows them.
                 let on = bool_param(params, "on")?.unwrap_or(!self.state.full_screen);
                 self.state.full_screen = on;
-                self.state.chrome = !on;
             }
             "ui.power.keepAwake" => {
                 self.state.keep_awake.wanted = bool_param(params, "on")?.unwrap_or(true);
@@ -343,6 +348,36 @@ impl App {
         }
     }
 
+    /// When the screen turns to portrait while a score with the automatic layout is open, go
+    /// full screen (the automatic layout then shows one page). Only on the turn itself, so the
+    /// player can leave full screen again.
+    fn follow_rotation(&mut self, ctx: &Context) {
+        let Some(size) = ctx.input(|i| i.viewport().monitor_size) else {
+            return;
+        };
+        if !(size.x > 0.0 && size.y > 0.0) {
+            return;
+        }
+        let portrait = size.y > size.x;
+        let turned = self.portrait == Some(false) && portrait;
+        self.portrait = Some(portrait);
+        if turned {
+            self.rotated_to_portrait();
+        }
+    }
+
+    /// The screen has just turned to portrait.
+    pub fn rotated_to_portrait(&mut self) {
+        let auto = self
+            .session
+            .reader_state()
+            .is_some_and(|st| st.get("layoutChoice").and_then(Value::as_str) == Some("auto"));
+        if auto && !self.state.full_screen {
+            let r = self.command("ui.view.fullScreen", &json!({ "on": true }));
+            self.report(r);
+        }
+    }
+
     /// Keeps the screen awake while wanted and a score is open (READ-9).
     fn sync_keep_awake(&mut self) {
         let want = self.state.keep_awake.wanted && self.session.has_score();
@@ -374,6 +409,7 @@ impl App {
             ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(self.state.full_screen));
             self.sent_full_screen = Some(self.state.full_screen);
         }
+        self.follow_rotation(&ctx);
         self.sync_keep_awake();
         self.sync_click();
         self.auto_sync(&ctx);
@@ -595,7 +631,7 @@ impl App {
         let running = st.get("running").and_then(Value::as_bool).unwrap_or(false);
         let bpm = st.get("bpm").and_then(Value::as_f64).unwrap_or(100.0);
         let beats = st.get("beats").and_then(Value::as_u64).unwrap_or(4);
-        ui.menu_button(format!("♩ {bpm:.0}"), |ui| {
+        ui.menu_button(format!("{bpm:.0} BPM"), |ui| {
             if ui
                 .selectable_label(running, if running { "Stop" } else { "Start" })
                 .clicked()
@@ -772,7 +808,7 @@ impl App {
             Layout::centered_and_justified(egui::Direction::TopDown),
             |ui| {
                 ui.label(
-                    RichText::new("Open a score (Ctrl+O) or drop a PDF here")
+                    RichText::new("Import a score (Ctrl+O) or drop a PDF here")
                         .size(20.0)
                         .color(Color32::from_gray(230)),
                 );
@@ -793,15 +829,42 @@ impl App {
         let size = Vec2::splat(tokens.button);
         let r = craft_ui::buttons::IconButton::new(label, size, &style)
             .selected(selected)
-            .show(ui, |ui, rect, colour| paint_icon(ui, rect, colour, icon))
+            .show(ui, |ui, rect, colour| {
+                crate::icons::paint(ui.painter(), rect, colour, icon)
+            })
             .on_hover_text(label);
         r.clicked()
+    }
+
+    /// The page layout as a drop-down: Automatic, Single page or Two pages, for this score.
+    fn layout_menu(
+        &mut self,
+        ui: &mut Ui,
+        tokens: &Tokens,
+        choice: &str,
+        run: &mut Vec<(&'static str, Value)>,
+    ) {
+        let (_, label, icon) = LAYOUTS
+            .iter()
+            .copied()
+            .find(|l| l.0 == choice)
+            .unwrap_or(LAYOUTS[0]);
+        let r = crate::icons::labelled(ui, icon, label).on_hover_text("Page layout");
+        egui::Popup::menu(&r).show(|ui| {
+            for (id, label, icon) in LAYOUTS {
+                if crate::icons::labelled_selected(ui, icon, label, id == choice).clicked() {
+                    run.push((layout_command(id), json!({})));
+                    ui.close();
+                }
+            }
+        });
+        let _ = tokens;
     }
 
     fn toolbar(&mut self, ui: &mut Ui, tokens: &Tokens) {
         let st = self.session.reader_state().unwrap_or(Value::Null);
         let s = |k: &str| st.get(k).and_then(Value::as_str).unwrap_or("").to_owned();
-        let layout = s("layout");
+        let choice = s("layoutChoice");
         let mode = s("mode");
         let fit = st
             .pointer("/zoom/fit")
@@ -815,9 +878,6 @@ impl App {
         let has = self.session.has_score();
         let mut run: Vec<(&str, Value)> = Vec::new();
         ui.horizontal_centered(|ui| {
-            if self.icon_button(ui, tokens, "Open Score…", false, Icon::Open) {
-                self.pick_and_open();
-            }
             if self.session.library().is_some()
                 && self.icon_button(ui, tokens, "Library", self.state.library, Icon::Library)
             {
@@ -879,21 +939,7 @@ impl App {
                     run.push(("view.turn.next", json!({})));
                 }
                 ui.separator();
-                if self.icon_button(ui, tokens, "Single Page", layout == "single", Icon::Single) {
-                    run.push(("view.layout.single", json!({})));
-                }
-                if self.icon_button(ui, tokens, "Two Pages", layout == "twoPage", Icon::Two) {
-                    run.push(("view.layout.twoPage", json!({})));
-                }
-                if layout == "twoPage" {
-                    let fa = st
-                        .get("firstAlone")
-                        .and_then(Value::as_bool)
-                        .unwrap_or(false);
-                    if self.icon_button(ui, tokens, "First Page Alone", fa, Icon::FirstAlone) {
-                        run.push(("view.layout.twoPage", json!({ "firstAlone": !fa })));
-                    }
-                }
+                self.layout_menu(ui, tokens, &choice, &mut run);
                 ui.separator();
                 let half = mode == "halfPage";
                 if self.icon_button(ui, tokens, "Half-Page Turns", half, Icon::Half) {
@@ -953,12 +999,12 @@ impl App {
                     let dl = defaults
                         .get("layout")
                         .and_then(Value::as_str)
-                        .unwrap_or("single");
+                        .unwrap_or("auto");
                     let dm = defaults
                         .get("mode")
                         .and_then(Value::as_str)
                         .unwrap_or("full");
-                    for (id, label) in [("single", "Single page"), ("twoPage", "Two pages")] {
+                    for (id, label, _) in LAYOUTS {
                         if ui.radio(dl == id, label).clicked() {
                             run.push(("view.defaults.set", json!({ "layout": id })));
                         }
@@ -1006,6 +1052,9 @@ impl App {
                 if self.icon_button(ui, tokens, "Markup", marking, Icon::Markup) {
                     run.push(("annotate.mode.set", json!({ "on": !marking })));
                 }
+                if self.session.library_score_id().is_some() {
+                    clear_ink_button(ui, tokens, &mut run);
+                }
             });
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 let playing = self
@@ -1042,14 +1091,6 @@ impl App {
                         json!({ "theme": if dark { "light" } else { "dark" } }),
                     ));
                 }
-                let awake = self.state.keep_awake.wanted;
-                let awake_label = match &self.state.keep_awake.error {
-                    Some(e) => format!("Keep Screen Awake ({e})"),
-                    None => "Keep Screen Awake".to_owned(),
-                };
-                if self.icon_button(ui, tokens, &awake_label, awake, Icon::Awake) {
-                    run.push(("ui.power.keepAwake", json!({ "on": !awake })));
-                }
                 if self.icon_button(
                     ui,
                     tokens,
@@ -1065,6 +1106,44 @@ impl App {
             let r = self.command(id, &p);
             self.report(r);
         }
+    }
+}
+
+/// Clear Ink (owner, 2026-11-01): removes the markings from the pages on screen, or the whole
+/// score, after asking. One undo step.
+fn clear_ink_button(ui: &mut Ui, tokens: &Tokens, run: &mut Vec<(&'static str, Value)>) {
+    let style = tokens.icon_button();
+    let r = craft_ui::buttons::IconButton::new("Clear Ink", Vec2::splat(tokens.button), &style)
+        .show(ui, |ui, rect, colour| {
+            crate::icons::paint(ui.painter(), rect, colour, Icon::ClearInk)
+        })
+        .on_hover_text("Clear Ink");
+    egui::Popup::menu(&r).show(|ui| {
+        ui.label("Remove the pen, highlighter, text and stamps?");
+        if ui.button("Clear the pages on screen").clicked() {
+            run.push(("annotate.clear", json!({ "pages": "shown" })));
+            ui.close();
+        }
+        if ui.button("Clear the whole score").clicked() {
+            run.push(("annotate.clear", json!({ "pages": "all" })));
+            ui.close();
+        }
+        ui.label(RichText::new("Undo brings it back.").weak());
+    });
+}
+
+/// The page layouts: id, label and icon, Automatic first (the default).
+const LAYOUTS: [(&str, &str, Icon); 3] = [
+    ("auto", "Automatic", Icon::AutoLayout),
+    ("single", "Single page", Icon::Single),
+    ("twoPage", "Two pages", Icon::Two),
+];
+
+fn layout_command(id: &str) -> &'static str {
+    match id {
+        "single" => "view.layout.single",
+        "twoPage" => "view.layout.twoPage",
+        _ => "view.layout.auto",
     }
 }
 
@@ -1179,205 +1258,10 @@ pub fn import_report(v: &Value) -> String {
     out
 }
 
-/// The toolbar's icons, painted with shapes so the shell ships no icon assets.
-#[derive(Debug, Clone, Copy)]
-enum Icon {
-    Open,
-    Previous,
-    Next,
-    Single,
-    Two,
-    FirstAlone,
-    Half,
-    Alternate,
-    FitWidth,
-    ZoomIn,
-    ZoomOut,
-    FullScreen,
-    Awake,
-    Theme,
-    Markup,
-    Library,
-}
-
-fn paint_icon(ui: &Ui, rect: Rect, c: Color32, icon: Icon) {
-    let p = ui.painter();
-    let r = rect.shrink(rect.width() * 0.28);
-    let line = Stroke::new(1.8, c);
-    let page = |x0: f32, x1: f32| Rect::from_min_max(pos2(x0, r.top()), pos2(x1, r.bottom()));
-    match icon {
-        Icon::Open => {
-            let body = Rect::from_min_max(pos2(r.left(), r.top() + r.height() * 0.25), r.max);
-            p.rect_stroke(body, 2.0, line, egui::StrokeKind::Middle);
-            p.line_segment(
-                [
-                    pos2(r.left(), body.top()),
-                    pos2(r.left() + r.width() * 0.4, r.top()),
-                ],
-                line,
-            );
-            p.line_segment(
-                [
-                    pos2(r.left() + r.width() * 0.4, r.top()),
-                    pos2(r.center().x, body.top()),
-                ],
-                line,
-            );
-        }
-        Icon::Previous | Icon::Next => {
-            let (a, b) = if matches!(icon, Icon::Next) {
-                (r.left(), r.right())
-            } else {
-                (r.right(), r.left())
-            };
-            let pts = vec![pos2(a, r.top()), pos2(b, r.center().y), pos2(a, r.bottom())];
-            p.add(egui::Shape::convex_polygon(pts, c, Stroke::NONE));
-        }
-        Icon::Single => {
-            p.rect_stroke(
-                page(r.left() + r.width() * 0.2, r.right() - r.width() * 0.2),
-                1.0,
-                line,
-                egui::StrokeKind::Middle,
-            );
-        }
-        Icon::Two | Icon::FirstAlone => {
-            let m = r.center().x;
-            p.rect_stroke(page(r.left(), m - 1.0), 1.0, line, egui::StrokeKind::Middle);
-            if matches!(icon, Icon::Two) {
-                p.rect_stroke(
-                    page(m + 1.0, r.right()),
-                    1.0,
-                    line,
-                    egui::StrokeKind::Middle,
-                );
-            } else {
-                p.text(
-                    pos2(m + r.width() * 0.25, r.center().y),
-                    egui::Align2::CENTER_CENTER,
-                    "1",
-                    egui::FontId::proportional(r.height() * 0.8),
-                    c,
-                );
-            }
-        }
-        Icon::Half => {
-            let pg = page(r.left() + r.width() * 0.2, r.right() - r.width() * 0.2);
-            p.rect_stroke(pg, 1.0, line, egui::StrokeKind::Middle);
-            p.rect_filled(
-                Rect::from_min_max(pg.min, pos2(pg.right(), pg.center().y)),
-                1.0,
-                c.gamma_multiply(0.5),
-            );
-        }
-        Icon::Alternate => {
-            let m = r.center().x;
-            p.rect_filled(page(r.left(), m - 1.0), 1.0, c.gamma_multiply(0.5));
-            p.rect_stroke(
-                page(m + 1.0, r.right()),
-                1.0,
-                line,
-                egui::StrokeKind::Middle,
-            );
-        }
-        Icon::FitWidth => {
-            let y = r.center().y;
-            p.line_segment([pos2(r.left(), y), pos2(r.right(), y)], line);
-            for (x, d) in [(r.left(), 1.0), (r.right(), -1.0)] {
-                p.line_segment([pos2(x, y), pos2(x + d * 5.0, y - 5.0)], line);
-                p.line_segment([pos2(x, y), pos2(x + d * 5.0, y + 5.0)], line);
-            }
-            p.line_segment([pos2(r.left(), r.top()), pos2(r.left(), r.bottom())], line);
-            p.line_segment(
-                [pos2(r.right(), r.top()), pos2(r.right(), r.bottom())],
-                line,
-            );
-        }
-        Icon::ZoomIn | Icon::ZoomOut => {
-            let rad = r.width() * 0.38;
-            let ctr = r.center() - vec2(2.0, 2.0);
-            p.circle_stroke(ctr, rad, line);
-            p.line_segment([ctr + vec2(rad * 0.7, rad * 0.7), r.right_bottom()], line);
-            p.line_segment(
-                [ctr - vec2(rad * 0.5, 0.0), ctr + vec2(rad * 0.5, 0.0)],
-                line,
-            );
-            if matches!(icon, Icon::ZoomIn) {
-                p.line_segment(
-                    [ctr - vec2(0.0, rad * 0.5), ctr + vec2(0.0, rad * 0.5)],
-                    line,
-                );
-            }
-        }
-        Icon::FullScreen => {
-            let k = r.width() * 0.35;
-            for (corner, dx, dy) in [
-                (r.left_top(), 1.0, 1.0),
-                (r.right_top(), -1.0, 1.0),
-                (r.left_bottom(), 1.0, -1.0),
-                (r.right_bottom(), -1.0, -1.0),
-            ] {
-                p.line_segment([corner, corner + vec2(dx * k, 0.0)], line);
-                p.line_segment([corner, corner + vec2(0.0, dy * k)], line);
-            }
-        }
-        Icon::Awake => {
-            let ctr = r.center();
-            p.circle_stroke(ctr, r.width() * 0.22, line);
-            for i in 0..8 {
-                let a = i as f32 * std::f32::consts::FRAC_PI_4;
-                let d = vec2(a.cos(), a.sin());
-                p.line_segment(
-                    [ctr + d * r.width() * 0.34, ctr + d * r.width() * 0.5],
-                    line,
-                );
-            }
-        }
-        Icon::Library => {
-            // Three book spines.
-            let w = r.width() / 4.0;
-            for i in 0..3 {
-                let x = r.left() + i as f32 * (w + 2.0);
-                p.rect_stroke(
-                    Rect::from_min_max(
-                        pos2(x, r.top() + (i % 2) as f32 * 3.0),
-                        pos2(x + w, r.bottom()),
-                    ),
-                    1.0,
-                    line,
-                    egui::StrokeKind::Middle,
-                );
-            }
-        }
-        Icon::Markup => {
-            // A pen, nib down to the left.
-            let (a, b) = (pos2(r.left(), r.bottom()), pos2(r.right(), r.top()));
-            p.line_segment([a + vec2(3.0, -3.0), b], Stroke::new(3.0, c));
-            p.add(egui::Shape::convex_polygon(
-                vec![a, a + vec2(6.0, 0.0), a + vec2(0.0, -6.0)],
-                c,
-                Stroke::NONE,
-            ));
-        }
-        Icon::Theme => {
-            let ctr = r.center();
-            let rad = r.width() * 0.45;
-            p.circle_stroke(ctr, rad, line);
-            let half: Vec<egui::Pos2> = (0..=16)
-                .map(|i| {
-                    let a = -std::f32::consts::FRAC_PI_2 + i as f32 * std::f32::consts::PI / 16.0;
-                    ctr + vec2(a.cos(), a.sin()) * rad
-                })
-                .collect();
-            p.add(egui::Shape::convex_polygon(half, c, Stroke::NONE));
-        }
-    }
-    let _ = Sense::hover();
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use egui::pos2;
     use scorecraft_testkit::pdf::{PageSpec, PdfBuilder};
 
     fn app_with_score(pages: usize) -> (App, std::path::PathBuf) {
@@ -1432,10 +1316,11 @@ mod tests {
         let r = app.command("ui.view.fullScreen", &json!({})).unwrap();
         assert_eq!(
             (r["fullScreen"].as_bool(), r["chrome"].as_bool()),
-            (Some(true), Some(false))
+            (Some(true), Some(true)),
+            "the toolbars stay in full screen"
         );
         let r = app.command("ui.chrome.toggle", &json!({})).unwrap();
-        assert_eq!(r["chrome"], true);
+        assert_eq!(r["chrome"], false);
         let r = app
             .command("ui.theme.set", &json!({ "theme": "dark" }))
             .unwrap();
@@ -1816,6 +1701,12 @@ mod tests {
         frames(&mut app, &ctx, 2, Vec::new());
         let st = app.session.reader_state().unwrap();
         assert_eq!(st["page"], 1);
+        // The automatic layout shows two A4 pages in a landscape window.
+        assert_eq!(
+            (st["layoutChoice"].as_str(), st["layout"].as_str()),
+            (Some("auto"), Some("twoPage"))
+        );
+        app.command("view.layout.single", &json!({})).unwrap();
         // The reader area is the window minus the toolbar.
         let vp = st["viewport"]["height"].as_f64().unwrap();
         assert!(vp > 700.0 && vp < 800.0, "{vp}");
@@ -1844,6 +1735,37 @@ mod tests {
         );
         frames(&mut app, &ctx, 2, vec![press(false)]);
         assert_eq!(app.session.reader_state().unwrap()["page"], 3);
+    }
+
+    #[test]
+    fn turning_the_screen_to_portrait_goes_full_screen_once() {
+        let (mut app, _) = app_with_score(3);
+        let ctx = Context::default();
+        let monitor = |app: &mut App, w: f32, h: f32| {
+            let mut input = egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(1280.0, 800.0))),
+                ..Default::default()
+            };
+            if let Some(v) = input.viewports.get_mut(&egui::ViewportId::ROOT) {
+                v.monitor_size = Some(vec2(w, h));
+            }
+            let mut out = ctx.run_ui(input, |ui| app.ui(ui));
+            out.textures_delta.clear();
+        };
+        monitor(&mut app, 1920.0, 1080.0);
+        assert!(!app.state.full_screen);
+        monitor(&mut app, 1080.0, 1920.0);
+        assert!(app.state.full_screen, "turned to portrait");
+        assert!(app.state.chrome, "the toolbars stay");
+        app.command("ui.view.fullScreen", &json!({ "on": false }))
+            .unwrap();
+        monitor(&mut app, 1080.0, 1920.0);
+        assert!(!app.state.full_screen, "only on the turn itself");
+        // A score on a fixed layout stays as it is.
+        monitor(&mut app, 1920.0, 1080.0);
+        app.command("view.layout.twoPage", &json!({})).unwrap();
+        monitor(&mut app, 1080.0, 1920.0);
+        assert!(!app.state.full_screen);
     }
 
     #[test]

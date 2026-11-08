@@ -5,6 +5,7 @@
 use egui::{Context, RichText};
 use serde_json::{Value, json};
 
+use crate::icons::{self, Icon};
 use crate::theme::Tokens;
 
 /// What is typed into the details fields, for one score.
@@ -131,12 +132,8 @@ impl ScorePanel {
                     ui.horizontal(|ui| {
                         for star in 1..=5u8 {
                             let on = star <= d.difficulty;
-                            let text = RichText::new(if on { "★" } else { "☆" }).color(if on {
-                                tokens.accent
-                            } else {
-                                tokens.text
-                            });
-                            if ui.selectable_label(false, text).clicked() {
+                            let icon = if on { Icon::StarFilled } else { Icon::Star };
+                            if icons::small_button(ui, icon, &format!("{star} of 5")).clicked() {
                                 // Tapping the chosen star again clears it.
                                 d.difficulty = if d.difficulty == star { 0 } else { star };
                             }
@@ -179,9 +176,9 @@ impl ScorePanel {
                             let source = p.get("source").and_then(Value::as_u64).unwrap_or(0) + 1;
                             let hidden = p.get("hidden").and_then(Value::as_bool).unwrap_or(false);
                             let turn = match p.get("rotation").and_then(Value::as_i64) {
-                                Some(90) => " ↻90°",
-                                Some(180) => " ↻180°",
-                                Some(270) => " ↺90°",
+                                Some(90) => ", turned right",
+                                Some(180) => ", upside down",
+                                Some(270) => ", turned left",
                                 _ => "",
                             };
                             ui.horizontal(|ui| {
@@ -192,13 +189,14 @@ impl ScorePanel {
                                     text = text.weak().italics();
                                 }
                                 ui.label(text);
-                                if ui.small_button("↺").on_hover_text("Turn left").clicked() {
+                                if icons::small_button(ui, Icon::TurnLeft, "Turn left").clicked() {
                                     run.push((
                                         "page.rotate",
                                         json!({ "score": id, "page": pos, "degrees": -90 }),
                                     ));
                                 }
-                                if ui.small_button("↻").on_hover_text("Turn right").clicked() {
+                                if icons::small_button(ui, Icon::TurnRight, "Turn right").clicked()
+                                {
                                     run.push((
                                         "page.rotate",
                                         json!({ "score": id, "page": pos, "degrees": 90 }),
@@ -213,23 +211,28 @@ impl ScorePanel {
                                         json!({ "score": id, "page": pos, "hidden": !hidden }),
                                     ));
                                 }
-                                if pos > 1 && ui.small_button("↑").clicked() {
+                                if pos > 1 && icons::small_button(ui, Icon::Up, "Move up").clicked()
+                                {
                                     run.push((
                                         "page.move",
                                         json!({ "score": id, "from": pos, "to": pos - 1 }),
                                     ));
                                 }
-                                if pos < n && ui.small_button("↓").clicked() {
+                                if pos < n
+                                    && icons::small_button(ui, Icon::Down, "Move down").clicked()
+                                {
                                     run.push((
                                         "page.move",
                                         json!({ "score": id, "from": pos, "to": pos + 1 }),
                                     ));
                                 }
                                 if n > 1
-                                    && ui
-                                        .small_button("✕")
-                                        .on_hover_text("Delete from the score (the file keeps it)")
-                                        .clicked()
+                                    && icons::small_button(
+                                        ui,
+                                        Icon::Close,
+                                        "Delete from the score (the file keeps it)",
+                                    )
+                                    .clicked()
                                 {
                                     run.push((
                                         "page.delete",
@@ -253,7 +256,7 @@ impl ScorePanel {
                         if ui.link(name).clicked() {
                             run.push(("view.bookmark.goto", json!({ "bookmark": bid })));
                         }
-                        if ui.small_button("✕").clicked() {
+                        if icons::small_button(ui, Icon::Close, "Remove bookmark").clicked() {
                             run.push((
                                 "score.bookmark.remove",
                                 json!({ "score": id, "bookmark": bid }),

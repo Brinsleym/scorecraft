@@ -12,7 +12,7 @@ use scorecraft_text::fit_inside;
 
 use crate::annotate_cmds::{markup_ready, writable};
 use crate::commands::{
-    CommandSpec, bad, opt_int, opt_str, params_object, reject_unknown_keys, req_id,
+    CommandSpec, bad, opt_int, opt_str, params_object, reject_unknown_keys, req_id, truncate,
 };
 use crate::text_cmds::{library_score, locate, page_key, page_rect, required_f64};
 use crate::{EngineError, Session};
@@ -78,6 +78,14 @@ pub fn specs() -> Vec<CommandSpec> {
             r#"{"annotation":id}"#,
             true,
             delete as _,
+        ),
+        spec(
+            "annotate.clear",
+            "Clear Ink",
+            "Markup",
+            r#"{"pages":"shown|all"="shown"}"#,
+            true,
+            clear as _,
         ),
     ]
 }
@@ -411,6 +419,70 @@ fn delete(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
         }),
     )?;
     Ok(json!({ "deleted": aid.to_string() }))
+}
+
+/// Removes every pen, highlighter, text and stamp marking from the pages on screen (or the whole
+/// score) on the visible, unlocked layers, as one undo step (owner, 2026-11-01: a Clear Ink
+/// button on the toolbar). Shortcuts and snips are navigation, not ink, and stay.
+fn clear(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
+    const ID: &str = "annotate.clear";
+    let p = params_object(ID, params)?;
+    reject_unknown_keys(ID, p, &["pages"])?;
+    let all = match opt_str(ID, p, "pages")?.unwrap_or("shown") {
+        "shown" => false,
+        "all" => true,
+        other => {
+            return Err(bad(
+                ID,
+                format!("`pages` must be shown or all, got {}", truncate(other, 32)),
+            ));
+        }
+    };
+    let score_id = open_score(session, ID)?;
+    let shown: Vec<PageKey> = session
+        .score
+        .as_ref()
+        .map(|o| {
+            let frame = o.reader.frame();
+            frame
+                .slots
+                .iter()
+                .filter_map(|s| o.reader.shown.get(s.page))
+                .filter_map(|p| u32::try_from(p.file_page).ok().map(PageKey))
+                .collect()
+        })
+        .unwrap_or_default();
+    let s = library_score(session, score_id)?;
+    let mut ops = Vec::new();
+    for (page, list) in &s.annotations {
+        if !all && !shown.contains(page) {
+            continue;
+        }
+        for a in list {
+            let ink = matches!(
+                a.kind,
+                AnnotationKind::Stroke(_)
+                    | AnnotationKind::Text(_)
+                    | AnnotationKind::Stamp(_)
+                    | AnnotationKind::Hairpin(_)
+            );
+            let open = s.layer(a.layer).is_some_and(|l| l.visible && !l.locked);
+            if ink && open {
+                ops.push(Op::RemoveAnnotation {
+                    score: score_id,
+                    page: *page,
+                    annotation: a.id,
+                });
+            }
+        }
+    }
+    let n = ops.len();
+    if n > 0 {
+        session
+            .lib_mut(ID)?
+            .commit("Clear Ink", Transaction::new(ops))?;
+    }
+    Ok(json!({ "cleared": n }))
 }
 
 #[cfg(test)]

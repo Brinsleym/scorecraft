@@ -539,7 +539,7 @@ impl InkCanvas {
             painter.text(
                 r.left_top() + vec2(2.0, 1.0),
                 egui::Align2::LEFT_TOP,
-                target.map_or_else(|| "→ hidden".to_owned(), |t| format!("→ p. {t}")),
+                target.map_or_else(|| "to a hidden page".to_owned(), |t| format!("to p. {t}")),
                 egui::FontId::proportional(11.0),
                 blue,
             );
