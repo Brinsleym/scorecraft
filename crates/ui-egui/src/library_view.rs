@@ -554,11 +554,21 @@ impl LibraryView {
                 }
             });
         }
-        let subfolders: Vec<(String, String)> = folders
+        let mut subfolders: Vec<(String, String)> = folders
             .iter()
             .filter(|f| f.2 == self.folder)
             .map(|f| (f.0.clone(), f.1.clone()))
             .collect();
+        if !self.query.trim().is_empty() {
+            // While searching, only folders that matter to the search (owner, 2026-11-08).
+            let scores = self.results.get("scores").and_then(Value::as_array);
+            let hits: Vec<Option<&str>> = scores
+                .into_iter()
+                .flatten()
+                .map(|s| s.get("folder").and_then(Value::as_str))
+                .collect();
+            subfolders.retain(|(id, name)| folder_relevant(&self.query, id, name, &folders, &hits));
+        }
         self.results_ui(ui, session, tokens, &subfolders, &folders, out);
     }
 
@@ -1937,6 +1947,39 @@ fn sync_buttons(ui: &mut Ui, session: &mut Session, out: &mut Vec<LibraryAction>
     }
 }
 
+/// Whether a folder belongs in search results: its name holds every word of `query`, or a
+/// score found (`hits`, each the folder it is filed in) is filed in it or a folder inside it.
+fn folder_relevant(
+    query: &str,
+    id: &str,
+    name: &str,
+    folders: &[(String, String, Option<String>)],
+    hits: &[Option<&str>],
+) -> bool {
+    let name = name.to_lowercase();
+    let words: Vec<String> = query.split_whitespace().map(str::to_lowercase).collect();
+    if !words.is_empty() && words.iter().all(|w| name.contains(w.as_str())) {
+        return true;
+    }
+    hits.iter().any(|&at| {
+        let mut at = at;
+        // Bounded: a damaged library could hold a cycle of parents.
+        for _ in 0..=folders.len() {
+            match at {
+                Some(f) if f == id => return true,
+                Some(f) => {
+                    at = folders
+                        .iter()
+                        .find(|x| x.0 == f)
+                        .and_then(|x| x.2.as_deref());
+                }
+                None => return false,
+            }
+        }
+        false
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1946,5 +1989,31 @@ mod tests {
         assert_eq!(day(0), "1970-01-01");
         assert_eq!(day(1_793_404_800_000), "2026-10-31");
         assert_eq!(day(951_782_400_000), "2000-02-29");
+    }
+
+    #[test]
+    fn search_shows_only_relevant_folders() {
+        let f = |id: &str, name: &str, parent: Option<&str>| {
+            (id.to_owned(), name.to_owned(), parent.map(str::to_owned))
+        };
+        let folders = vec![
+            f("a", "Bach", None),
+            f("b", "Chopin", None),
+            f("c", "Suites", Some("a")),
+            f("x", "Loop", Some("y")),
+            f("y", "Loop", Some("x")),
+        ];
+        // A score found deep inside Bach/Suites makes Bach relevant, not Chopin.
+        let hits = [Some("c")];
+        assert!(folder_relevant("cello", "a", "Bach", &folders, &hits));
+        assert!(folder_relevant("cello", "c", "Suites", &folders, &hits));
+        assert!(!folder_relevant("cello", "b", "Chopin", &folders, &hits));
+        // A folder's own name matches, whatever its case.
+        assert!(folder_relevant("chop", "b", "Chopin", &folders, &[]));
+        assert!(!folder_relevant("chop liszt", "b", "Chopin", &folders, &[]));
+        // Scores at the top of the library make no folder relevant.
+        assert!(!folder_relevant("cello", "a", "Bach", &folders, &[None]));
+        // A cycle of parents ends.
+        assert!(!folder_relevant("q", "a", "Bach", &folders, &[Some("x")]));
     }
 }

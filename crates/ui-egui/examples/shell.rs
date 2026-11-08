@@ -8,7 +8,8 @@
 //!
 //! Options: `--width W --height H` (points), `--ppp X`, `--pages N` (a synthetic score of N
 //! pages, opened in the reader; 0 for none), `--theme light|dark`, `--frame` (draw the desktop's
-//! own title bar), `--steps` (`;`-separated:
+//! own title bar), `--font F` (a fallback font file, e.g. a CJK `.ttc`), `--name N` (the
+//! score's file name), `--steps` (`;`-separated:
 //! `cmd <id> <json>`, `click x,y`, `rclick x,y`, `drag x0,y0 x1,y1`, `pen x0,y0 x1,y1`,
 //! `type <text>`, `key <Name>`, `frames N`).
 
@@ -19,7 +20,7 @@ use std::collections::HashMap;
 use egui::epaint::{ClippedPrimitive, ImageData, Primitive};
 use egui::{Color32, Context, Event, Pos2, RawInput, Rect, TextureId, pos2, vec2};
 use scorecraft_testkit::pdf::{PageSpec, PdfBuilder};
-use scorecraft_ui_egui::{App, NoPlatform, Settings};
+use scorecraft_ui_egui::{App, Settings};
 use serde_json::Value;
 
 fn arg<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
@@ -168,14 +169,24 @@ fn point(s: &str) -> Result<Pos2, String> {
 }
 
 /// The desktop's frameless window (`--frame`): the shell draws its own title bar.
-struct Framed;
+/// The headless platform: optionally the desktop's title bar, and a fallback font.
+struct Dev {
+    framed: bool,
+    fallback: Option<Vec<u8>>,
+}
 
-impl scorecraft_ui_egui::Platform for Framed {
+impl scorecraft_ui_egui::Platform for Dev {
     fn set_keep_awake(&mut self, _on: bool) -> Result<(), String> {
         Ok(())
     }
     fn draws_title_bar(&self) -> bool {
-        true
+        self.framed
+    }
+    fn ui_fonts(&self) -> scorecraft_ui_egui::UiFonts {
+        scorecraft_ui_egui::UiFonts {
+            fallbacks: self.fallback.iter().map(|b| (b.clone(), 0)).collect(),
+            ..Default::default()
+        }
     }
 }
 
@@ -193,15 +204,24 @@ fn run() -> Result<(), String> {
     if arg(&args, "--theme") == Some("dark") {
         settings.theme = scorecraft_ui_egui::Theme::Dark;
     }
-    let mut app = if args.iter().any(|a| a == "--frame") {
-        App::new(Box::new(Framed), settings)
-    } else {
-        App::new(Box::new(NoPlatform), settings)
+    let fallback = match arg(&args, "--font") {
+        Some(p) => Some(std::fs::read(p).map_err(|e| format!("{p}: {e}"))?),
+        None => None,
     };
+    let mut app = App::new(
+        Box::new(Dev {
+            framed: args.iter().any(|a| a == "--frame"),
+            fallback,
+        }),
+        settings,
+    );
     let dir = std::env::temp_dir().join(format!("scorecraft-shell-{}", std::process::id()));
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     if pages > 0 {
-        let path = dir.join("Sonata in G.pdf");
+        let path = dir.join(format!(
+            "{}.pdf",
+            arg(&args, "--name").unwrap_or("Sonata in G")
+        ));
         std::fs::write(
             &path,
             PdfBuilder::new()
