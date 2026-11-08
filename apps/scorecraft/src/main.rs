@@ -76,6 +76,17 @@ struct Desktop {
 }
 
 impl Platform for Desktop {
+    /// Segoe UI from the Windows fonts folder; ScoreCraft may not ship it.
+    fn ui_fonts(&self) -> scorecraft_ui_egui::UiFonts {
+        let dir = std::env::var_os("WINDIR")
+            .filter(|_| cfg!(windows))
+            .map(|w| PathBuf::from(w).join("Fonts"));
+        let read = |name: &str| dir.as_ref().and_then(|d| std::fs::read(d.join(name)).ok());
+        scorecraft_ui_egui::UiFonts {
+            regular: read("segoeui.ttf"),
+            semibold: read("seguisb.ttf"),
+        }
+    }
     fn pick_score(&mut self) -> Option<String> {
         #[cfg(any(windows, target_os = "macos"))]
         {

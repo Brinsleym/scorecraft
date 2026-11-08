@@ -1,5 +1,5 @@
 //! The library window (feature-map LIB-14, spec `docs/spec/library.md`): a sidebar of sections
-//! (Library, Lists, Recordings, Practice, Search, Recently Deleted, Settings), and in Library a
+//! (Library, Lists, Recordings, Practice, Recently Deleted, Settings), and in Library a
 //! grid of covers or a list, folders first, with a floating toolbar on the right and a menu on
 //! each score. Every list comes from the engine
 //! (`library.search`, `library.info`); covers are rendered off the frame (a worker thread on
@@ -15,7 +15,7 @@ use scorecraft_engine::{CoverJob, Session};
 use serde_json::{Value, json};
 
 use crate::icons::{self, Icon};
-use crate::theme::Tokens;
+use crate::theme::{self, Tokens};
 
 /// The longest side of a cover, in pixels.
 const COVER_PX: u32 = 220;
@@ -75,19 +75,17 @@ pub enum Section {
     Lists,
     Recordings,
     Practice,
-    Search,
     Trash,
     Settings,
 }
 
 impl Section {
     /// The sidebar's rows above the gap; Settings sits at the bottom.
-    pub const MAIN: [(Section, &'static str, Icon); 6] = [
+    pub const MAIN: [(Section, &'static str, Icon); 5] = [
         (Section::Library, "Library", Icon::Library),
         (Section::Lists, "Lists", Icon::Lists),
         (Section::Recordings, "Recordings", Icon::Recordings),
         (Section::Practice, "Practice", Icon::Practice),
-        (Section::Search, "Search", Icon::Search),
         (Section::Trash, "Recently Deleted", Icon::Trash),
     ];
 }
@@ -286,11 +284,7 @@ impl LibraryView {
             .ok()
             .and_then(|v| v.get("sort").cloned())
             .unwrap_or(Value::Null);
-        // Search looks through the whole library; Library through the folder shown.
-        let folder = match self.section {
-            Section::Search => None,
-            _ => self.folder.clone(),
-        };
+        let folder = self.folder.clone();
         let ask = (
             format!(
                 "{}{}",
@@ -396,7 +390,7 @@ impl LibraryView {
     }
 
     /// The left sidebar (owner, 2026-11-01): compact rows for Library, Lists, Recordings,
-    /// Practice, Search and Recently Deleted, then a gap and Settings at the bottom. When a
+    /// Practice and Recently Deleted, then a gap and Settings at the bottom. When a
     /// score is open, a row on top goes back to it.
     pub fn sidebar(
         &mut self,
@@ -474,7 +468,6 @@ impl LibraryView {
         self.refresh(session);
         match self.section {
             Section::Library => self.library_section(ui, session, tokens, &mut out),
-            Section::Search => self.search_section(ui, session, tokens, &mut out),
             Section::Lists => self.lists_panel(ui, tokens, &mut out),
             Section::Trash => {
                 heading(ui, tokens, "Recently Deleted");
@@ -553,46 +546,6 @@ impl LibraryView {
             .map(|f| (f.0.clone(), f.1.clone()))
             .collect();
         self.results_ui(ui, session, tokens, &subfolders, &folders, out);
-    }
-
-    /// Search (owner, 2026-11-01): the whole library by details or inside the scores. Searching
-    /// IMSLP for new scores comes later.
-    fn search_section(
-        &mut self,
-        ui: &mut Ui,
-        session: &mut Session,
-        tokens: &Tokens,
-        out: &mut Vec<LibraryAction>,
-    ) {
-        heading(ui, tokens, "Search");
-        ui.horizontal(|ui| {
-            let r = ui.add(
-                egui::TextEdit::singleline(&mut self.query)
-                    .hint_text("Title, composer, tags, key…")
-                    .desired_width(320.0),
-            );
-            if self.query.is_empty() {
-                r.request_focus();
-            }
-            if ui
-                .selectable_label(self.full_text, "Inside scores")
-                .on_hover_text("Search the words in the PDFs and practice notes")
-                .clicked()
-            {
-                self.full_text = !self.full_text;
-            }
-        });
-        ui.label(
-            RichText::new("Searching IMSLP for new scores is not built yet.")
-                .weak()
-                .italics(),
-        );
-        ui.add_space(4.0);
-        if self.query.trim().is_empty() {
-            return;
-        }
-        let folders = self.folder_list();
-        self.results_ui(ui, session, tokens, &[], &folders, out);
     }
 
     /// The header's buttons, right-aligned beside the title (owner's Stitch concept,
@@ -1077,8 +1030,8 @@ impl LibraryView {
             } else {
                 format!("{n} items")
             };
-            let label = caption(ui, name, 12.0, tokens.text, size.x, 1);
-            let count = caption(ui, &count, 11.0, tokens.muted, size.x, 1);
+            let label = caption(ui, name, theme::SMALL, theme::TIGHT, tokens.text, size.x, 1);
+            let count = caption(ui, &count, theme::CAPTION, 0.0, tokens.muted, size.x, 1);
             let p = ui.painter();
             let tile = egui::Rect::from_min_size(rect.min, vec2(size.x, size.x * COVER_RATIO));
             p.add(SHADOW.as_shape(tile, CornerRadius::same(RADIUS)));
@@ -1094,7 +1047,7 @@ impl LibraryView {
                 Stroke::new(1.0, tokens.card_border),
                 egui::StrokeKind::Inside,
             );
-            let side = (size.x * 0.42).clamp(24.0, 64.0);
+            let side = (size.x * 0.39).clamp(24.0, 64.0);
             icons::paint(
                 p,
                 egui::Rect::from_center_size(tile.center(), vec2(side, side)),
@@ -1150,7 +1103,15 @@ impl LibraryView {
         self.want_cover(session, &id);
         let title = s.get("title").and_then(Value::as_str).unwrap_or("");
         let composer = s.get("composer").and_then(Value::as_str).unwrap_or("");
-        let label = caption(ui, title, 12.0, tokens.text, size.x, 2);
+        let label = caption(
+            ui,
+            title,
+            theme::SMALL,
+            theme::TIGHT,
+            tokens.text,
+            size.x,
+            2,
+        );
         let p = ui.painter();
         let cover_rect = egui::Rect::from_min_size(rect.min, vec2(size.x, size.x * COVER_RATIO));
         // The page sits on white paper, whatever its own shape.
@@ -1219,14 +1180,21 @@ fn glyph(ui: &mut Ui, icon: Icon, color: Color32, side: f32) {
 
 /// A section's heading.
 fn heading(ui: &mut Ui, tokens: &Tokens, text: &str) {
-    ui.label(RichText::new(text).size(30.0).color(tokens.strong));
+    ui.label(
+        RichText::new(text)
+            .font(egui::FontId::new(theme::TITLE, theme::semibold()))
+            .extra_letter_spacing(theme::TITLE * theme::TIGHT)
+            .color(tokens.strong),
+    );
 }
 
-/// Text under a card: centred on x = 0, at most `rows` lines of `width`, cut with an ellipsis.
+/// Text under a card: centred on x = 0, at most `rows` lines of `width`, cut with an ellipsis,
+/// with `tracking` extra letter spacing as a fraction of `size`.
 fn caption(
     ui: &Ui,
     text: &str,
     size: f32,
+    tracking: f32,
     color: Color32,
     width: f32,
     rows: usize,
@@ -1237,6 +1205,9 @@ fn caption(
         color,
         width,
     );
+    if let Some(section) = job.sections.first_mut() {
+        section.format.extra_letter_spacing = size * tracking;
+    }
     job.wrap.max_rows = rows;
     job.wrap.break_anywhere = rows == 1;
     job.halign = egui::Align::Center;
@@ -1270,10 +1241,13 @@ fn nav_row(ui: &mut Ui, t: &Tokens, icon: Icon, text: &str, selected: bool) -> e
         } else {
             t.nav_text
         };
-        let icon_rect =
-            egui::Rect::from_min_size(egui::pos2(left, rect.center().y - 8.0), vec2(16.0, 16.0));
+        let icon_px = theme::icon_for(theme::TEXT);
+        let icon_rect = egui::Rect::from_min_size(
+            egui::pos2(left, rect.center().y - icon_px / 2.0),
+            vec2(icon_px, icon_px),
+        );
         icons::paint(p, icon_rect, if selected { t.accent } else { fg }, icon);
-        let galley = p.layout_no_wrap(text.to_owned(), egui::FontId::proportional(13.0), fg);
+        let galley = p.layout_no_wrap(text.to_owned(), egui::FontId::proportional(theme::TEXT), fg);
         let clip =
             egui::Rect::from_min_max(egui::pos2(icon_rect.right() + 12.0, rect.top()), rect.max);
         p.with_clip_rect(clip).galley(
@@ -1306,7 +1280,8 @@ fn header_button(
     style: Style,
 ) -> egui::Response {
     const H: f32 = 36.0;
-    let font = egui::FontId::proportional(13.0);
+    let font = egui::FontId::proportional(theme::TEXT);
+    let icon_px = theme::icon_for(theme::TEXT);
     let galley = label.map(|l| {
         ui.painter()
             .layout_no_wrap(l.to_owned(), font, Color32::PLACEHOLDER)
@@ -1316,7 +1291,9 @@ fn header_button(
     let width = if square {
         H
     } else {
-        40.0 + galley.as_ref().map_or(0.0, |g| 8.0 + g.size().x) + if chevron { 20.0 } else { 0.0 }
+        24.0 + icon_px
+            + galley.as_ref().map_or(0.0, |g| 8.0 + g.size().x)
+            + if chevron { 20.0 } else { 0.0 }
     };
     let (rect, r) = ui.allocate_exact_size(vec2(width, H), Sense::click());
     if ui.is_rect_visible(rect) {
@@ -1338,14 +1315,15 @@ fn header_button(
             egui::StrokeKind::Inside,
         );
         let mut x = if square {
-            rect.center().x - 8.0
+            rect.center().x - icon_px / 2.0
         } else {
             rect.left() + 12.0
         };
         let y = rect.center().y;
-        let icon_rect = egui::Rect::from_min_size(egui::pos2(x, y - 8.0), vec2(16.0, 16.0));
+        let icon_rect =
+            egui::Rect::from_min_size(egui::pos2(x, y - icon_px / 2.0), vec2(icon_px, icon_px));
         icons::paint(p, icon_rect, fg, icon);
-        x += 24.0;
+        x += icon_px + 8.0;
         if let Some(g) = galley {
             let w = g.size().x;
             p.galley(egui::pos2(x, y - g.size().y / 2.0), g, fg);

@@ -153,5 +153,123 @@ impl Tokens {
             Stroke::new(1.0, self.text),
         );
         ctx.set_visuals(visuals);
+        ctx.all_styles_mut(|style| {
+            use egui::{FontFamily, FontId, TextStyle};
+            style.text_styles = [
+                (TextStyle::Small, FontId::proportional(CAPTION)),
+                (TextStyle::Body, FontId::proportional(TEXT)),
+                (TextStyle::Button, FontId::proportional(TEXT)),
+                (TextStyle::Heading, FontId::new(TITLE, semibold())),
+                (
+                    TextStyle::Monospace,
+                    FontId::new(TEXT, FontFamily::Monospace),
+                ),
+            ]
+            .into();
+        });
+    }
+}
+
+/// The type scale (owner's Stitch concept, 2026-11-08; `docs/ui-design.md`, Styling rules), in
+/// points: body and buttons, card titles, counts and hints, page titles.
+pub const TEXT: f32 = 13.0;
+pub const SMALL: f32 = 12.0;
+pub const CAPTION: f32 = 11.0;
+pub const TITLE: f32 = 30.0;
+/// Icons in the reader's 44-point toolbar buttons.
+pub const TOOLBAR_ICON: f32 = 20.0;
+/// "Tight" letter spacing for titles and card captions, as a fraction of the text size.
+pub const TIGHT: f32 = -0.025;
+
+/// An icon's size beside text of `text` points: 16 beside 13, as in the concept.
+pub fn icon_for(text: f32) -> f32 {
+    (text * 16.0 / 13.0).round()
+}
+
+/// Segoe UI Semibold (600): page titles. Medium (500) has no Segoe UI face and renders Regular,
+/// as it does in a browser.
+pub fn semibold() -> egui::FontFamily {
+    egui::FontFamily::Name("semibold".into())
+}
+
+/// The Tabler icon font alone, so an icon never falls back to a text glyph.
+pub fn icon_family() -> egui::FontFamily {
+    egui::FontFamily::Name("icons".into())
+}
+
+/// Tabler Icons 3.31.0 (MIT), outline at stroke 2, cut to the glyphs [`crate::icons::Icon`] uses.
+const TABLER: &[u8] = include_bytes!("../assets/tabler/tabler-icons.ttf");
+
+/// The interface fonts a platform found: Segoe UI's Regular and Semibold faces where the system
+/// has them (Windows). ScoreCraft may not ship Segoe UI, so elsewhere egui's own fonts stand in.
+#[derive(Debug, Clone, Default)]
+pub struct UiFonts {
+    pub regular: Option<Vec<u8>>,
+    pub semibold: Option<Vec<u8>>,
+}
+
+/// Installs the interface fonts: Segoe UI first (when the platform gave valid files), egui's
+/// fonts behind it for other scripts, and the Tabler icons. Font bytes from the system are
+/// checked first, since egui panics on a file it can't parse.
+pub fn install_fonts(ctx: &egui::Context, fonts: &UiFonts) {
+    use egui::{FontData, FontFamily};
+    use std::sync::Arc;
+    let mut defs = egui::FontDefinitions::default();
+    let valid = |b: &&Vec<u8>| skrifa::FontRef::from_index(b.as_slice(), 0).is_ok();
+    let mut regular = defs
+        .families
+        .get(&FontFamily::Proportional)
+        .cloned()
+        .unwrap_or_default();
+    if let Some(bytes) = fonts.regular.as_ref().filter(valid) {
+        defs.font_data.insert(
+            "segoe-ui".into(),
+            Arc::new(FontData::from_owned(bytes.clone())),
+        );
+        regular.insert(0, "segoe-ui".into());
+    }
+    let mut bold = regular.clone();
+    if let Some(bytes) = fonts.semibold.as_ref().filter(valid) {
+        defs.font_data.insert(
+            "segoe-ui-semibold".into(),
+            Arc::new(FontData::from_owned(bytes.clone())),
+        );
+        bold.insert(0, "segoe-ui-semibold".into());
+    }
+    defs.font_data
+        .insert("tabler".into(), Arc::new(FontData::from_static(TABLER)));
+    defs.families.insert(FontFamily::Proportional, regular);
+    defs.families.insert(semibold(), bold);
+    defs.families.insert(icon_family(), vec!["tabler".into()]);
+    ctx.set_fonts(defs);
+}
+
+#[cfg(test)]
+mod font_tests {
+    use super::*;
+
+    /// A damaged or truncated system font is skipped, not handed to egui (which panics on it);
+    /// text and icons still draw.
+    #[test]
+    fn unreadable_system_fonts_are_skipped() {
+        let ctx = egui::Context::default();
+        let junk = UiFonts {
+            regular: Some(b"not a font".to_vec()),
+            semibold: Some(Vec::new()),
+        };
+        install_fonts(&ctx, &junk);
+        Tokens::for_theme(Theme::Dark).apply(Theme::Dark, &ctx);
+        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+            ui.heading("Library");
+            ui.label("Etude 7");
+            crate::icons::paint(
+                ui.painter(),
+                egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(16.0, 16.0)),
+                Color32::WHITE,
+                crate::icons::Icon::Library,
+            );
+        });
+        out.textures_delta.clear();
+        assert!(!out.shapes.is_empty());
     }
 }

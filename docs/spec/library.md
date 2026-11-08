@@ -1,6 +1,6 @@
 # Library
 
-> **Last reviewed:** 2026-10-31 · **Last updated:** 2026-11-01 · **Change:** minor (the owner's first hands-on feedback: sidebar, floating toolbar, the score menu, Settings in the library; earlier: Recently Deleted with folders; earlier: the owner's answers on search and sort; earlier: M5 part 2: covers and the window; earlier: first version) · **Target:** enScore 3.7 (2026)
+> **Last reviewed:** 2026-10-31 · **Last updated:** 2026-11-08 · **Change:** minor (Search leaves the sidebar for the header; earlier: the owner's first hands-on feedback: sidebar, floating toolbar, the score menu, Settings in the library; earlier: Recently Deleted with folders; earlier: the owner's answers on search and sort; earlier: M5 part 2: covers and the window; earlier: first version) · **Target:** enScore 3.7 (2026)
 
 Finding scores in the library: search, sort, the recently opened list, importing a whole folder,
 the library window with covers, and Recently Deleted. Written for milestone M5; Recently Deleted
@@ -85,10 +85,11 @@ follow (observed in the owner's screenshots 2 and 3; nothing copied):
 
 - **No full-width toolbar.** The library has no score-view toolbar above it. A compact,
   **resizable left sidebar** lists, one per row with its icon: **Library**, **Lists**,
-  **Recordings**, **Practice**, **Search**, **Recently Deleted**, then a gap, then **Settings** at
+  **Recordings**, **Practice**, **Recently Deleted**, then a gap, then **Settings** at
   the bottom. While a score is open, a row at the top goes back to it. Recordings and Practice are
-  placeholders until they are specified; Search finds scores in the library (by their details or
-  inside them, LIB-5, LIB-6), and searching IMSLP for new scores comes later.
+  placeholders until they are specified. Search is not a sidebar row (owner, 2026-11-08): the
+  header's Search button finds scores in the folder shown (by their details or inside them, LIB-5,
+  LIB-6); searching IMSLP for new scores comes later.
 - **Library** shows the folder's name (or *Library*) with a way back up, and a **floating toolbar
   anchored on the right**: **More** (Select; covers or a list; sync), **Filter** (only the scores
   matching what is typed, optionally inside them), **Sort** (*By Title*, Composer, Date added,
@@ -190,6 +191,7 @@ Still open: the questions in the [Edit Details note](../observations/library-edi
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-08 | minor | Search leaves the sidebar; the header's Search button searches the folder shown |
 | 2026-11-01 | minor | Owner's first hands-on feedback: the library's sidebar (Library, Lists, Recordings, Practice, Search, Recently Deleted, Settings), the floating toolbar on the right, the score's right-click menu in the owner's order, selecting, Settings as a library page, folder icons; LIBS-15..17 |
 | 2026-11-01 | minor | LIB-10: folders in Recently Deleted with their scores, read-only, restored together, removed after 30 days; scores left in one are reported with a restore prompt; LIBS-14 |
 | 2026-11-01 | minor | Built: search inside words and every Edit Details field (LIBS-13), articles kept in sort |

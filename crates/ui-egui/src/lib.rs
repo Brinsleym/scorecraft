@@ -27,7 +27,7 @@ pub mod theme;
 pub use app::{App, NoPlatform, Platform, SHELL_COMMANDS};
 pub use settings::Settings;
 pub use state::{Theme, UiState};
-pub use theme::Tokens;
+pub use theme::{Tokens, UiFonts};
 
 /// The crate's package name, used by `cargo xtask layers` smoke tests and diagnostics.
 pub const CRATE_NAME: &str = env!("CARGO_PKG_NAME");
