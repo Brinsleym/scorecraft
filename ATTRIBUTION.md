@@ -16,7 +16,7 @@ to them ([`docs/contributing.md`](docs/contributing.md#adding-an-asset)).
 
 | Path | Title | Author | Source | License |
 |---|---|---|---|---|
-| _none yet_ | | | | |
+| `docs/images/*.png` | README screenshots of ScoreCraft | ScoreCraft contributors; the pages and covers shown are public-domain scores from `corpus/public-domain` (Mutopia Project, Wikimedia Commons) | Captured from the desktop app over the control channel | MIT OR Apache-2.0; the scores shown are Public Domain (provenance in `corpus/public-domain/corpus.toml`) |
 
 ## Reused code (dependencies, not copied files)
 
