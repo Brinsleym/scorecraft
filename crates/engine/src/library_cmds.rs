@@ -242,10 +242,28 @@ fn close(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
     Ok(json!({ "closed": true }))
 }
 
+/// What each folder holds directly, as the library shows it: its live folders and the live
+/// scores filed in it (list placeholders' pages are not library scores).
+fn folder_items(lib: &Library) -> std::collections::BTreeMap<FolderId, usize> {
+    let hidden = lib.placeholder_pages();
+    let mut items = std::collections::BTreeMap::new();
+    let parents = lib.live_folders().filter_map(|f| f.parent);
+    let homes = lib
+        .live_scores()
+        .filter(|s| !hidden.contains(&s.id))
+        .filter_map(|s| s.folder);
+    for f in parents.chain(homes) {
+        let n: &mut usize = items.entry(f).or_default();
+        *n = n.saturating_add(1);
+    }
+    items
+}
+
 fn info(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
     const ID: &str = "library.info";
     reject_unknown_keys(ID, params_object(ID, params)?, &[])?;
     let l = session.lib_mut(ID)?;
+    let items = folder_items(&l.lib);
     Ok(json!({
         "id": l.lib.id.to_string(),
         "location": l.location,
@@ -256,6 +274,7 @@ fn info(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
             "name": f.name,
             "parent": f.parent.map(|p| p.to_string()),
             "path": l.lib.folder_path(f.id),
+            "items": items.get(&f.id).copied().unwrap_or(0),
         })).collect::<Vec<_>>(),
         "deletedFolders": l.lib.folders.values().filter(|f| f.deleted_ms.is_some()).map(|f| json!({
             "id": f.id.to_string(),

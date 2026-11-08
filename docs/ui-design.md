@@ -1,6 +1,6 @@
 # UI design system
 
-> **Last reviewed:** 2026-10-28 · **Last updated:** 2026-11-01 · **Change:** minor (the owner's first hands-on feedback: toolbars, the library's sidebar and floating toolbar, painted icons; earlier: first version) · **Target:** enScore 3.7 (2026)
+> **Last reviewed:** 2026-10-28 · **Last updated:** 2026-11-08 · **Change:** minor (the library ported from the owner's Stitch concept: brand accent, header buttons, card grid; earlier: the owner's first hands-on feedback) · **Target:** enScore 3.7 (2026)
 
 ScoreCraft's look is its own. We match enScore's *conventions* where a musician's hands expect them
 (tap to turn, pen to mark, the score filling the screen), never its visual identity, icons or copy
@@ -23,7 +23,8 @@ ScoreCraft's look is its own. We match enScore's *conventions* where a musician'
 ## Themes and tokens
 
 All colours, radii, spacings and font sizes come from `theme::Tokens` (`ui-egui/src/theme.rs`),
-never hard-coded. Themes:
+never hard-coded. The accent in every theme is ScoreCraft's brand colour, `#c45821` (owner,
+2026-11-08; see [decisions](decisions.md)). Themes:
 
 | Theme | Use |
 |---|---|
@@ -56,10 +57,18 @@ hue kept), Sepia (with intensity), Inverted.
 ## Library layout
 
 No full-width toolbar. A compact, resizable left sidebar of rows (Library, Lists, Recordings,
-Practice, Search, Recently Deleted, a gap, Settings); a floating toolbar anchored on the right
-(More, Filter, Sort, New Folder, Import); a grid of folders and covers or a dense list; a
-right-click menu on each score (Edit Details, Add to list, Move to, Select, Share, Print, Delete);
-multi-select for moves, lists and deleting. Spec: `docs/spec/library.md` LIB-14.
+Practice, Search, Recently Deleted, a divider, Settings); the section shown is filled, with the
+accent on its left edge and icon. Beside it, a large page title with its buttons on the right
+(More, Search this folder, Sort with a chevron, New Folder, and Import filled with the accent);
+a grid of folders and covers or a dense list; a right-click menu on each score (Edit Details, Add
+to list, Move to, Select, Share, Print, Delete); multi-select for moves, lists and deleting. Spec:
+`docs/spec/library.md` LIB-14.
+
+The look follows the owner's Stitch concept (2026-11-08): cards at least 118 pt wide fill each
+row with 24 pt between columns and 32 pt between rows; covers are 4:5 white paper with 8 pt
+corners and a soft shadow, titled underneath in up to two lines; folders are tiles with the accent
+folder icon, their name and an item count (`library.info` `folders[].items`). Header buttons and
+sidebar rows are 36 pt high (desktop sizes; tablets still need the 44 pt targets of principle 3).
 
 ## Widgets
 
@@ -84,5 +93,6 @@ PNGs of public-domain scores.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-08 | minor | Library ported from the owner's Stitch concept: brand accent `#c45821`, title-row buttons, filled card grid with item counts |
 | 2026-11-01 | minor | Owner's first hands-on feedback: what stays off the score view, the library's sidebar, floating toolbar and score menu, painted icons |
 | 2026-10-28 | major | First version |

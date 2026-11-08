@@ -471,18 +471,20 @@ impl App {
         self.score_window(&ctx, &tokens);
         if in_library {
             let open = self.open_title();
-            let actions = egui::Panel::left("library-sidebar")
+            let panel = egui::Panel::left("library-sidebar")
                 .resizable(true)
-                .default_size(190.0)
+                .default_size(200.0)
                 .size_range(140.0..=320.0)
                 .frame(
                     egui::Frame::NONE
-                        .fill(tokens.toolbar_bg)
-                        .inner_margin(egui::Margin::symmetric(6, 6)),
+                        .fill(tokens.sidebar_bg)
+                        .inner_margin(egui::Margin::symmetric(8, 12)),
                 )
-                .show(ui, |ui| self.library.sidebar(ui, open.as_deref()))
-                .inner;
-            self.library_actions(actions);
+                .show(ui, |ui| self.library.sidebar(ui, &tokens, open.as_deref()));
+            let edge = panel.response.rect;
+            ui.painter()
+                .vline(edge.right(), edge.y_range(), (1.0, tokens.divider));
+            self.library_actions(panel.inner);
         }
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(tokens.reader_bg))
@@ -515,8 +517,13 @@ impl App {
     fn library_window(&mut self, ui: &mut Ui, tokens: &Tokens) {
         self.library.grid = self.state.library_grid;
         let actions = egui::Frame::NONE
-            .fill(tokens.toolbar_bg)
-            .inner_margin(egui::Margin::same(12))
+            .fill(tokens.main_bg)
+            .inner_margin(egui::Margin {
+                left: 32,
+                right: 32,
+                top: 24,
+                bottom: 8,
+            })
             .show(ui, |ui| {
                 // The window fills the reader area, whatever its contents.
                 ui.set_min_size(ui.available_size());

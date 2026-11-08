@@ -602,6 +602,18 @@ fn lib_10_folders_go_to_recently_deleted_for_30_days() {
     run(&mut s, "library.trash.restore", json!({ "folder": horn }));
     let info = run(&mut s, "library.info", json!({}));
     assert_eq!(info["folders"].as_array().unwrap().len(), 2);
+    // Each folder counts what it holds directly: Horn has Etudes and the concerto.
+    let items = |name: &str| {
+        info["folders"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|f| f["name"] == name)
+            .unwrap()["items"]
+            .clone()
+    };
+    assert_eq!(items("Horn"), 2, "{info}");
+    assert_eq!(items("Etudes"), 1, "{info}");
     assert_eq!(info["trashed"], 0);
     let got = run(&mut s, "library.score.get", json!({ "score": sb }));
     assert_eq!(got["folder"], etudes.as_str(), "{got}");
