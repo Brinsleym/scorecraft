@@ -69,6 +69,8 @@ pub struct UiState {
     pub library: bool,
     /// The library shows covers (true) or a list.
     pub library_grid: bool,
+    /// The library's sidebar is shown (the title bar's toggle, `ui.sidebar.toggle`).
+    pub sidebar: bool,
 }
 
 impl UiState {
@@ -76,6 +78,7 @@ impl UiState {
         UiState {
             chrome: true,
             library_grid: true,
+            sidebar: true,
             ..UiState::default()
         }
     }

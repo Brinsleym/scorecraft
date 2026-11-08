@@ -75,6 +75,8 @@ pub enum Icon {
     CloudUpload,
     Cloud,
     Database,
+    /// The title bar's sidebar toggle (hamburger).
+    Menu,
 }
 
 impl Icon {
@@ -96,7 +98,7 @@ impl Icon {
             Icon::Markup => '\u{eb04}',                   // pencil
             Icon::ClearInk => '\u{eb8b}',                 // eraser
             Icon::Library => '\u{eff2}',                  // books
-            Icon::Lists => '\u{ec42}',                    // menu-2
+            Icon::Lists | Icon::Menu => '\u{ec42}',       // menu-2
             Icon::Recordings => '\u{eaf0}',               // microphone
             Icon::Practice => '\u{ea5c}',                 // chart-line
             Icon::Search => '\u{eb1c}',                   // search
@@ -355,7 +357,7 @@ mod subset_tests {
     use super::Icon;
     use skrifa::MetadataProvider;
 
-    const ALL: [Icon; 61] = [
+    const ALL: [Icon; 62] = [
         Icon::Previous,
         Icon::Next,
         Icon::Single,
@@ -417,6 +419,7 @@ mod subset_tests {
         Icon::CloudUpload,
         Icon::Cloud,
         Icon::Database,
+        Icon::Menu,
     ];
 
     /// Every icon's glyph is in the bundled subset: a missing one would draw as a box.

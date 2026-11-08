@@ -79,7 +79,8 @@ impl App {
 
         egui::Frame::NONE.fill(tokens.page_bg).show(ui, |ui| {
             ui.set_min_size(ui.available_size());
-            egui::ScrollArea::vertical()
+            // The scroll bar sits over the right margin, clear of the centred column.
+            crate::scroll::SmoothScroll::vertical("settings")
                 .auto_shrink(false)
                 .show(ui, |ui| {
                     // The column is centred: equal margins, at least MARGIN_X.

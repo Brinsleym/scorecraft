@@ -16,8 +16,12 @@ use serde_json::{Value, json};
 
 use crate::icons::{self, Icon};
 use crate::menu;
+use crate::scroll::SmoothScroll;
 use crate::theme::{self, Tokens};
 
+/// The library window's margin on the left and right of the page, in points. The scroll
+/// bar sits in the right one, so the content has the same margin on both sides.
+pub const PAGE_MARGIN: f32 = 32.0;
 /// The longest side of a cover, in pixels.
 const COVER_PX: u32 = 220;
 /// The grid (owner's Stitch concept, 2026-11-08): cards at least this wide, the gaps between
@@ -444,6 +448,21 @@ impl LibraryView {
             self.go(Section::Settings);
         }
         out
+    }
+
+    /// Goes up from the folder shown to its parent. `false` at the library's top.
+    pub fn up(&mut self) -> bool {
+        let Some(here) = self.folder.take() else {
+            return false;
+        };
+        self.folder = self
+            .folder_list()
+            .into_iter()
+            .find(|f| f.0 == here)
+            .and_then(|f| f.2);
+        self.stop_selecting();
+        self.dirty = true;
+        true
     }
 
     /// Leaves selecting, with nothing selected.
@@ -932,7 +951,8 @@ impl LibraryView {
             );
             ui.ctx().request_repaint();
         }
-        egui::ScrollArea::vertical()
+        SmoothScroll::vertical("library-results")
+            .gutter(PAGE_MARGIN)
             .auto_shrink(false)
             .show(ui, |ui| {
                 if self.grid {
@@ -1679,8 +1699,8 @@ impl LibraryView {
             }
         });
         self.range_notice_ui(ui, &list, out);
-        egui::ScrollArea::vertical()
-            .id_salt("list-entries")
+        SmoothScroll::vertical("list-entries")
+            .gutter(PAGE_MARGIN)
             .show(ui, |ui| {
                 let n = entries.len();
                 for (i, e) in entries.iter().enumerate() {
@@ -1767,8 +1787,8 @@ impl LibraryView {
         if ui.button("Empty Recently Deleted").clicked() {
             out.push(LibraryAction::Command("library.trash.empty", json!({})));
         }
-        egui::ScrollArea::vertical()
-            .id_salt("trash")
+        SmoothScroll::vertical("trash")
+            .gutter(PAGE_MARGIN)
             .auto_shrink(false)
             .show(ui, |ui| {
                 for f in &folders {
