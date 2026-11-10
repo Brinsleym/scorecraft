@@ -321,9 +321,6 @@ const TABLER: &[u8] = include_bytes!("../assets/tabler/tabler-icons.ttf");
 pub struct UiFonts {
     pub regular: Option<Vec<u8>>,
     pub semibold: Option<Vec<u8>>,
-    /// System fonts for scripts the interface fonts lack (Japanese, Chinese, Korean), tried in
-    /// order after them: each a font file and the face to use in it (a `.ttc` holds several).
-    pub fallbacks: Vec<(Vec<u8>, u32)>,
 }
 
 /// Installs the interface fonts: Segoe UI first (when the platform gave valid files), egui's
@@ -354,19 +351,6 @@ pub fn install_fonts(ctx: &egui::Context, fonts: &UiFonts) {
         );
         bold.insert(0, "segoe-ui-semibold".into());
     }
-    // Behind everything else, so a CJK font never replaces Segoe UI's Latin letters.
-    for (n, (bytes, index)) in fonts.fallbacks.iter().enumerate() {
-        if skrifa::FontRef::from_index(bytes.as_slice(), *index).is_err() {
-            continue;
-        }
-        let name = format!("fallback-{n}");
-        defs.font_data.insert(
-            name.clone(),
-            Arc::new(FontData::from_blob(Arc::new(bytes.clone()), *index)),
-        );
-        regular.push(name.clone());
-        bold.push(name);
-    }
     defs.font_data
         .insert("tabler".into(), Arc::new(FontData::from_static(TABLER)));
     defs.families.insert(FontFamily::Proportional, regular);
@@ -387,7 +371,6 @@ mod font_tests {
         let junk = UiFonts {
             regular: Some(b"not a font".to_vec()),
             semibold: Some(Vec::new()),
-            fallbacks: vec![(b"nor this".to_vec(), 0), (Vec::new(), 3)],
         };
         install_fonts(&ctx, &junk);
         Tokens::for_theme(Theme::Dark).apply(Theme::Dark, &ctx);
@@ -403,25 +386,5 @@ mod font_tests {
         });
         out.textures_delta.clear();
         assert!(!out.shapes.is_empty());
-    }
-
-    /// A CJK fallback goes after the interface fonts in both families, never before them.
-    #[test]
-    fn fallback_fonts_follow_the_interface_fonts() {
-        let ctx = egui::Context::default();
-        let fonts = UiFonts {
-            fallbacks: vec![(TABLER.to_vec(), 0)],
-            ..UiFonts::default()
-        };
-        install_fonts(&ctx, &fonts);
-        let mut out = ctx.run_ui(egui::RawInput::default(), |_| {});
-        out.textures_delta.clear();
-        let defs = ctx.fonts(|f| f.definitions().clone());
-        for family in [egui::FontFamily::Proportional, semibold()] {
-            let list = defs.families.get(&family).cloned().unwrap_or_default();
-            assert_eq!(list.last().map(String::as_str), Some("fallback-0"));
-            assert!(list.len() > 1);
-        }
-        assert!(defs.font_data.contains_key("fallback-0"));
     }
 }

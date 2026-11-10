@@ -74,55 +74,6 @@ fn load_settings() -> Settings {
 /// scorecraft-ui-egui).
 const FRAMELESS: bool = !cfg!(target_os = "macos");
 
-/// System CJK fonts, one per group: the first file of each group that exists is read. Japanese
-/// comes first, as its Han forms are the ones the owner's scores need; Chinese and Korean follow
-/// for the characters it lacks. A `.ttc` collection's first face is used.
-const CJK_FONTS: &[&[&str]] = if cfg!(windows) {
-    &[
-        &["YuGothR.ttc", "meiryo.ttc", "msgothic.ttc"],
-        &["msyh.ttc", "simsun.ttc"],
-        &["malgun.ttf"],
-    ]
-} else if cfg!(target_os = "macos") {
-    &[
-        &[
-            "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
-            "/System/Library/Fonts/Hiragino Sans GB.ttc",
-        ],
-        &["/System/Library/Fonts/PingFang.ttc"],
-        &["/System/Library/Fonts/AppleSDGothicNeo.ttc"],
-    ]
-} else {
-    // Noto Sans CJK covers all three scripts in one file, wherever the distribution puts it.
-    &[&[
-        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-        "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
-        "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",
-        "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
-        "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
-        "/usr/share/fonts/wenquanyi/wqy-microhei/wqy-microhei.ttc",
-    ]]
-};
-
-/// Reads [`CJK_FONTS`]; on Windows the names are looked up in the fonts folder `dir`. A
-/// missing or unreadable file is skipped (the shell checks each font before using it).
-fn cjk_fallbacks(dir: Option<&std::path::Path>) -> Vec<(Vec<u8>, u32)> {
-    let path = |name: &str| match dir {
-        Some(d) if cfg!(windows) => Some(d.join(name)),
-        _ if cfg!(windows) => None,
-        _ => Some(PathBuf::from(name)),
-    };
-    CJK_FONTS
-        .iter()
-        .filter_map(|group| {
-            group
-                .iter()
-                .find_map(|name| path(name).and_then(|p| std::fs::read(p).ok()))
-                .map(|bytes| (bytes, 0))
-        })
-        .collect()
-}
-
 struct Desktop {
     keep_awake: KeepAwake,
     /// The metronome's click, opened the first time it is wanted.
@@ -130,8 +81,7 @@ struct Desktop {
 }
 
 impl Platform for Desktop {
-    /// Segoe UI from the Windows fonts folder; ScoreCraft may not ship it. Behind it, the
-    /// system's Japanese, Chinese and Korean fonts, so titles in those scripts aren't boxes.
+    /// Segoe UI from the Windows fonts folder; ScoreCraft may not ship it.
     fn ui_fonts(&self) -> scorecraft_ui_egui::UiFonts {
         let dir = std::env::var_os("WINDIR")
             .filter(|_| cfg!(windows))
@@ -140,7 +90,6 @@ impl Platform for Desktop {
         scorecraft_ui_egui::UiFonts {
             regular: read("segoeui.ttf"),
             semibold: read("seguisb.ttf"),
-            fallbacks: cjk_fallbacks(dir.as_deref()),
         }
     }
     fn pick_score(&mut self) -> Option<String> {
