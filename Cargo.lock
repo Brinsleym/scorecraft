@@ -3738,6 +3738,7 @@ dependencies = [
  "scorecraft-testkit",
  "scorecraft-ui-egui",
  "serde_json",
+ "winit",
  "winresource",
 ]
 

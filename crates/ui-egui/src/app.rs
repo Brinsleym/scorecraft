@@ -432,7 +432,11 @@ impl App {
             .exact_size(crate::title_bar::HEIGHT)
             .resizable(false)
             .show_separator_line(false)
-            .frame(egui::Frame::NONE.fill(tokens.title_bar_bg))
+            .frame(
+                egui::Frame::NONE
+                    .fill(tokens.title_bar_bg)
+                    .corner_radius(crate::title_bar::corners(self.maximized)),
+            )
             .show(ui, |ui| crate::title_bar::show(ui, tokens, bar))
             .inner;
         if let Some(a) = action {

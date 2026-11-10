@@ -5,7 +5,9 @@
 //! Minimise, Maximise (Restore when maximised) and Close, Windows-style. The empty middle drags
 //! the window (the system's own move, so Windows snap and Aero Shake still work) and a
 //! double-click maximises or restores it. [`resize_edges`] gives the frameless window its resize
-//! borders back, and [`paint_border`] its hairline edge.
+//! borders back, and [`paint_border`] its hairline edge. In a window (not maximised) the bar's
+//! top corners are rounded ([`corners`]); the desktop app makes the window transparent so the
+//! corners show what is behind it.
 //!
 //! Each button answers with a [`TitleAction`]; the app runs the matching `ui.*` command, so agents
 //! drive the same actions over the control channel.
@@ -33,6 +35,22 @@ const GLYPH: f32 = 10.0;
 /// The invisible resize borders: their depth, and how far a corner reaches along each edge.
 const RESIZE_EDGE: f32 = 5.0;
 const RESIZE_CORNER: f32 = 14.0;
+/// The radius of the window's top corners while it is not maximised: Windows 11's 8.
+const CORNER: u8 = 8;
+
+/// The window's corner radii: the top two rounded while it is not maximised, square otherwise.
+pub fn corners(maximized: bool) -> CornerRadius {
+    if maximized {
+        CornerRadius::ZERO
+    } else {
+        CornerRadius {
+            nw: CORNER,
+            ne: CORNER,
+            sw: 0,
+            se: 0,
+        }
+    }
+}
 
 /// What a press in the title bar asks for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -149,7 +167,15 @@ pub fn show(ui: &mut Ui, tokens: &Tokens, bar: TitleBar) -> Option<TitleAction> 
         (Glyph::Close, "Close", TitleAction::Close),
     ];
     for (i, (glyph, label, action)) in buttons.into_iter().enumerate() {
-        if window_button(ui, tokens, win(i as f32), glyph)
+        let corner = if glyph == Glyph::Close {
+            CornerRadius {
+                ne: corners(bar.maximized).ne,
+                ..CornerRadius::ZERO
+            }
+        } else {
+            CornerRadius::ZERO
+        };
+        if window_button(ui, tokens, win(i as f32), glyph, corner)
             .on_hover_text(label)
             .clicked()
         {
@@ -207,7 +233,14 @@ enum Glyph {
 }
 
 /// A Windows-style caption button: square, a hover fill (red for Close), and a thin glyph.
-fn window_button(ui: &mut Ui, tokens: &Tokens, rect: Rect, glyph: Glyph) -> egui::Response {
+/// `corner` rounds its hover fill (Close's top-right, in a window).
+fn window_button(
+    ui: &mut Ui,
+    tokens: &Tokens,
+    rect: Rect,
+    glyph: Glyph,
+    corner: CornerRadius,
+) -> egui::Response {
     let r = ui.interact(
         rect,
         ui.scope_id().with(("title-window", glyph as u8)),
@@ -222,7 +255,7 @@ fn window_button(ui: &mut Ui, tokens: &Tokens, rect: Rect, glyph: Glyph) -> egui
         } else {
             tokens.button_hover
         };
-        ui.painter().rect_filled(rect, CornerRadius::ZERO, fill);
+        ui.painter().rect_filled(rect, corner, fill);
     }
     paint_glyph(ui.painter(), rect.center(), glyph, colour);
     r
@@ -382,7 +415,8 @@ pub fn resize_edges(ctx: &Context) {
     }
 }
 
-/// The frameless window's hairline edge, drawn over everything (not when maximised).
+/// The frameless window's hairline edge, drawn over everything (not when maximised), following
+/// the rounded top corners.
 pub fn paint_border(ctx: &Context, tokens: &Tokens) {
     let p = ctx.layer_painter(LayerId::new(
         Order::Foreground,
@@ -390,7 +424,7 @@ pub fn paint_border(ctx: &Context, tokens: &Tokens) {
     ));
     p.rect_stroke(
         ctx.content_rect(),
-        CornerRadius::ZERO,
+        corners(false),
         Stroke::new(1.0, tokens.window_border),
         StrokeKind::Inside,
     );
@@ -422,6 +456,13 @@ mod tests {
         assert_eq!(at(795.0, 597.0), Some(D::SouthEast));
         assert_eq!(at(f32::NAN, 1.0), None);
         assert_eq!(resize_direction(pos2(0.0, 0.0), Vec2::ZERO), None);
+    }
+
+    #[test]
+    fn only_a_window_has_rounded_top_corners() {
+        let w = corners(false);
+        assert_eq!((w.nw, w.ne, w.sw, w.se), (CORNER, CORNER, 0, 0));
+        assert_eq!(corners(true), CornerRadius::ZERO);
     }
 
     #[test]
