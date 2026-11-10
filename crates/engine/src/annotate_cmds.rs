@@ -834,7 +834,8 @@ fn stroke(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
     // A stroke drawn on screen that starts at a ruler edge is ruled along it (ANNO-17). The ruler
     // lies on the screen, so only view-space strokes meet it; erasers are never ruled.
     let erasing = device == PointerKind::Eraser || session.markup.tool == MarkupTool::Eraser;
-    let mut ruled = false;
+    // The ruled line in view pixels, so the shell can draw what was kept while the page redraws.
+    let mut ruled: Option<Value> = None;
     if space == "view"
         && !erasing
         && let Some(y) = session.markup.ruler
@@ -855,7 +856,12 @@ fn stroke(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
                 .iter()
                 .map(|q| (f64::from(q.x), f64::from(q.y), q.pressure, q.t))
                 .collect();
-            ruled = true;
+            ruled = Some(json!(
+                along
+                    .iter()
+                    .map(|q| [f64::from(q.x), f64::from(q.y)])
+                    .collect::<Vec<_>>()
+            ));
         }
     }
     // Where on which page: map the samples into the page's PDF space.
@@ -956,7 +962,7 @@ fn stroke(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
         // Shapes (ANNO-16): a ruled stroke is already straight.
         let mut shape = None;
         if markup.shapes
-            && !ruled
+            && ruled.is_none()
             && let Some((found, straight)) = scorecraft_ink::straighten(&points)
         {
             points = straight;
@@ -1000,6 +1006,7 @@ fn stroke(session: &mut Session, params: &Value) -> Result<Value, EngineError> {
                 "annotation": id.to_string(),
                 "points": count,
                 "shape": shape,
+                "ruled": ruled,
             }),
         }
     };

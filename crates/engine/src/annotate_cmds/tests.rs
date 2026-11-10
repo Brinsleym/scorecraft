@@ -489,7 +489,12 @@ fn ink_27_ruler_straightens_strokes_that_start_at_its_edge() {
             json!([x, edge + 5.0 + f64::from(i % 3)])
         })
         .collect();
-    run(&mut s, "annotate.stroke", json!({ "points": wobble }));
+    let r = run(&mut s, "annotate.stroke", json!({ "points": wobble }));
+    // The kept line in view pixels, for the shell to draw while the page redraws.
+    let line = r["ruled"].as_array().unwrap();
+    assert_eq!(line.len(), 2, "{r}");
+    assert!((line[0][1].as_f64().unwrap() - edge).abs() < 1e-3, "{r}");
+    assert!((line[1][1].as_f64().unwrap() - edge).abs() < 1e-3, "{r}");
     let list = run(&mut s, "annotate.page.list", json!({}));
     let pts = list["annotations"][0]["points"].as_array().unwrap();
     assert_eq!(pts.len(), 2, "ruled into a straight line");
@@ -498,7 +503,8 @@ fn ink_27_ruler_straightens_strokes_that_start_at_its_edge() {
     let free: Vec<Value> = (0..10)
         .map(|i| json!([x0 + 20.0 + f64::from(i) * 5.0, 600.0 + f64::from(i % 2)]))
         .collect();
-    run(&mut s, "annotate.stroke", json!({ "points": free }));
+    let r = run(&mut s, "annotate.stroke", json!({ "points": free }));
+    assert!(r["ruled"].is_null(), "{r}");
     let list = run(&mut s, "annotate.page.list", json!({}));
     assert_eq!(
         list["annotations"][1]["points"].as_array().unwrap().len(),

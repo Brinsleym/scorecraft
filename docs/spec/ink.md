@@ -1,6 +1,6 @@
 # Ink and markup
 
-> **Last reviewed:** 2026-10-31 · **Last updated:** 2026-11-01 · **Change:** minor (the owner's first hands-on feedback: notes typed in their box, selected and edited later, never placed on top of another; black stamps; no eraser trail; one-layer highlighter preview; markup survives scrolling and turns; earlier: the owner's answers on highlighter overlap, notes, page edges and the ruler; earlier: M4 part 5: export with ink; earlier: M4 part 4: the pen in the app; earlier: M4 part 3: rectangle select, shapes switch, pen button; earlier: ANNO-8 text notes from the owner's observation; earlier: owner's answers to the open questions; earlier: owner's direction on the toolbar; earlier: first version) · **Target:** enScore 3.7 (2026)
+> **Last reviewed:** 2026-10-31 · **Last updated:** 2026-11-08 · **Change:** minor (the owner's to-do list of 2026-11-08: a ruled line shows ruled at once; a menu over the page never draws; earlier: the owner's first hands-on feedback: notes typed in their box, selected and edited later, never placed on top of another; black stamps; no eraser trail; one-layer highlighter preview; markup survives scrolling and turns; earlier: the owner's answers on highlighter overlap, notes, page edges and the ruler; earlier: M4 part 5: export with ink; earlier: M4 part 4: the pen in the app; earlier: M4 part 3: rectangle select, shapes switch, pen button; earlier: ANNO-8 text notes from the owner's observation; earlier: owner's answers to the open questions; earlier: owner's direction on the toolbar; earlier: first version) · **Target:** enScore 3.7 (2026)
 
 How the player marks up a score: pens, highlighters, whiteout, erasers, text notes, stamps,
 layers, selection, shapes, and exporting the result. Written for milestone M4.
@@ -301,6 +301,9 @@ ScoreCraft's own additions, beyond what was observed:
 - The *Draw with Touch* switch lets the mouse and touch draw (and erase, write text and select)
   like a pen, at full width since they have no pressure. It is off by default and kept between
   launches.
+- A press on anything shown over the page (a drop-down menu such as *Clear Ink*, a pop-up, a
+  floating toolbar) belongs to that control: it never draws on the page underneath, even with
+  *Draw with Touch* on.
 - **Palm rejection while the pen draws.** While a pen is touching the screen, every touch is
   ignored: a hand leaning on the screen never turns, pans, zooms or (with *Draw with Touch*)
   draws. In detail:
@@ -346,6 +349,8 @@ ScoreCraft's own additions, beyond what was observed:
 - While it is shown, a pen or highlighter stroke that starts within 18 screen pixels of either
   long edge is drawn straight along that edge, from where it started to where the pen's movement
   along the edge ended. Strokes that start further away are drawn freehand.
+- A ruled stroke shows as the straight line along the edge the moment the pen lifts; the path
+  the pen actually took never lingers on screen.
 - The ruler is a guide, not a marking: it is never stored in the score or exported. Hiding it, or
   leaving markup mode, removes it from the screen.
 

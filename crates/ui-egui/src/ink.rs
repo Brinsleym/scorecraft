@@ -9,11 +9,11 @@
 //! touch with a force is taken as a pen. Where that guess is wrong, *Draw with Touch* lets every
 //! pointer draw.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use egui::{
-    Color32, ColorImage, Context, Event, Painter, Pos2, Rect, Shape, Stroke, TextureHandle,
-    TextureOptions, TouchPhase, Vec2, pos2, vec2,
+    Color32, ColorImage, Context, Event, LayerId, Painter, Pos2, Rect, Shape, Stroke,
+    TextureHandle, TextureOptions, TouchPhase, Vec2, pos2, vec2,
 };
 use scorecraft_engine::Session;
 use scorecraft_input::{PalmFilter, Phase, PointerKind};
@@ -257,6 +257,9 @@ pub struct InkCanvas {
     palm: PalmFilter,
     /// Touches down now.
     touches: HashMap<u64, PointerKind>,
+    /// Touches that went down on a menu, pop-up or toolbar over the page: they belong to it,
+    /// never to markup, until they lift.
+    elsewhere: HashSet<u64>,
     live: Option<Live>,
     pending: Vec<Pending>,
     /// The reader stays blocked until every pointer lifts, then one frame more (its click is
@@ -294,17 +297,27 @@ impl InkCanvas {
         *self = InkCanvas::default();
     }
 
+    /// The committed strokes the shell is still drawing, reader-local pixels (tests).
+    #[cfg(test)]
+    pub(crate) fn kept(&self) -> Vec<Vec<Pos2>> {
+        self.pending.iter().map(|p| p.shape.clone()).collect()
+    }
+
     /// Whether markup is handling a gesture now.
     pub fn busy(&self) -> bool {
         self.live.is_some() || self.text.is_some()
     }
 
-    /// One frame of markup input. `state` is `annotate.state`; `rect` the reader's area.
-    /// Errors from the engine go to `error`.
+    /// One frame of markup input. `state` is `annotate.state`; `rect` the reader's area and
+    /// `layer` the layer it is drawn on: a press on anything above it (a drop-down menu over the
+    /// page, a pop-up, a floating toolbar) is that widget's, not a stroke. Errors from the engine
+    /// go to `error`.
+    #[allow(clippy::too_many_arguments)]
     pub fn input(
         &mut self,
         ctx: &Context,
         rect: Rect,
+        layer: LayerId,
         session: &mut Session,
         state: &Value,
         error: &mut Option<String>,
@@ -347,6 +360,15 @@ impl InkCanvas {
                         TouchPhase::Cancel => Phase::Cancel,
                     };
                     let tid = id.0;
+                    if phase == Phase::Down && covered(ctx, layer, pos) {
+                        self.elsewhere.insert(tid);
+                    }
+                    if self.elsewhere.contains(&tid) {
+                        if matches!(phase, Phase::Up | Phase::Cancel) {
+                            self.elsewhere.remove(&tid);
+                        }
+                        continue;
+                    }
                     let f = self.palm.event(tid, kind, phase, now_ms);
                     for c in f.cancel {
                         // A touch gesture cut short by the pen: its ink and its tap go.
@@ -408,7 +430,7 @@ impl InkCanvas {
                     if pen_only && !(inside && self.on_ruler(state, pos, rect)) && !mine {
                         continue;
                     }
-                    if pressed && !inside {
+                    if pressed && (!inside || covered(ctx, layer, pos)) {
                         continue;
                     }
                     self.block = true;
@@ -882,10 +904,30 @@ impl InkCanvas {
                             && let Some(fp) = v.get("filePage").and_then(Value::as_u64)
                             && let Some((pts, stroke)) = live_shape(&live, session, state)
                         {
-                            let (shape, image) = match image {
-                                Some(im) => (Vec::new(), Some(im)),
-                                None => (pts, None),
+                            // A stroke the engine ruled or straightened is kept as it was
+                            // drawn, not as the pen went: the line along the ruler's edge, and
+                            // nothing for a shape (its page shows it as soon as it redraws).
+                            let ruled: Option<Vec<Pos2>> =
+                                v.get("ruled").and_then(Value::as_array).map(|line| {
+                                    line.iter()
+                                        .filter_map(|q| {
+                                            Some(pos2(
+                                                q.get(0)?.as_f64()? as f32,
+                                                q.get(1)?.as_f64()? as f32,
+                                            ))
+                                        })
+                                        .collect()
+                                });
+                            let shaped = v.get("shape").is_some_and(|s| !s.is_null());
+                            let (shape, image) = match (image, ruled) {
+                                (Some(im), _) => (Vec::new(), Some(im)),
+                                (None, Some(line)) => (line, None),
+                                (None, None) if shaped => (Vec::new(), None),
+                                (None, None) => (pts, None),
                             };
+                            if shape.is_empty() && image.is_none() {
+                                return;
+                            }
                             self.pending.push(Pending {
                                 file_page: usize::try_from(fp.saturating_sub(1)).unwrap_or(0),
                                 texture: None,
@@ -919,8 +961,11 @@ impl InkCanvas {
     }
 
     /// Notes which texture each kept stroke's page had when it was committed, and drops the
-    /// strokes whose page has been redrawn since (or that waited too long).
-    pub fn settle(&mut self, now: f64, texture_of: &dyn Fn(usize) -> Option<usize>) {
+    /// strokes whose page has been redrawn since (or that waited too long). Call it before the
+    /// pages are drawn, so a stroke committed this frame notes the page as it was before the
+    /// stroke. Returns whether strokes are still kept: the caller repaints soon, so they go as
+    /// soon as their page is ready even when nothing else moves.
+    pub fn settle(&mut self, now: f64, texture_of: &dyn Fn(usize) -> Option<usize>) -> bool {
         self.pending.retain_mut(|p| {
             let current = texture_of(p.file_page);
             match p.texture {
@@ -931,6 +976,7 @@ impl InkCanvas {
                 Some(t) => current.unwrap_or(0) == t && now - p.born < PENDING_SECS,
             }
         });
+        !self.pending.is_empty()
     }
 
     /// Draws the live and kept strokes, the ruler and the selection over the pages.
@@ -1091,6 +1137,12 @@ pub fn entry_rect(entry: &TextEntry, session: &Session) -> Rect {
         entry.at,
         vec2(longest * size * 0.6 + 8.0, lines * size * 1.3 + 6.0),
     )
+}
+
+/// Whether something other than the reader (a menu, pop-up or floating toolbar) is on top at
+/// `pos`, screen pixels.
+fn covered(ctx: &Context, reader: LayerId, pos: Pos2) -> bool {
+    ctx.layer_id_at(pos).is_some_and(|l| l != reader)
 }
 
 /// Records an engine error; returns the value on success.

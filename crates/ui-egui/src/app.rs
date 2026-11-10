@@ -1702,6 +1702,116 @@ mod tests {
     }
 
     #[test]
+    fn ink_27_a_stroke_ruled_along_the_ruler_is_drawn_ruled_while_its_page_redraws() {
+        let (mut app, ctx) = markup_app();
+        app.command("annotate.ruler.show", &json!({})).unwrap();
+        app.command("annotate.ruler.set", &json!({ "y": 300.0 }))
+            .unwrap();
+        frames(&mut app, &ctx, 1, Vec::new());
+        let st = app.session.reader_state().unwrap();
+        // The reader runs to the window's bottom edge.
+        let top = 800.0 - st["viewport"]["height"].as_f64().unwrap() as f32;
+        let half =
+            app.session.dispatch("annotate.state", &json!({})).unwrap()["ruler"]["halfHeight"]
+                .as_f64()
+                .unwrap() as f32;
+        let edge = 300.0 + half;
+        // A pen drawn just below the ruler's bottom edge, wobbling away from it.
+        use egui::TouchPhase::{End, Move, Start};
+        let mut s = vec![vec![touch(7, Start, 400.0, top + edge + 4.0, true)]];
+        for k in 1..8 {
+            let y = top + edge + 4.0 + (k % 3) as f32 * 3.0;
+            s.push(vec![touch(7, Move, 400.0 + k as f32 * 40.0, y, true)]);
+        }
+        s.push(vec![touch(7, End, 720.0, top + edge + 9.0, true)]);
+        script(&mut app, &ctx, 1.0, s);
+        assert_eq!(strokes_on_page(&mut app), 1, "{:?}", app.state.message);
+        // What the shell keeps drawing is the ruled line, never the line the pen took.
+        let kept = app.reader.ink.kept();
+        assert_eq!(kept.len(), 1, "{kept:?}");
+        assert_eq!(kept[0].len(), 2, "{kept:?}");
+        assert!(
+            kept[0].iter().all(|p| (p.y - edge).abs() < 0.5),
+            "{kept:?} along {edge}"
+        );
+        // And it goes on its own, with no other input, once its page has redrawn.
+        script(&mut app, &ctx, 4.0, vec![Vec::new()]);
+        assert!(app.reader.ink.kept().is_empty());
+    }
+
+    #[test]
+    fn with_draw_with_touch_a_menu_over_the_page_takes_its_taps() {
+        let (mut app, ctx) = markup_app();
+        app.command("input.pen.only", &json!({ "on": false }))
+            .unwrap();
+        // A drop-down open over the page (like Clear Ink's), at 380..720 × 250..450.
+        let run = |app: &mut App, start: f64, script: Vec<Vec<egui::Event>>| {
+            for (k, events) in script.into_iter().enumerate() {
+                let input = egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(1280.0, 800.0))),
+                    time: Some(start + k as f64 * 0.016),
+                    events,
+                    ..Default::default()
+                };
+                let mut out = ctx.run_ui(input, |ui| {
+                    app.ui(ui);
+                    egui::Area::new(egui::Id::unique("menu-over-the-page"))
+                        .order(egui::Order::Foreground)
+                        .fixed_pos(pos2(380.0, 250.0))
+                        .show(ui.ctx(), |ui| {
+                            ui.allocate_exact_size(vec2(340.0, 200.0), egui::Sense::click());
+                        });
+                });
+                out.textures_delta.clear();
+            }
+        };
+        run(&mut app, 1.0, vec![Vec::new(), Vec::new()]);
+        // A finger dragging across the menu draws nothing on the page under it.
+        let mut s = drag(11, 400.0, 700.0, 300.0, false);
+        s.push(Vec::new());
+        run(&mut app, 2.0, s);
+        assert_eq!(strokes_on_page(&mut app), 0, "the menu took it");
+        // A tap on the menu (press and lift in place) draws nothing either.
+        use egui::TouchPhase::{End, Start};
+        run(
+            &mut app,
+            3.0,
+            vec![
+                vec![touch(12, Start, 500.0, 350.0, false)],
+                vec![touch(12, End, 500.0, 350.0, false)],
+                Vec::new(),
+            ],
+        );
+        assert_eq!(strokes_on_page(&mut app), 0, "the menu took the tap");
+        // The mouse, likewise.
+        let button = |pressed, x| egui::Event::PointerButton {
+            pos: pos2(x, 300.0),
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        let mut s = vec![vec![
+            egui::Event::PointerMoved(pos2(400.0, 300.0)),
+            button(true, 400.0),
+        ]];
+        for k in 1..6 {
+            s.push(vec![egui::Event::PointerMoved(pos2(
+                400.0 + k as f32 * 40.0,
+                300.0,
+            ))]);
+        }
+        s.push(vec![button(false, 640.0)]);
+        s.push(Vec::new());
+        run(&mut app, 4.0, s);
+        assert_eq!(strokes_on_page(&mut app), 0, "the menu took the click");
+        // Off the menu, the finger still draws.
+        let mut s = drag(13, 400.0, 700.0, 600.0, false);
+        s.push(Vec::new());
+        run(&mut app, 5.0, s);
+        assert_eq!(strokes_on_page(&mut app), 1, "{:?}", app.state.message);
+    }
+
+    #[test]
     fn ink_20_a_hand_leaning_while_the_pen_draws_does_nothing() {
         use egui::TouchPhase::{End, Move, Start};
         let (mut app, ctx) = markup_app();
