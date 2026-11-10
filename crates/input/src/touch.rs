@@ -23,6 +23,12 @@ pub const WHEEL_STEP: f64 = 60.0;
 /// trackpad turns one page.
 pub const WHEEL_COOLDOWN_MS: u64 = 350;
 
+/// After a wheel turn, the rest also lasts until the wheel has been still this long. A fast
+/// trackpad flick keeps coasting (the system's momentum) well past [`WHEEL_COOLDOWN_MS`], and
+/// that coasting must not turn a second page (owner, 2026-11-08: "scrolls twice if high
+/// speed"). Movement the other way is a new gesture and doesn't extend the rest.
+pub const WHEEL_QUIET_MS: u64 = 150;
+
 /// The parts of the reader area.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Zone {
@@ -79,11 +85,13 @@ pub fn tap_zone(x: f64, y: Option<f64>, width: f64, height: f64) -> Zone {
 
 /// Turns pages from scroll-wheel movement: wheel travel adds up until it reaches
 /// [`WHEEL_STEP`], then one page turns (down: forward, up: back) and the wheel rests for
-/// [`WHEEL_COOLDOWN_MS`].
+/// [`WHEEL_COOLDOWN_MS`], and for as long after as the same flick keeps coasting.
 #[derive(Debug, Clone, Default)]
 pub struct WheelGate {
     travel: f64,
     resting_until: u64,
+    /// The direction of the last turn (1 forward, -1 back, 0 none yet).
+    turned: f64,
 }
 
 impl WheelGate {
@@ -98,6 +106,12 @@ impl WheelGate {
             return None;
         }
         if now_ms < self.resting_until {
+            if dy.signum() == self.turned {
+                // Still the same flick, coasting: rest until it stops.
+                self.resting_until = self
+                    .resting_until
+                    .max(now_ms.saturating_add(WHEEL_QUIET_MS));
+            }
             self.travel = 0.0;
             return None;
         }
@@ -113,6 +127,7 @@ impl WheelGate {
         } else {
             Action::Previous
         };
+        self.turned = self.travel.signum();
         self.travel = 0.0;
         self.resting_until = now_ms.saturating_add(WHEEL_COOLDOWN_MS);
         Some(action)
@@ -180,6 +195,30 @@ mod tests {
         assert_eq!(z(10.0, Some(f64::NAN)), Zone::Back);
         assert_eq!(tap_zone(10.0, None, 0.0, 600.0), Zone::Controls);
         assert_eq!(Zone::Forward.action(), Some(Action::Next));
+    }
+
+    #[test]
+    fn a_fast_flick_turns_one_page_however_long_it_coasts() {
+        let mut w = WheelGate::new();
+        // A flick, then a second of momentum every 16 ms, slowing down.
+        let mut turns = 0;
+        for k in 0..64u64 {
+            let dy = 80.0 * 0.93_f64.powi(k as i32) + 0.5;
+            turns += usize::from(w.wheel(dy, k * 16).is_some());
+        }
+        assert_eq!(turns, 1);
+        // Still, then a new flick: it turns again.
+        assert_eq!(
+            w.wheel(90.0, 63 * 16 + WHEEL_QUIET_MS + 10),
+            Some(Action::Next)
+        );
+        // A flick back is a new gesture: once the short rest is over, it turns at once.
+        let t = 63 * 16 + WHEEL_QUIET_MS + 10;
+        assert_eq!(w.wheel(-90.0, t + 20), None);
+        assert_eq!(
+            w.wheel(-90.0, t + WHEEL_COOLDOWN_MS + 1),
+            Some(Action::Previous)
+        );
     }
 
     #[test]

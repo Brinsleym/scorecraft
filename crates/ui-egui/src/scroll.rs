@@ -5,14 +5,21 @@
 //! trackpad finger for finger. A mouse wheel moves in coarse notches, which egui spreads over
 //! only a tenth of a second, so the page jumps. [`SmoothScroll`] takes a wheel's movement over
 //! the area and eases it in over about a quarter of a second, as a browser does. Trackpads,
-//! touch drags and the scroll bar itself are left to egui.
+//! touch drags and the scroll bar itself are left to egui, so they follow the fingers and the
+//! system's own coasting directly.
+//!
+//! Telling them apart: Windows reports a precision trackpad in wheel *lines*, like a wheel, but
+//! in fractions of a line, where a wheel notch is a whole line. A trackpad flick is never
+//! eased: easing it too made the page lag the fingers, then move again on its own once they
+//! had stopped (owner, 2026-11-08: "scrolls twice if high speed").
 //!
 //! With a [`SmoothScroll::gutter`], the bar sits in the page's right margin rather than over
 //! the content: the content keeps its width, so the left and right margins stay the same, and
 //! the bar is centred in the margin on the right.
 
 use egui::{
-    Color32, Event, Id, MouseWheelUnit, Rect, ScrollArea, Sense, Ui, UiBuilder, style::ScrollStyle,
+    Color32, Event, Id, MouseWheelSource, MouseWheelUnit, Rect, ScrollArea, Sense, Ui, UiBuilder,
+    style::ScrollStyle,
 };
 
 /// How quickly a wheel notch is eased in: this fraction of it in [`EASE_SECONDS`].
@@ -26,6 +33,11 @@ const WHEEL_HOLD: f64 = 0.25;
 /// Point deltas at least this long come from a wheel, not a trackpad (egui's own rule, from
 /// `WheelState::on_wheel_event`).
 const WHEEL_POINTS: f32 = 8.0;
+/// After a trackpad event, wheel-like events are taken as more of the trackpad for this long:
+/// a fast flick can happen to report a whole line, which must not start easing mid-gesture.
+const GLIDE_HOLD: f64 = 0.3;
+/// A line delta further than this from a whole number of lines comes from a trackpad.
+const FRACTION: f32 = 0.01;
 /// The widest scroll bar, in points; a narrower gutter gets half its width.
 const BAR: f32 = 8.0;
 
@@ -36,6 +48,8 @@ struct Memory {
     pending: f32,
     /// Ease the wheel's movement until this time.
     wheel_until: f64,
+    /// A trackpad is scrolling until this time: leave everything to egui.
+    glide_until: f64,
     /// Last frame: where the area was, its offset and its largest offset.
     rect: Option<Rect>,
     offset: f32,
@@ -145,17 +159,29 @@ impl SmoothScroll {
 /// Takes a wheel's movement over the area out of egui's input and eases it into the offset.
 /// Returns the offset to show this frame, if the wheel moved it.
 fn ease_wheel(ui: &Ui, memory: &mut Memory, hovered: bool) -> Option<f32> {
-    let (now, dt, wheel) = ui.input(|i| {
-        let wheel = i.events.iter().any(|e| match e {
-            Event::MouseWheel { unit, delta, .. } => match unit {
-                MouseWheelUnit::Line | MouseWheelUnit::Page => true,
-                MouseWheelUnit::Point => delta.length() >= WHEEL_POINTS,
-            },
-            _ => false,
+    let (now, dt, notch, glide) = ui.input(|i| {
+        let kinds = i.events.iter().filter_map(|e| match e {
+            Event::MouseWheel {
+                unit,
+                delta,
+                source,
+                ..
+            } => Some(is_notch(*unit, *delta, *source)),
+            _ => None,
         });
-        (i.time, i.stable_dt.clamp(0.0, 0.1), wheel)
+        let (mut notch, mut glide) = (false, false);
+        for k in kinds {
+            notch |= k;
+            glide |= !k;
+        }
+        (i.time, i.stable_dt.clamp(0.0, 0.1), notch, glide)
     });
-    if hovered && wheel {
+    if glide {
+        // A trackpad: stop taking egui's delta (what was already taken still eases in).
+        memory.glide_until = now + GLIDE_HOLD;
+        memory.wheel_until = now;
+    }
+    if hovered && notch && now >= memory.glide_until {
         memory.wheel_until = now + WHEEL_HOLD;
     }
     if hovered && now < memory.wheel_until {
@@ -186,6 +212,23 @@ fn ease_wheel(ui: &Ui, memory: &mut Memory, hovered: bool) -> Option<f32> {
     }
     memory.offset = offset;
     Some(offset)
+}
+
+/// Whether a wheel event is a mouse wheel's notch (eased in) rather than a trackpad (left to
+/// egui). macOS says which; elsewhere a whole number of lines, or a long jump in points, is a
+/// wheel.
+fn is_notch(unit: MouseWheelUnit, delta: egui::Vec2, source: MouseWheelSource) -> bool {
+    match source {
+        MouseWheelSource::Trackpad | MouseWheelSource::Momentum => false,
+        MouseWheelSource::Wheel => true,
+        MouseWheelSource::Unknown => match unit {
+            MouseWheelUnit::Line | MouseWheelUnit::Page => {
+                let whole = |v: f32| (v - v.round()).abs() <= FRACTION;
+                whole(delta.x) && whole(delta.y)
+            }
+            MouseWheelUnit::Point => delta.length() >= WHEEL_POINTS,
+        },
+    }
 }
 
 /// A solid bar (it takes room rather than floating over the content), centred in a gutter
@@ -330,5 +373,122 @@ mod tests {
         assert!(!s.floating);
         assert_eq!(s.bar_inner_margin, s.bar_outer_margin);
         assert!((s.allocated_width() - 32.0).abs() < 0.01);
+    }
+
+    /// Runs one frame 1/60 s apart per entry of `script`, the pointer over the area, and returns
+    /// the offset and the wheel movement still to ease in after each.
+    fn run_script(script: Vec<Vec<Event>>) -> Vec<(f32, f32)> {
+        let ctx = egui::Context::default();
+        let mut seen = Vec::new();
+        for (f, events) in script.into_iter().enumerate() {
+            let input = egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(400.0, 300.0),
+                )),
+                time: Some(f as f64 / 60.0),
+                events: std::iter::once(Event::PointerMoved(egui::pos2(100.0, 100.0)))
+                    .chain(events)
+                    .collect(),
+                ..Default::default()
+            };
+            let mut mem = Memory::default();
+            let mut out = ctx.run_ui(input, |ui| {
+                SmoothScroll::vertical("s")
+                    .auto_shrink(false)
+                    .show(ui, |ui| {
+                        for i in 0..400 {
+                            ui.label(format!("row {i}"));
+                        }
+                    });
+                let id = ui.make_persistent_id(("smooth-scroll", "s"));
+                mem = ui.ctx().data(|d| d.get_temp(id)).unwrap_or_default();
+            });
+            out.textures_delta.clear();
+            seen.push((mem.offset, mem.pending));
+        }
+        seen
+    }
+
+    fn lines(y: f32, source: MouseWheelSource) -> Event {
+        Event::MouseWheel {
+            unit: MouseWheelUnit::Line,
+            delta: egui::vec2(0.0, y),
+            phase: egui::TouchPhase::Move,
+            source,
+            modifiers: egui::Modifiers::NONE,
+        }
+    }
+
+    /// A fast flick on a Windows precision trackpad: fractions of a line, two events a frame,
+    /// fast then coasting, with one event that happens to be a whole line. It is never eased:
+    /// the page keeps up with the fingers and stops when they do, without a second push.
+    #[test]
+    fn a_trackpad_flick_is_followed_not_eased() {
+        let mut script = Vec::new();
+        for f in 0..30 {
+            let speed = 2.6 * 0.88_f32.powi(f);
+            let mut frame = vec![
+                lines(-speed, MouseWheelSource::Unknown),
+                lines(-speed * 0.95, MouseWheelSource::Unknown),
+            ];
+            if f == 4 {
+                frame.push(lines(-1.0, MouseWheelSource::Unknown));
+            }
+            script.push(frame);
+        }
+        script.extend((0..30).map(|_| Vec::new()));
+        let seen = run_script(script);
+        assert!(seen.iter().all(|s| s.1 == 0.0), "nothing eased: {seen:?}");
+        let end = seen.last().map_or(0.0, |s| s.0);
+        assert!(end > 200.0, "scrolled: {seen:?}");
+        // Close behind the fingers: by a few frames after the last event it is nearly there.
+        assert!(seen[34].0 > end * 0.97, "responsive: {seen:?}");
+        // One movement, down all the way, then still.
+        assert!(seen.windows(2).all(|w| w[1].0 >= w[0].0 - 0.01), "{seen:?}");
+        assert!((seen[45].0 - end).abs() < 0.5, "settled: {seen:?}");
+    }
+
+    /// macOS says a trackpad is a trackpad, however far one event jumps.
+    #[test]
+    fn a_known_trackpad_is_never_a_notch() {
+        let far = egui::vec2(0.0, 40.0);
+        assert!(!is_notch(
+            MouseWheelUnit::Point,
+            far,
+            MouseWheelSource::Trackpad
+        ));
+        assert!(!is_notch(
+            MouseWheelUnit::Point,
+            far,
+            MouseWheelSource::Momentum
+        ));
+        assert!(is_notch(
+            MouseWheelUnit::Point,
+            far,
+            MouseWheelSource::Unknown
+        ));
+        assert!(is_notch(
+            MouseWheelUnit::Line,
+            egui::vec2(0.0, -2.0),
+            MouseWheelSource::Unknown
+        ));
+        assert!(!is_notch(
+            MouseWheelUnit::Line,
+            egui::vec2(0.0, -0.35),
+            MouseWheelSource::Unknown
+        ));
+        let script = vec![
+            vec![Event::MouseWheel {
+                unit: MouseWheelUnit::Point,
+                delta: -far,
+                phase: egui::TouchPhase::Move,
+                source: MouseWheelSource::Trackpad,
+                modifiers: egui::Modifiers::NONE,
+            }],
+            Vec::new(),
+        ];
+        let seen = run_script(script);
+        assert!(seen.iter().all(|s| s.1 == 0.0), "{seen:?}");
     }
 }
