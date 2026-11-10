@@ -71,6 +71,40 @@ fn filters_are_cached_separately() {
     assert!(Arc::ptr_eq(&normal, &v.page(0, 0.5).unwrap()));
 }
 
+/// Scanned scores are one picture per page; Dark and Sepia recolour them too (owner,
+/// 2026-11-08: they did nothing on scans).
+#[test]
+fn filters_recolour_scanned_pages() {
+    let bytes = PdfBuilder::new()
+        .page(PageSpec::default().scanned())
+        .build();
+    let mut v = ScoreView::new(
+        Document::open(Arc::new(bytes)).unwrap(),
+        scorecraft_render::DEFAULT_BUDGET,
+    );
+    let normal = v.page(0, 0.5).unwrap();
+    let (w, h) = (normal.width, normal.height);
+    // The image's second row (a quarter to a half down) is black, the rest white.
+    let (paper_at, ink_at) = ((w / 2, h * 3 / 4), (w / 2, h * 3 / 8));
+    assert_eq!(
+        normal.pixel(paper_at.0, paper_at.1),
+        Some([255, 255, 255, 255])
+    );
+    assert_eq!(normal.pixel(ink_at.0, ink_at.1), Some([0, 0, 0, 255]));
+    for f in [Filter::Dark, Filter::Sepia] {
+        v.set_filter(f);
+        let page = v.page(0, 0.5).unwrap();
+        let c = f.colors().unwrap();
+        let rgba = |[r, g, b]: [u8; 3]| Some([r, g, b, 255]);
+        assert_eq!(
+            page.pixel(paper_at.0, paper_at.1),
+            rgba(c.paper),
+            "{f:?} paper"
+        );
+        assert_eq!(page.pixel(ink_at.0, ink_at.1), rgba(c.ink), "{f:?} ink");
+    }
+}
+
 #[test]
 fn bad_requests_are_errors() {
     let mut v = view(2);

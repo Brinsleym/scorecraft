@@ -105,10 +105,7 @@ impl ScoreView {
     /// Switches the display filter. Bitmaps already cached for other filters stay cached, so
     /// switching back is instant.
     pub fn set_filter(&mut self, filter: Filter) {
-        if filter != self.filter {
-            self.doc = self.doc.fork(filter.colors());
-            self.filter = filter;
-        }
+        self.filter = filter;
     }
 
     /// Page `page` at `scale` (snapped to its [`ZoomBucket`]) with the current filter: a cache
@@ -118,7 +115,7 @@ impl ScoreView {
         if let Some(hit) = self.shared.lock().cache.get(&key) {
             return Ok(hit);
         }
-        let bitmap = Arc::new(self.doc.render(page, key.zoom.scale())?);
+        let bitmap = Arc::new(render(&mut self.doc, page, key.zoom.scale(), key.filter)?);
         self.shared.lock().cache.insert(key, bitmap.clone());
         Ok(bitmap)
     }
@@ -203,7 +200,9 @@ impl ScoreView {
             w: TILE_SIDE.min(w - x),
             h: TILE_SIDE.min(h - y),
         };
-        let bitmap = Arc::new(self.doc.render_tile(page, key.zoom.scale(), tile)?);
+        let mut bitmap = self.doc.render_tile(page, key.zoom.scale(), tile)?;
+        key.filter.recolour(&mut bitmap);
+        let bitmap = Arc::new(bitmap);
         self.shared.lock().cache.insert(key, bitmap.clone());
         Ok(bitmap)
     }
@@ -260,9 +259,7 @@ impl ScoreView {
             let cached = self.shared.lock().cache.get(&key);
             let base = match cached {
                 Some(b) => Some(b),
-                None => self
-                    .doc
-                    .render(key.page, key.zoom.scale())
+                None => render(&mut self.doc, key.page, key.zoom.scale(), key.filter)
                     .ok()
                     .map(Arc::new)
                     .inspect(|b| self.shared.lock().cache.insert(key, b.clone())),
@@ -288,11 +285,10 @@ impl ScoreView {
             return Ok(());
         }
         let shared = self.shared.clone();
-        let filter = self.filter;
-        let doc = self.doc.fork(filter.colors());
+        let doc = self.doc.fork(None);
         let handle = std::thread::Builder::new()
             .name("scorecraft-prefetch".into())
-            .spawn(move || worker(&shared, doc, filter))?;
+            .spawn(move || worker(&shared, doc))?;
         self.worker = Some(handle);
         Ok(())
     }
@@ -379,7 +375,7 @@ impl std::fmt::Debug for ScoreView {
 
 /// The pre-render loop: take a request, render it without holding the lock, cache it.
 #[cfg(not(target_arch = "wasm32"))]
-fn worker(shared: &Shared, mut doc: Document, mut filter: Filter) {
+fn worker(shared: &Shared, mut doc: Document) {
     loop {
         let key = {
             let mut state = shared.lock();
@@ -401,16 +397,14 @@ fn worker(shared: &Shared, mut doc: Document, mut filter: Filter) {
                     .unwrap_or_else(PoisonError::into_inner);
             }
         };
-        if key.filter != filter {
-            doc = doc.fork(key.filter.colors());
-            filter = key.filter;
-        }
         // A failed render is not cached: the page is rendered again, and the error reported,
         // when it is shown.
         let cached = shared.lock().cache.get(&key);
         let base = match cached {
             Some(b) => Some(b),
-            None => doc.render(key.page, key.zoom.scale()).ok().map(Arc::new),
+            None => render(&mut doc, key.page, key.zoom.scale(), key.filter)
+                .ok()
+                .map(Arc::new),
         };
         let mut state = shared.lock();
         if let Some(base) = base {
@@ -480,12 +474,12 @@ fn draw_ink(
             .take(4)
             .map(|c| c.abs())
             .fold(0.0, f64::max) as f32;
-        let mut src_doc = doc.fork(doc.colors());
+        let mut src_doc = doc.fork(None);
         for s in snips {
             let Ok(src_page) = usize::try_from(s.from.page.0) else {
                 continue;
             };
-            let Ok(src) = src_doc.render(src_page, scale) else {
+            let Ok(src) = render(&mut src_doc, src_page, scale, filter) else {
                 continue;
             };
             if let Some(src_m) = src_doc
@@ -498,4 +492,11 @@ fn draw_ink(
         }
     }
     Arc::new(out)
+}
+
+/// Page `page` of `doc` (drawing in the file's own colours) at `scale`, recoloured by `filter`.
+fn render(doc: &mut Document, page: usize, scale: f32, filter: Filter) -> Result<Bitmap, PdfError> {
+    let mut bm = doc.render(page, scale)?;
+    filter.recolour(&mut bm);
+    Ok(bm)
 }

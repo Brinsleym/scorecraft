@@ -12,6 +12,10 @@ use crate::state::{Theme, UiState};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
+    /// The file's format, [`Settings::VERSION`] when written by this build; 0 for files from
+    /// before it had one (read by [`Settings::parse`], which brings them up to date).
+    #[serde(default)]
+    pub version: u32,
     /// The default layout: `auto` (one page or two from the window), `single` or `twoPage`.
     pub layout: String,
     pub mode: String,
@@ -43,6 +47,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Settings {
+            version: Settings::VERSION,
             layout: "auto".into(),
             mode: "full".into(),
             split: 0.5,
@@ -66,13 +71,29 @@ impl Default for Settings {
 pub const MAX_SETTINGS_BYTES: usize = 1 << 20;
 
 impl Settings {
+    /// The settings format this build writes. 1 (2026-11-08): the default layout became
+    /// *Automatic*.
+    pub const VERSION: u32 = 1;
+
     /// Parses a settings file; anything unreadable gives the defaults (a bad file never stops
     /// the app from starting).
     pub fn parse(text: &str) -> Settings {
         if text.len() > MAX_SETTINGS_BYTES {
             return Settings::default();
         }
-        serde_json::from_str(text).unwrap_or_default()
+        let mut s: Settings = serde_json::from_str(text).unwrap_or_default();
+        s.upgrade();
+        s
+    }
+
+    /// Brings settings from an older build up to date.
+    fn upgrade(&mut self) {
+        if self.version < 1 {
+            // Files from before *Automatic* existed hold the old default, *Single page*, which
+            // nobody chose over Automatic: start them on Automatic (owner, 2026-11-08).
+            self.layout = "auto".into();
+        }
+        self.version = Settings::VERSION;
     }
 
     pub fn to_json_string(&self) -> String {
@@ -227,7 +248,9 @@ impl Settings {
                 run(id, json!({ "on": get(key) }));
             }
         }
-        if get("/penButton").is_string() {
+        // *Select* is no longer offered for the pen button (owner, 2026-11-08); a saved one keeps
+        // the default, the eraser.
+        if get("/penButton").is_string() && get("/penButton") != "select" {
             run(
                 "annotate.pen.buttonTool",
                 json!({ "tool": get("/penButton") }),
@@ -299,5 +322,42 @@ mod tests {
         // Unknown and missing fields are fine.
         let p = Settings::parse(r#"{"mode":"halfPage","future":1}"#);
         assert_eq!((p.mode.as_str(), p.layout.as_str()), ("halfPage", "auto"));
+    }
+
+    #[test]
+    fn older_files_start_on_the_automatic_layout() {
+        // Written before the format had a version: the old default, single page.
+        let old = Settings::parse(r#"{"layout":"single","mode":"halfPage"}"#);
+        assert_eq!(
+            (old.layout.as_str(), old.mode.as_str()),
+            ("auto", "halfPage")
+        );
+        assert_eq!(old.version, Settings::VERSION);
+        // A choice saved by this build is kept.
+        let s = Settings {
+            layout: "single".into(),
+            ..Settings::default()
+        };
+        assert_eq!(Settings::parse(&s.to_json_string()).layout, "single");
+        assert_eq!(Settings::default().layout, "auto");
+    }
+
+    #[test]
+    fn a_saved_select_pen_button_keeps_the_eraser() {
+        let mut session = Session::new();
+        let s = Settings {
+            markup: json!({ "penButton": "select" }),
+            ..Settings::default()
+        };
+        s.apply_markup(&mut session);
+        let m = session.dispatch("annotate.state", &json!({})).unwrap();
+        assert_eq!(m["penButton"], "eraser");
+        let s = Settings {
+            markup: json!({ "penButton": "highlighter" }),
+            ..Settings::default()
+        };
+        s.apply_markup(&mut session);
+        let m = session.dispatch("annotate.state", &json!({})).unwrap();
+        assert_eq!(m["penButton"], "highlighter");
     }
 }
