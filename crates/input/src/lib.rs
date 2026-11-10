@@ -21,8 +21,8 @@ pub use keys::{
 };
 pub use palm::{Filtered, MAX_POINTERS, PEN_LIFT_GRACE_MS, PalmFilter, Phase, PointerKind};
 pub use touch::{
-    CONTROLS_BAND, Gesture, MAX_TAP_TRAVEL, MIN_SWIPE, WHEEL_COOLDOWN_MS, WHEEL_QUIET_MS,
-    WHEEL_STEP, WheelGate, Zone, classify, tap_zone,
+    CONTROLS_BAND, Gesture, MAX_TAP_TRAVEL, MIN_SWIPE, WHEEL_COOLDOWN_MS, WHEEL_STEP, WheelGate,
+    Zone, classify, tap_zone,
 };
 
 /// The crate's package name, used by `cargo xtask layers` smoke tests and diagnostics.

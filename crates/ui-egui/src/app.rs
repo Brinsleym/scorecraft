@@ -566,7 +566,8 @@ impl App {
         }
 
         // The library has its own sidebar and floating toolbar instead (owner, 2026-11-01).
-        let in_library = self.in_library();
+        let in_library =
+            (self.state.library || !self.session.has_score()) && self.session.library().is_some();
         if self.state.chrome && !in_library {
             egui::Panel::top("toolbar")
                 .exact_size(tokens.toolbar_height)
@@ -658,17 +659,6 @@ impl App {
                     self.state.message = Some(e);
                 }
             });
-        // Library was tapped in the score's toolbar (or the reverse) after the panels were
-        // chosen: this frame drew the library without its sidebar, or the score under the
-        // library's. Draw it again at once, whole, so the sidebar never lags a frame behind.
-        if self.in_library() != in_library {
-            ctx.request_discard("the library opened or closed");
-        }
-    }
-
-    /// Whether the library (with its sidebar) fills the window rather than the score.
-    fn in_library(&self) -> bool {
-        (self.state.library || !self.session.has_score()) && self.session.library().is_some()
     }
 
     fn library_window(&mut self, ui: &mut Ui, tokens: &Tokens) {
@@ -2215,33 +2205,6 @@ mod tests {
             true
         );
         assert_eq!(app.session.reader_state().unwrap()["pageCount"], 2);
-    }
-
-    /// Library tapped in the score's toolbar: the frame that opens it is drawn again, so the
-    /// library never shows for a frame without its sidebar (owner, 2026-11-08).
-    #[test]
-    fn the_library_opens_with_its_sidebar_in_the_same_frame() {
-        let (mut app, _) = app_with_score(2);
-        let ctx = Context::default();
-        frames(&mut app, &ctx, 2, Vec::new());
-        assert!(!app.state.library && app.state.sidebar);
-        let mut passes = Vec::new();
-        for (k, events) in click(28.0, 26.0).into_iter().enumerate() {
-            let input = egui::RawInput {
-                screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(1280.0, 800.0))),
-                time: Some(1.0 + k as f64 * 0.016),
-                events,
-                ..Default::default()
-            };
-            let mut out = ctx.run_ui(input, |ui| app.ui(ui));
-            out.textures_delta.clear();
-            passes.push((app.state.library, out.platform_output.num_completed_passes));
-        }
-        assert!(app.state.library, "the toolbar's Library button opened it");
-        // The frame Library opened in ran twice; the others once.
-        let opened = passes.iter().position(|p| p.0).unwrap();
-        assert_eq!(passes[opened].1, 2);
-        assert!(passes.iter().skip(opened + 1).all(|p| p.1 == 1));
     }
 
     #[test]
