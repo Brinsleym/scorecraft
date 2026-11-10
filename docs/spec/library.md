@@ -116,8 +116,10 @@ follow (observed in the owner's screenshots 2 and 3; nothing copied):
   the default layout and turns for every score), markup (the ruler button, round highlighter
   ends, shapes, what the pen's button switches to) and sync.
 - The score view's toolbar keeps only what is used while playing; it has no Score, New, Export,
-  Turning, theme or settings controls. Its page layout drop-down has *Use my defaults* to forget
-  the score's own layout and turns.
+  Turning, theme or settings controls. Half-page and alternating turns show their names under
+  their icons, and Landscape Page Zoom is in the "..." menu at the toolbar's far right (owner,
+  2026-11-08). The page layout drop-down lists only the layouts; `view.override.clear` still
+  forgets a score's own layout and turns.
 - Covers are rendered in the background and cached; the grid scrolls while they arrive, showing
   a placeholder until each is ready.
 

@@ -60,7 +60,8 @@ layers, selection, shapes, and exporting the result. Written for milestone M4.
   highlighter, eraser, text, stamp, rectangle select, ruler (only when the *Show ruler button* setting is
   on; it is off by default); then eight colour swatches, a palette button and a width slider. The
   active tool and the selected swatch are marked. The swatches and palette are the active tool's:
-  the pen's and the highlighter's are different (ANNO-4).
+  the pen's and the highlighter's are different (ANNO-4). Each tool and the ruler is an icon
+  with its name under it; the palette, undo and redo are icons alone (owner, 2026-11-08).
 - With the eraser selected, its *stroke* and *pixel* options appear in the bar next to it. With
   the stamp tool selected, the stamp choices appear instead of the swatches (ANNO-9). With the
   text tool selected, the *Draw with Touch* toggle reads *Type with Touch* (ANNO-8).
@@ -290,6 +291,8 @@ ScoreCraft's own additions, beyond what was observed:
 
 - Every markup step above is undoable and redoable, in the score's own history (shared with its
   page edits). Undo during a stroke cancels the stroke in progress.
+- Ctrl+Z undoes and Ctrl+Shift+Z or Ctrl+Y redoes the open score's steps in the reader (Cmd on
+  macOS), as the toolbar's undo and redo icons do; a text box being typed in keeps its own.
 
 ### ANNO-14 Pen only and Draw with Touch (palm rejection)
 

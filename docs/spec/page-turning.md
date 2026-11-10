@@ -101,8 +101,8 @@ them. Written for milestone M3.
   turn moves one page.
 - Changing the layout or turn mode from a library score's own view (the toolbar, or the
   `view.layout.*` and `view.turn.*` commands) makes that the score's own choice: it opens that
-  way from then on, whatever the default becomes. *Use these for this score*
-  (`view.override.clear`) forgets it. The choice is kept in the library's settings
+  way from then on, whatever the default becomes. `view.override.clear` forgets it
+  (the toolbar no longer offers it, owner 2026-11-08). The choice is kept in the library's settings
   (`reader.<score id>`), so it syncs, and it is not an undo step.
 - A list carries the last score's layout to the next score (LIST-4) only when the next has no
   choice of its own, and carrying it does not make it that score's own (`remember: false`).

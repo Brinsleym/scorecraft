@@ -77,6 +77,15 @@ pub enum Icon {
     Database,
     /// The title bar's sidebar toggle (hamburger).
     Menu,
+    // The markup toolbar's tools (owner, 2026-11-08).
+    Undo,
+    Redo,
+    Pen,
+    Highlighter,
+    Eraser,
+    Text,
+    Stamp,
+    Select,
 }
 
 impl Icon {
@@ -96,7 +105,7 @@ impl Icon {
             Icon::FullScreen => '\u{eaea}',               // maximize
             Icon::Theme => '\u{f4a3}',                    // sun-moon
             Icon::Markup => '\u{eb04}',                   // pencil
-            Icon::ClearInk => '\u{eb8b}',                 // eraser
+            Icon::ClearInk | Icon::Eraser => '\u{eb8b}',  // eraser
             Icon::Library => '\u{eff2}',                  // books
             Icon::Lists | Icon::Menu => '\u{ec42}',       // menu-2
             Icon::Recordings => '\u{eaf0}',               // microphone
@@ -143,6 +152,13 @@ impl Icon {
             Icon::CloudUpload => '\u{ea75}',              // cloud-upload
             Icon::Cloud => '\u{ea76}',                    // cloud
             Icon::Database => '\u{ea88}',                 // database
+            Icon::Undo => '\u{eb77}',                     // arrow-back-up
+            Icon::Redo => '\u{eb78}',                     // arrow-forward-up
+            Icon::Pen => '\u{f06e}',                      // ballpen
+            Icon::Highlighter => '\u{ef3f}',              // highlight
+            Icon::Text => '\u{ebc5}',                     // typography
+            Icon::Stamp => '\u{f5ab}',                    // rubber-stamp
+            Icon::Select => '\u{eeae}',                   // marquee-2
         }
     }
 }
@@ -245,6 +261,59 @@ pub fn labelled_selected(ui: &mut Ui, icon: Icon, text: &str, selected: bool) ->
             v.text_color(),
         );
     }
+    r
+}
+
+/// A toolbar button with `icon` over a short `caption` (owner, 2026-11-08: the markup tools and
+/// the turn modes), `height` points high and at least as wide; `selected` shows it chosen.
+pub fn captioned(
+    ui: &mut Ui,
+    tokens: &crate::theme::Tokens,
+    icon: Icon,
+    caption: &str,
+    selected: bool,
+    height: f32,
+) -> Response {
+    let font = FontId::proportional(crate::theme::CAPTION);
+    let galley = ui
+        .painter()
+        .layout_no_wrap(caption.to_owned(), font, Color32::PLACEHOLDER);
+    let side = (height * 0.45).clamp(12.0, crate::theme::TOOLBAR_ICON);
+    let size = vec2((galley.size().x + 12.0).max(height), height);
+    let (rect, r) = ui.allocate_exact_size(size, Sense::click());
+    if ui.is_rect_visible(rect) {
+        let pressed = r.is_pointer_button_down_on();
+        if selected || r.hovered() || pressed {
+            ui.painter().rect_filled(rect, tokens.radius, tokens.hover);
+        }
+        let colour = if selected || pressed {
+            tokens.accent
+        } else {
+            tokens.icon
+        };
+        let gap = 2.0;
+        let top = rect.center().y - (side + gap + galley.size().y) / 2.0;
+        paint(
+            ui.painter(),
+            Rect::from_center_size(pos2(rect.center().x, top + side / 2.0), Vec2::splat(side)),
+            colour,
+            icon,
+        );
+        ui.painter().galley(
+            pos2(rect.center().x - galley.size().x / 2.0, top + side + gap),
+            galley,
+            colour,
+        );
+        if r.has_focus() {
+            ui.painter().rect_stroke(
+                rect,
+                tokens.radius,
+                egui::Stroke::new(2.0, tokens.accent),
+                egui::StrokeKind::Inside,
+            );
+        }
+    }
+    r.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, selected, caption));
     r
 }
 
@@ -357,7 +426,7 @@ mod subset_tests {
     use super::Icon;
     use skrifa::MetadataProvider;
 
-    const ALL: [Icon; 62] = [
+    const ALL: [Icon; 70] = [
         Icon::Previous,
         Icon::Next,
         Icon::Single,
@@ -420,6 +489,14 @@ mod subset_tests {
         Icon::Cloud,
         Icon::Database,
         Icon::Menu,
+        Icon::Undo,
+        Icon::Redo,
+        Icon::Pen,
+        Icon::Highlighter,
+        Icon::Eraser,
+        Icon::Text,
+        Icon::Stamp,
+        Icon::Select,
     ];
 
     /// Every icon's glyph is in the bundled subset: a missing one would draw as a box.
